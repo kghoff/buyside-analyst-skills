@@ -1,0 +1,299 @@
+[
+ {
+  "period": "Q1 19",
+  "value": 68.6,
+  "raw": "68.6",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q1 DXCM release 2020-04-28 EX-99.01.md",
+  "line": 390,
+  "note": "prior-year column of the Q1 20 release; hardware label first printed 2020"
+ },
+ {
+  "period": "Q2 19",
+  "value": 76.0,
+  "raw": "76.0",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q2 DXCM release 2020-07-28 EX-99.01.md",
+  "line": 398,
+  "note": "prior-year column of the Q2 20 release"
+ },
+ {
+  "period": "Q3 19",
+  "value": 79.1,
+  "raw": "79.1",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q3 DXCM release 2020-10-27 EX-99.01.md",
+  "line": 361,
+  "note": "prior-year column of the Q3 20 release"
+ },
+ {
+  "period": "Q4 19",
+  "value": 103.3,
+  "raw": "103.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q4 DXCM release 2021-02-11.md",
+  "line": 384,
+  "note": "prior-year column of the Q4 20 release"
+ },
+ {
+  "period": "FY 19",
+  "value": 327.0,
+  "raw": "327.0",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q4 DXCM release 2021-02-11.md",
+  "line": 384,
+  "note": "prior-year column of the Q4 20 release"
+ },
+ {
+  "period": "Q1 20",
+  "value": 80.1,
+  "raw": "80.1",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q1 DXCM release 2020-04-28 EX-99.01.md",
+  "line": 390,
+  "note": "as reported"
+ },
+ {
+  "period": "Q2 20",
+  "value": 87.3,
+  "raw": "87.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q2 DXCM release 2020-07-28 EX-99.01.md",
+  "line": 398,
+  "note": "as reported"
+ },
+ {
+  "period": "Q3 20",
+  "value": 94.6,
+  "raw": "94.6",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q3 DXCM release 2020-10-27 EX-99.01.md",
+  "line": 361,
+  "note": "as reported"
+ },
+ {
+  "period": "Q4 20",
+  "value": 103.3,
+  "raw": "103.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q4 DXCM release 2021-02-11.md",
+  "line": 384,
+  "note": "as reported"
+ },
+ {
+  "period": "FY 20",
+  "value": 365.3,
+  "raw": "365.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2020 Q4 DXCM release 2021-02-11.md",
+  "line": 384,
+  "note": "full year"
+ },
+ {
+  "period": "Q1 21",
+  "value": 80.7,
+  "raw": "80.7",
+  "scale": 1,
+  "file": "Press Releases/_md/2021 Q1 DXCM release 2021-04-29.md",
+  "line": 368,
+  "note": "as reported"
+ },
+ {
+  "period": "Q2 21",
+  "value": 100.6,
+  "raw": "100.6",
+  "scale": 1,
+  "file": "Press Releases/_md/2021 Q2 DXCM release 2021-07-29.md",
+  "line": 385,
+  "note": "as reported"
+ },
+ {
+  "period": "Q3 21",
+  "value": 102.3,
+  "raw": "102.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2021 Q3 DXCM release 2021-10-28.md",
+  "line": 377,
+  "note": "as reported"
+ },
+ {
+  "period": "Q4 21",
+  "value": 99.6,
+  "raw": "99.6",
+  "scale": 1,
+  "file": "Press Releases/_md/2021 Q4 DXCM release 2022-02-10.md",
+  "line": 343,
+  "note": "as reported"
+ },
+ {
+  "period": "FY 21",
+  "value": 383.2,
+  "raw": "383.2",
+  "scale": 1,
+  "file": "Press Releases/_md/2021 Q4 DXCM release 2022-02-10.md",
+  "line": 343,
+  "note": "full year"
+ },
+ {
+  "period": "Q1 22",
+  "value": 85.6,
+  "raw": "85.6",
+  "scale": 1,
+  "file": "Press Releases/_md/2022 Q1 DXCM release 2022-04-28.md",
+  "line": 315,
+  "note": "as reported"
+ },
+ {
+  "period": "Q2 22",
+  "value": 98.5,
+  "raw": "98.5",
+  "scale": 1,
+  "file": "Press Releases/_md/2022 Q2 DXCM release 2022-07-28.md",
+  "line": 308,
+  "note": "as reported"
+ },
+ {
+  "period": "Q3 22",
+  "value": 103.0,
+  "raw": "103.0",
+  "scale": 1,
+  "file": "Press Releases/_md/2022 Q3 DXCM release 2022-10-27.md",
+  "line": 306,
+  "note": "as reported"
+ },
+ {
+  "period": "Q4 22",
+  "value": 100.4,
+  "raw": "100.4",
+  "scale": 1,
+  "file": "Press Releases/_md/2022 Q4 DXCM release 2023-02-09.md",
+  "line": 335,
+  "note": "as reported"
+ },
+ {
+  "period": "FY 22",
+  "value": 387.5,
+  "raw": "387.5",
+  "scale": 1,
+  "file": "Press Releases/_md/2022 Q4 DXCM release 2023-02-09.md",
+  "line": 335,
+  "note": "full year"
+ },
+ {
+  "period": "Q1 23",
+  "value": 89.6,
+  "raw": "89.6",
+  "scale": 1,
+  "file": "Press Releases/_md/2023 Q1 DXCM release 2023-04-27.md",
+  "line": 320,
+  "note": "as reported"
+ },
+ {
+  "period": "Q2 23",
+  "value": 93.3,
+  "raw": "93.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2023 Q2 DXCM release 2023-07-27.md",
+  "line": 320,
+  "note": "as reported"
+ },
+ {
+  "period": "Q3 23",
+  "value": 101.2,
+  "raw": "101.2",
+  "scale": 1,
+  "file": "Press Releases/_md/2023 Q3 DXCM release 2023-10-26.md",
+  "line": 321,
+  "note": "as reported"
+ },
+ {
+  "period": "Q4 23",
+  "value": 87.5,
+  "raw": "87.5",
+  "scale": 1,
+  "file": "Press Releases/_md/2023 Q4 DXCM release 2024-02-08.md",
+  "line": 331,
+  "note": "as reported"
+ },
+ {
+  "period": "FY 23",
+  "value": 371.6,
+  "raw": "371.6",
+  "scale": 1,
+  "file": "Press Releases/_md/2023 Q4 DXCM release 2024-02-08.md",
+  "line": 331,
+  "note": "full year"
+ },
+ {
+  "period": "Q1 24",
+  "value": 66.7,
+  "raw": "66.7",
+  "scale": 1,
+  "file": "Press Releases/_md/2024 Q1 DXCM release 2024-04-25.md",
+  "line": 316,
+  "note": "as reported"
+ },
+ {
+  "period": "Q2 24",
+  "value": 57.3,
+  "raw": "57.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2024 Q2 DXCM release 2024-07-25.md",
+  "line": 324,
+  "note": "as reported"
+ },
+ {
+  "period": "Q3 24",
+  "value": 42.4,
+  "raw": "42.4",
+  "scale": 1,
+  "file": "Press Releases/_md/2024 Q3 DXCM release 2024-10-24.md",
+  "line": 328,
+  "note": "as reported"
+ },
+ {
+  "period": "Q4 24",
+  "value": 45.0,
+  "raw": "45.0",
+  "scale": 1,
+  "file": "Press Releases/_md/2024 Q4 DXCM release 2025-02-13.md",
+  "line": 341,
+  "note": "as reported"
+ },
+ {
+  "period": "FY 24",
+  "value": 211.4,
+  "raw": "211.4",
+  "scale": 1,
+  "file": "Press Releases/_md/2024 Q4 DXCM release 2025-02-13.md",
+  "line": 341,
+  "note": "full year"
+ },
+ {
+  "period": "Q1 25",
+  "value": 38.8,
+  "raw": "38.8",
+  "scale": 1,
+  "file": "Press Releases/_md/2025 Q1 DXCM release 2025-05-01.md",
+  "line": 325,
+  "note": "as reported"
+ },
+ {
+  "period": "Q2 25",
+  "value": 39.3,
+  "raw": "39.3",
+  "scale": 1,
+  "file": "Press Releases/_md/2025 Q2 DXCM release 2025-07-30.md",
+  "line": 341,
+  "note": "as reported"
+ },
+ {
+  "period": "Q3 25",
+  "value": 34.2,
+  "raw": "34.2",
+  "scale": 1,
+  "file": "Press Releases/_md/2025 Q3 DXCM release 2025-10-30.md",
+  "line": 321,
+  "note": "as reported"
+ }
+]

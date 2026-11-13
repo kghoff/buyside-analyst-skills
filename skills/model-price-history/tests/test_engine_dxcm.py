@@ -1,0 +1,123 @@
+"""The prototype must reproduce the user's accepted DXCM tabs (reference cached values) to ~1e-9. If a rule in engine.py
+drifts (window length, look-ahead, release timing, start dates), these fail - that is the point."""
+import math
+
+import pandas as pd
+import pytest
+
+TOL = 1e-9
+
+
+def close(a, b):
+    if a is None or (isinstance(a, float) and math.isnan(a)):
+        return b is None or (isinstance(b, float) and math.isnan(b))
+    return b is not None and not (isinstance(b, float) and math.isnan(b)) and abs(a - b) <= TOL * max(1, abs(a))
+
+
+def by_date(dates, vals):
+    return {pd.Timestamp(d): v for d, v in zip(dates, vals)}
+
+
+def test_daily_rows_and_base_match_reference(dxcm_run, ref_values):
+    # same trading days, 2013-12-31 first, index base 2014-12-31 (252-row warm-up)
+    assert [d.date().isoformat() for d in dxcm_run["dates"]] == ref_values["dates"]
+    assert dxcm_run["dates"][dxcm_run["base"]] == pd.Timestamp("2014-12-31")
+
+
+@pytest.mark.parametrize("ours,theirs", [("beta", "beta"), ("idio", "idio")])
+def test_daily_beta_and_idio(dxcm_run, ref_values, ours, theirs):
+    bad = [i for i, (a, b) in enumerate(zip(ref_values["daily"][theirs], dxcm_run[ours])) if not close(a, b)]
+    assert not bad, (len(bad), bad[:5])
+
+
+@pytest.mark.parametrize("ours,theirs", [("ttm_eps", "ttm_eps"), ("rev_g", "ov1"), ("om", "ov2"), ("em", "ov3"),
+                                         ("roic", "ov4"), ("ntm_eps", "ntm_eps"), ("ntm_pe", "ntm_pe")])
+def test_point_in_time_columns(dxcm_run, ref_values, ours, theirs):
+    # values switch the trading day after each full-results release
+    ref = ref_values["daily"][theirs]
+    bad = [ref_values["dates"][i] for i, (a, b) in enumerate(zip(ref, dxcm_run["daily"][ours])) if i > 252 and not close(a, b)]
+    assert not bad, (len(bad), bad[:5])
+
+
+def test_event_labels_on_reaction_days(dxcm_run, ref_values):
+    ref = ref_values["daily"]["event"]
+    bad = [ref_values["dates"][i] for i in range(253, len(ref)) if (ref[i] or "") != dxcm_run["label"][i]]
+    assert not bad, bad[:5]
+
+
+def test_handoff_regression_values(dxcm_run):
+    # HANDOFF.md section 4 numbers (reference as of 2026-11-04)
+    assert round(dxcm_run["beta"][-1], 3) == 0.601
+    W = dxcm_run["weekly"]
+    assert W["date"][0] == pd.Timestamp("2016-01-08")          # 3-factor starts 2016-01-08
+    assert (round(W["b_mkt"][-1], 3), round(W["b_ind"][-1], 3), round(W["b_mom"][-1], 3), round(W["r2"][-1], 3)) == \
+        (0.831, 0.696, -0.205, 0.193)
+    assert round(W["idx3"][-1], 2) == 137.51
+    A = dxcm_run["annual"]
+    i = A["fy"].index(2025)
+    assert (round(A["fcf"][i], 1), round(A["bb"][i], 1), round(A["pe"][i], 1)) == (1077.2, 471.9, 32.3)
+    assert A["n"][A["fy"].index(2018)] == 8
+
+
+@pytest.mark.parametrize("ours,theirs", [("b_mkt", "b_mkt"), ("b_ind", "b_ind"), ("b_mom", "b_mom"), ("r2", "r2"),
+                                         ("idio3", "idio3"), ("idx3", "idx3"), ("pct3", "pct3"), ("rev_g", "ov1"),
+                                         ("om", "ov2"), ("em", "ov3"), ("roic", "ov4")])
+def test_weekly_three_factor(dxcm_run, ref_values, ours, theirs):
+    W = dxcm_run["weekly"]
+    ref = by_date(ref_values["weekly"]["date"], ref_values["weekly"][theirs])
+    assert all(pd.Timestamp(d) in ref for d in W["date"])
+    bad = [d for d, v in zip(W["date"], W[ours]) if not close(ref[d], v)]
+    if ours.startswith("b_") or ours in ("r2", "idio3"):
+        bad = [d for d in bad if d != W["date"][0]]              # base row has no regression in either
+    assert not bad, (len(bad), bad[:5])
+
+
+def test_monthly_block(dxcm_run, ref_values):
+    M, R = dxcm_run["monthly"], ref_values["monthly"]
+    assert [d.date().isoformat() for d in M["date"]] == R["date"]
+    for k in ("close", "ntm_eps", "ntm_pe", "ttm_eps"):
+        assert all(close(a, b) for a, b in zip(R[k], M[k])), k
+
+
+def test_annual_block(dxcm_run, ref_values):
+    A, R = dxcm_run["annual"], ref_values["annual"]
+    assert A["fy"] == R["fy"]
+    for k in ("fcf", "bb", "pe"):
+        assert all(close(a, b) for a, b in zip(R[k], A[k])), k
+    assert A["n"] == R["n"]
+
+
+def test_quarter_table(dxcm_run, ref_values):
+    Q, R = dxcm_run["quarters"], ref_values["events"]
+    assert [q["label"] for q in Q] == R["periods"]
+    assert all(close(a, q["ttm_n"]) for a, q in zip(R["ttm_eps_ng"], Q))
+    assert all(close(a, q["ttm_rev"]) for a, q in zip(R["ttm_rev"], Q))
+    assert all(close(a, q["ntm"]) for a, q in zip(R["ntm"], Q))
+    for j, k in enumerate(("rev_g", "om", "em", "roic")):
+        assert all(close(a[j], q[k]) for a, q in zip(R["ov"], Q)), k
+
+
+def test_event_returns(dxcm_run, ref_values):
+    for (d, t, nm, tm, react, idio), e in zip(ref_values["events"]["list"], dxcm_run["events"]):
+        assert e["reaction"] == pd.Timestamp(react), nm
+        if idio is not None:
+            assert close(idio, e["idio"]), nm
+
+
+def test_fcf_chart_pe_groups_month_ends_by_fiscal_year(dxcm_run, ref_values, reference_model):
+    # MDT's year ends in April: its FY26 P/E must average May 2025 - April 2026 month-ends, not calendar 2026
+    # (calendar grouping blanked MDT's FY26 point and shifted every other year by 4 months)
+    import engine, modmap, os
+    from conftest import FIX
+    ev = ref_values["events"]
+    full = {p: pd.Timestamp(d) for p, d in zip(ev["periods"], ev["full_dates"])}
+    prices = {k: engine.load_close(os.path.join(FIX, f"{t}_us_d.csv"))
+              for k, t in (("stock", "dxcm"), ("spy", "spy"), ("etf", "xhe"), ("mom", "mtum"))}
+    cfg = {"oi_role": "oi_ng", "ebitda_role": None, "roic_role": "roic", "eps_role": "eps_ng", "ttm_key": "ttm_n",
+           "fcf_role": "fcf", "bb_roles": ["buyback_net"], "fye_month": 4}
+    run = engine.run(cfg, prices, modmap.read(reference_model), full, [])
+    M, A = run["monthly"], run["annual"]
+    want = [v for d, v in zip(M["date"], M["ntm_pe"]) if pd.Timestamp(2024, 5, 1) <= d <= pd.Timestamp(2025, 4, 30) and engine.isnum(v)]
+    i = A["fy"].index(2025)
+    assert A["n"][i] == len(want) and abs(A["pe"][i] - sum(want) / len(want)) < 1e-12
+    assert A["n"] != dxcm_run["annual"]["n"]              # different from the calendar-year (December) grouping

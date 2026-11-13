@@ -1,0 +1,8 @@
+{
+  "name": "buyside-analyst-skills",
+  "owner": { "name": "Kyle Hoff" },
+  "metadata": { "description": "Claude Code skills for the fundamental buyside analyst.", "version": "1.0.0" },
+  "plugins": [
+    { "name": "buyside", "source": "./", "description": "Claude Code skills for the fundamental buyside analyst. Speed up the thesis development workflow - modeling, research, valuation, pitch deck assembly, etc" }
+  ]
+}

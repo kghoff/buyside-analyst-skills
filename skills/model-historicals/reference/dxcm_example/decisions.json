@@ -1,0 +1,8 @@
+{
+ "notes": ["ASU 2020-06 (convertible notes, adopted 2022 full-retrospective): kept 2020-2021 as originally filed so each year's quarters sum to the year; 2022+ on the new basis (the user approved for DXCM)."],
+ "share_splits": [{"through_period": "Q1 22", "factor": 4, "note": "4-for-1 split June 2022; pre-split share counts x4 so EPS is comparable"}],
+ "value_overrides": [
+   {"period": "FY 21", "role": "GWI", "components": [26.5, 31.5], "note": "10-K combined 'Intangibles and other assets'; 2022 10-K splits Dec-21 into intangibles 31.5 + other 10.5"},
+   {"period": "FY 21", "role": "OTHA", "components": [10.5], "note": "see above"}
+ ]
+}

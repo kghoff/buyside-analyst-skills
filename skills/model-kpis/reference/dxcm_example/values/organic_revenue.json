@@ -1,0 +1,299 @@
+[
+ {
+  "period": "Q1 20",
+  "raw": "406.2",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 406.2,
+  "scale": 1
+ },
+ {
+  "period": "Q2 20",
+  "raw": "452.9",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 452.9,
+  "scale": 1
+ },
+ {
+  "period": "Q3 20",
+  "raw": "498.5",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 498.5,
+  "scale": 1
+ },
+ {
+  "period": "Q4 20",
+  "raw": "565.6",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 565.6,
+  "scale": 1
+ },
+ {
+  "period": "Q1 21",
+  "raw": "499.6",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 499.6,
+  "scale": 1
+ },
+ {
+  "period": "Q2 21",
+  "raw": "587.8",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 587.8,
+  "scale": 1
+ },
+ {
+  "period": "Q3 21",
+  "raw": "636.6",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 636.6,
+  "scale": 1
+ },
+ {
+  "period": "Q4 21",
+  "raw": "682.8",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 682.8,
+  "scale": 1
+ },
+ {
+  "period": "Q1 22",
+  "raw": "620.7",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "prior-year column of the Q2 22 deck (original definition)",
+  "value": 620.7,
+  "scale": 1
+ },
+ {
+  "period": "Q2 22",
+  "raw": "690.5",
+  "file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+  "line": 352,
+  "note": "own-period deck, as reported then",
+  "value": 690.5,
+  "scale": 1
+ },
+ {
+  "period": "Q3 22",
+  "raw": "779.3",
+  "file": "Investor Decks/_md/2022 Q3 DXCM deck.md",
+  "line": 341,
+  "note": "own-period deck, as reported then",
+  "value": 779.3,
+  "scale": 1
+ },
+ {
+  "period": "Q4 22",
+  "raw": "835.6",
+  "file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+  "line": 343,
+  "note": "own-period deck, as reported then",
+  "value": 835.6,
+  "scale": 1
+ },
+ {
+  "period": "FY 22",
+  "raw": "2,926.1",
+  "file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+  "line": 343,
+  "note": "full year, from the Q4 deck",
+  "value": 2926.1,
+  "scale": 1
+ },
+ {
+  "period": "Q1 23",
+  "raw": "751.2",
+  "file": "Investor Decks/_md/2023 Q1 DXCM deck.md",
+  "line": 285,
+  "note": "own-period deck, as reported then",
+  "value": 751.2,
+  "scale": 1
+ },
+ {
+  "period": "Q2 23",
+  "raw": "875.9",
+  "file": "Investor Decks/_md/2023 Q2 DXCM deck.md",
+  "line": 308,
+  "note": "own-period deck, as reported then",
+  "value": 875.9,
+  "scale": 1
+ },
+ {
+  "period": "Q3 23",
+  "raw": "969.1",
+  "file": "Investor Decks/_md/2023 Q3 DXCM deck.md",
+  "line": 285,
+  "note": "own-period deck, as reported then",
+  "value": 969.1,
+  "scale": 1
+ },
+ {
+  "period": "Q4 23",
+  "raw": "1,026.3",
+  "file": "Investor Decks/_md/2023 Q4 DXCM deck.md",
+  "line": 281,
+  "note": "own-period deck, as reported then",
+  "value": 1026.3,
+  "scale": 1
+ },
+ {
+  "period": "FY 23",
+  "raw": "3,622.5",
+  "file": "Investor Decks/_md/2023 Q4 DXCM deck.md",
+  "line": 281,
+  "note": "full year, from the Q4 deck",
+  "value": 3622.5,
+  "scale": 1
+ },
+ {
+  "period": "Q1 24",
+  "raw": "915.0",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 269,
+  "note": "own-period deck, as reported then",
+  "value": 915.0,
+  "scale": 1
+ },
+ {
+  "period": "Q2 24",
+  "raw": "1,004.9",
+  "file": "Investor Decks/_md/2024 Q2 DXCM deck.md",
+  "line": 284,
+  "note": "own-period deck, as reported then",
+  "value": 1004.9,
+  "scale": 1
+ },
+ {
+  "period": "Q3 24",
+  "raw": "994.7",
+  "file": "Investor Decks/_md/2024 Q3 DXCM deck.md",
+  "line": 283,
+  "note": "own-period deck, as reported then",
+  "value": 994.7,
+  "scale": 1
+ },
+ {
+  "period": "Q4 24",
+  "raw": "1,108.2",
+  "file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+  "line": 288,
+  "note": "own-period deck, as reported then",
+  "value": 1108.2,
+  "scale": 1
+ },
+ {
+  "period": "FY 24",
+  "raw": "4,022.8",
+  "file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+  "line": 288,
+  "note": "full year, from the Q4 deck",
+  "value": 4022.8,
+  "scale": 1
+ },
+ {
+  "period": "Q1 25",
+  "raw": "1,045.9",
+  "file": "Investor Decks/_md/2025 Q1 DXCM deck.md",
+  "line": 283,
+  "note": "own-period deck, as reported then",
+  "value": 1045.9,
+  "scale": 1
+ },
+ {
+  "period": "Q2 25",
+  "raw": "1,150.9",
+  "file": "Investor Decks/_md/2025 Q2 DXCM deck.md",
+  "line": 282,
+  "note": "own-period deck, as reported then",
+  "value": 1150.9,
+  "scale": 1
+ },
+ {
+  "period": "Q3 25",
+  "raw": "1,197.9",
+  "file": "Investor Decks/_md/2025 Q3 DXCM deck.md",
+  "line": 280,
+  "note": "own-period deck, as reported then",
+  "value": 1197.9,
+  "scale": 1
+ },
+ {
+  "period": "Q4 25",
+  "raw": "1,250.2",
+  "file": "Investor Decks/_md/2025 Q4 DXCM deck.md",
+  "line": 242,
+  "note": "own-period deck, as reported then",
+  "value": 1250.2,
+  "scale": 1
+ },
+ {
+  "period": "FY 25",
+  "raw": "4,644.9",
+  "file": "Investor Decks/_md/2025 Q4 DXCM deck.md",
+  "line": 242,
+  "note": "full year, from the Q4 deck",
+  "value": 4644.9,
+  "scale": 1
+ },
+ {
+  "period": "Q1 26",
+  "raw": "1,165.3",
+  "file": "Investor Decks/_md/2026 Q1 DXCM deck.md",
+  "line": 245,
+  "note": "own-period deck, as reported then",
+  "value": 1165.3,
+  "scale": 1
+ },
+ {
+  "period": "Q2 26",
+  "raw": "1,298.3",
+  "file": "Investor Decks/_md/2026 Q2 DXCM deck.md",
+  "line": 252,
+  "note": "own-period deck, as reported then",
+  "value": 1298.3,
+  "scale": 1
+ },
+ {
+  "period": "Q3 26",
+  "raw": "1,345.5",
+  "file": "Investor Decks/_md/2026 Q3 DXCM deck.md",
+  "line": 260,
+  "note": "own-period deck, as reported then",
+  "value": 1345.5,
+  "scale": 1
+ },
+ {
+  "period": "FY 20",
+  "raw": "1,923.3",
+  "file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+  "line": 343,
+  "note": "prior-year columns of the Q4 22 deck",
+  "value": 1923.3,
+  "scale": 1
+ },
+ {
+  "period": "FY 21",
+  "raw": "2,406.8",
+  "file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+  "line": 343,
+  "note": "prior-year columns of the Q4 22 deck",
+  "value": 2406.8,
+  "scale": 1
+ }
+]

@@ -1,0 +1,292 @@
+{
+ "section_title": "NON-GAAP METRICS",
+ "insert_before": "BALANCE SHEET",
+ "metrics": [
+  {
+   "key": "non-gaap gross profit",
+   "rows": [
+    {
+     "role": "start",
+     "label": "GAAP Gross Profit",
+     "link": {
+      "label": "^gross profit"
+     }
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Amortization of intangibles",
+     "match": [
+      "amortization.*intangible"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Other Items",
+     "match": [
+      ".*"
+     ]
+    },
+    {
+     "role": "end",
+     "label": "Non-GAAP Gross Profit"
+    }
+   ]
+  },
+  {
+   "key": "non-gaap operating income",
+   "rows": [
+    {
+     "role": "start",
+     "label": "GAAP Operating Income",
+     "link": {
+      "label": "^operating income"
+     }
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Amortization of Intangibles",
+     "match": [
+      "amortization.*intangible"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Other Items",
+     "match": [
+      "^(?!.*(intellectual property|litigation settlement)).*"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) IP Litigation Costs",
+     "match": [
+      "intellectual property litigation",
+      "litigation settlement"
+     ]
+    },
+    {
+     "role": "end",
+     "label": "Non-GAAP Operating Income"
+    }
+   ]
+  },
+  {
+   "key": "adjusted ebitda",
+   "rows": [
+    {
+     "role": "start",
+     "label": "GAAP Net Income",
+     "link": {
+      "label": "^net income"
+     }
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Other Items",
+     "match": [
+      "^(?!.*(depreciation|share-based|interest expense and interest income|income tax|equity|intellectual property|litigation settlement)).*"
+     ]
+    },
+    {
+     "role": "link",
+     "label": "(+/-) D&A",
+     "match": [
+      "^depreciation and amortization"
+     ],
+     "link": {
+      "section": "CASH FLOW STATEMENT",
+      "label": "depreciation"
+     }
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Equity Investment Gains / Losses",
+     "match": [
+      "equity (method )?investment"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) IP Litigation Costs",
+     "match": [
+      "intellectual property litigation",
+      "litigation settlement"
+     ]
+    },
+    {
+     "role": "link",
+     "label": "(+/-) SBC",
+     "match": [
+      "^share-based compensation"
+     ],
+     "link": {
+      "section": "CASH FLOW STATEMENT",
+      "label": "sbc"
+     }
+    },
+    {
+     "role": "item",
+     "label": "(+) Interest Income / (-) Interest Expense",
+     "match": [
+      "interest expense and interest income"
+     ]
+    },
+    {
+     "role": "link",
+     "label": "(+/-) Income Tax",
+     "match": [
+      "^income tax"
+     ],
+     "link": {
+      "label": "income taxes",
+      "sign": -1
+     }
+    },
+    {
+     "role": "end",
+     "label": "Adjusted EBITDA"
+    }
+   ]
+  },
+  {
+   "key": "non-gaap net income",
+   "rows": [
+    {
+     "role": "start",
+     "label": "GAAP Net Income",
+     "link": {
+      "label": "^net income"
+     }
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Amortization of Intangibles",
+     "match": [
+      "amortization.*intangible"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Equity Investment Gains / Losses",
+     "match": [
+      "equity (method )?investment"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Other Items",
+     "match": [
+      "^(?!.*(intellectual property|litigation settlement|tax)).*"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) IP Litigation Costs",
+     "match": [
+      "intellectual property litigation",
+      "litigation settlement"
+     ]
+    },
+    {
+     "role": "item",
+     "label": "(+/-) Adjustments related to taxes",
+     "match": [
+      "tax"
+     ]
+    },
+    {
+     "role": "end",
+     "label": "Non-GAAP Net Income"
+    }
+   ]
+  }
+ ],
+ "eps": {
+  "net_income_metric": "non-gaap net income",
+  "rows": [
+   {
+    "role": "link",
+    "id": "ni",
+    "label": "Non-GAAP Net Income"
+   },
+   {
+    "role": "item",
+    "id": "ifconv",
+    "label": "(+/-) Int Expense on Senior Conv. Notes"
+   },
+   {
+    "role": "sum",
+    "id": "ni_eps",
+    "label": "Non-GAAP Net Income for Diluted EPS"
+   },
+   {
+    "role": "shares",
+    "label": "Non-GAAP Diluted Shares",
+    "units": "M"
+   },
+   {
+    "role": "eps",
+    "label": "Non-GAAP EPS, Diluted",
+    "units": "$"
+   }
+  ]
+ },
+ "share_splits": [
+  {
+   "through_period": "Q1 22",
+   "factor": 4,
+   "note": "4-for-1 split, June 2022"
+  }
+ ],
+ "prefer_restated": [
+  {
+   "metric": "non-gaap net income",
+   "fiscal_year": 2017
+  },
+  {
+   "metric": "non-gaap operating income",
+   "fiscal_year": 2018
+  },
+  {
+   "metric": "adjusted ebitda",
+   "fiscal_year": 2018
+  },
+  {
+   "metric": "non-gaap net income",
+   "fiscal_year": 2018
+  }
+ ],
+ "exclude": [],
+ "analysis": [
+  {
+   "row": "Non-GAAP Gross Profit",
+   "section": "NON-GAAP METRICS",
+   "macro": "M"
+  },
+  {
+   "row": "Non-GAAP Operating Income",
+   "section": "NON-GAAP METRICS",
+   "macro": "M"
+  },
+  {
+   "row": "Adjusted EBITDA",
+   "section": "NON-GAAP METRICS",
+   "macro": "M"
+  },
+  {
+   "row": "Non-GAAP Net Income",
+   "section": "NON-GAAP METRICS",
+   "macro": "M"
+  },
+  {
+   "row": "Non-GAAP EPS, Diluted",
+   "section": "NON-GAAP METRICS",
+   "macro": "G"
+  }
+ ],
+ "notes": [
+  "2017 net income and 2018 operating income / EBITDA / net income use the restated ('As Adjusted') comparatives from the following year's releases, so each year follows one definition and its quarters sum to its full year.",
+  "2021 (ASU 2020-06): the 2022 releases restated 2021 on a new GAAP basis. Those comparatives start from a GAAP figure that differs from the model, so the extractor skips them (and the add-backs / shares / EPS in the same columns); 2021 stays as originally filed.",
+  "'Litigation settlement costs' (2020-21) grouped with IP litigation: the release footnote says they relate to a patent-infringement suit."
+ ]
+}

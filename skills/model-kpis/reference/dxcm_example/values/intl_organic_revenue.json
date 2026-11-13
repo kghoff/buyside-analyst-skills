@@ -1,0 +1,398 @@
+[
+{
+"period": "Q1 20",
+"value": 113.9,
+"raw": "113.9",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q2 20",
+"value": 85.8,
+"raw": "85.8",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q3 20",
+"value": 99.9,
+"raw": "99.9",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q4 20",
+"value": 114.1,
+"raw": "114.1",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q1 21",
+"value": 118.4,
+"raw": "118.4",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q2 21",
+"value": 126.3,
+"raw": "126.3",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q3 21",
+"value": 147.0,
+"raw": "147.0",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q4 21",
+"value": 165.7,
+"raw": "165.7",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q1 22",
+"value": 169.5,
+"raw": "169.5",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "prior-period column of Q2 22 deck"
+},
+{
+"period": "Q2 22",
+"value": 179.5,
+"raw": "179.5",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q2 DXCM deck.md",
+"line": 347,
+"note": "period's own deck"
+},
+{
+"period": "Q3 22",
+"value": 205.9,
+"raw": "205.9",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q3 DXCM deck.md",
+"line": 336,
+"note": "period's own deck"
+},
+{
+"period": "Q4 22",
+"value": 229.2,
+"raw": "229.2",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+"line": 338,
+"note": "period's own deck"
+},
+{
+"period": "FY 20",
+"value": 413.8,
+"raw": "413.8",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+"line": 338,
+"note": "prior-period column of Q4 22 deck"
+},
+{
+"period": "FY 21",
+"value": 557.4,
+"raw": "557.4",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+"line": 338,
+"note": "prior-period column of Q4 22 deck"
+},
+{
+"period": "FY 22",
+"value": 784.1,
+"raw": "784.1",
+"scale": 1,
+"file": "Investor Decks/_md/2022 Q4 DXCM deck.md",
+"line": 338,
+"note": "prior-period column of Q4 22 deck"
+},
+{
+"period": "Q1 23",
+"value": 225.2,
+"raw": "225.2",
+"scale": 1,
+"file": "Investor Decks/_md/2023 Q1 DXCM deck.md",
+"line": 280,
+"note": "period's own deck"
+},
+{
+"period": "Q2 23",
+"value": 259.3,
+"raw": "259.3",
+"scale": 1,
+"file": "Investor Decks/_md/2023 Q2 DXCM deck.md",
+"line": 303,
+"note": "period's own deck"
+},
+{
+"period": "Q3 23",
+"value": 255.5,
+"raw": "255.5",
+"scale": 1,
+"file": "Investor Decks/_md/2023 Q3 DXCM deck.md",
+"line": 280,
+"note": "period's own deck"
+},
+{
+"period": "Q4 23",
+"value": 257.2,
+"raw": "257.2",
+"scale": 1,
+"file": "Investor Decks/_md/2023 Q4 DXCM deck.md",
+"line": 276,
+"note": "period's own deck"
+},
+{
+"period": "FY 23",
+"value": 997.2,
+"raw": "997.2",
+"scale": 1,
+"file": "Investor Decks/_md/2023 Q4 DXCM deck.md",
+"line": 276,
+"note": "prior-period column of Q4 23 deck"
+},
+{
+"period": "Q3 21",
+"value": 147.2,
+"raw": "147.2",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q1 22",
+"value": 169.9,
+"raw": "169.9",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q2 22",
+"value": 180.2,
+"raw": "180.2",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q3 22",
+"value": 200.6,
+"raw": "200.6",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q4 22",
+"value": 221.6,
+"raw": "221.6",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q1 23",
+"value": 217.6,
+"raw": "217.6",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q2 23",
+"value": 251.0,
+"raw": "251.0",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q3 23",
+"value": 247.2,
+"raw": "247.2",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q4 23",
+"value": 249.3,
+"raw": "249.3",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "prior-period column of Q1 24 deck; restated vs earlier deck"
+},
+{
+"period": "Q1 24",
+"value": 261.8,
+"raw": "261.8",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+"line": 263,
+"note": "period's own deck"
+},
+{
+"period": "Q2 24",
+"value": 273.0,
+"raw": "273.0",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q2 DXCM deck.md",
+"line": 277,
+"note": "period's own deck"
+},
+{
+"period": "Q3 24",
+"value": 292.8,
+"raw": "292.8",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q3 DXCM deck.md",
+"line": 276,
+"note": "period's own deck"
+},
+{
+"period": "Q4 24",
+"value": 305.4,
+"raw": "305.4",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+"line": 281,
+"note": "period's own deck"
+},
+{
+"period": "FY 22",
+"value": 772.3,
+"raw": "772.3",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+"line": 281,
+"note": "prior-period column of Q4 24 deck; restated vs earlier deck"
+},
+{
+"period": "FY 23",
+"value": 965.1,
+"raw": "965.1",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+"line": 281,
+"note": "prior-period column of Q4 24 deck; restated vs earlier deck"
+},
+{
+"period": "FY 24",
+"value": 1133.0,
+"raw": "1,133.0",
+"scale": 1,
+"file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+"line": 281,
+"note": "prior-period column of Q4 24 deck"
+},
+{
+"period": "Q1 25",
+"value": 295.5,
+"raw": "295.5",
+"scale": 1,
+"file": "Investor Decks/_md/2025 Q1 DXCM deck.md",
+"line": 276,
+"note": "period's own deck"
+},
+{
+"period": "Q2 25",
+"value": 309.8,
+"raw": "309.8",
+"scale": 1,
+"file": "Investor Decks/_md/2025 Q2 DXCM deck.md",
+"line": 275,
+"note": "period's own deck"
+},
+{
+"period": "Q3 25",
+"value": 346.0,
+"raw": "346.0",
+"scale": 1,
+"file": "Investor Decks/_md/2025 Q3 DXCM deck.md",
+"line": 273,
+"note": "period's own deck"
+},
+{
+"period": "Q4 25",
+"value": 358.7,
+"raw": "358.7",
+"scale": 1,
+"file": "Investor Decks/_md/2025 Q4 DXCM deck.md",
+"line": 235,
+"note": "period's own deck"
+},
+{
+"period": "FY 25",
+"value": 1310.0,
+"raw": "1,310.0",
+"scale": 1,
+"file": "Investor Decks/_md/2025 Q4 DXCM deck.md",
+"line": 235,
+"note": "prior-period column of Q4 25 deck"
+},
+{
+"period": "Q1 26",
+"value": 333.0,
+"raw": "333.0",
+"scale": 1,
+"file": "Investor Decks/_md/2026 Q1 DXCM deck.md",
+"line": 238,
+"note": "period's own deck"
+},
+{
+"period": "Q2 26",
+"value": 365.1,
+"raw": "365.1",
+"scale": 1,
+"file": "Investor Decks/_md/2026 Q2 DXCM deck.md",
+"line": 245,
+"note": "period's own deck"
+},
+{
+"period": "Q3 26",
+"value": 376.4,
+"raw": "376.4",
+"scale": 1,
+"file": "Investor Decks/_md/2026 Q3 DXCM deck.md",
+"line": 253,
+"note": "period's own deck"
+}
+]

@@ -1,0 +1,16 @@
+{"subject": "AAA", "industry": "Widgets", "years": [2023, 2024, 2025],
+ "companies": [
+  {"ticker": "AAA", "name": "Aco", "role": "subject", "source": "mod", "segment": null, "header": "Aco (AAA)",
+   "parent": null, "fy_map": {},
+   "lines": {"revenue": {"2023": {"v": 100, "kind": "typed", "note": "n"}, "2024": {"v": 120, "kind": "typed", "note": "n"}, "2025": {"v": 150, "kind": "typed", "note": "n"}},
+             "cogs": {"2023": {"v": -40, "kind": "typed", "note": "n"}, "2024": {"v": -48, "kind": "typed", "note": "n"}, "2025": {"v": -60, "kind": "typed", "note": "n"}},
+             "oi": {"2023": {"v": 20, "kind": "typed", "note": "n"}, "2024": {"v": 24, "kind": "typed", "note": "n"}, "2025": {"v": 30, "kind": "typed", "note": "n"}},
+             "pretax": {"2025": {"v": 30, "kind": "typed", "note": "n"}}, "tax": {"2025": {"v": -6, "kind": "typed", "note": "n"}},
+             "cash": {"2024": {"v": 50, "kind": "typed", "note": "n"}, "2025": {"v": 50, "kind": "typed", "note": "n"}},
+             "ppe": {"2024": {"v": 70, "kind": "typed", "note": "n"}, "2025": {"v": 90, "kind": "typed", "note": "n"}},
+             "capex": {"2025": {"v": -15, "kind": "typed", "note": "n"}}, "da": {"2025": {"v": 10, "kind": "typed", "note": "n"}}}},
+  {"ticker": "BBB", "name": "Bco", "role": "peer", "source": "xbrl", "segment": null, "header": "Bco (BBB)",
+   "parent": null, "fy_map": {},
+   "lines": {"revenue": {"2024": {"v": 300, "kind": "typed", "note": "n"}, "2025": {"v": 301, "kind": "typed", "note": "n"}},
+             "oi": {"2024": {"v": 30, "kind": "typed", "note": "n"}, "2025": {"v": 30, "kind": "typed", "note": "n"}}}}],
+ "excluded": [], "warnings": []}

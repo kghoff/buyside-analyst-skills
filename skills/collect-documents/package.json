@@ -1,0 +1,16 @@
+{
+  "name": "gather-skill",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "BUYSIDE_SETTINGS=${BUYSIDE_SETTINGS:-../../tests/settings.test.json} vitest run"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.12"
+  }
+}

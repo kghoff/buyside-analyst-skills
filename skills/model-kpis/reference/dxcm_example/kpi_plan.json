@@ -1,0 +1,254 @@
+{
+ "metrics": [
+  {
+   "key": "organic_revenue",
+   "label": "Organic Revenue",
+   "units": "$ M",
+   "kind": "flow",
+   "definition": "\"Organic revenue excludes non-CGM revenue acquired or divested in the trailing twelve months, as well as the impact of foreign exchange.\" (Investor Decks/_md/Q3 26 DXCM deck.md, slide 9 'Total Revenue - Organic'). Through 2022 the definition read \"excludes non-CGM revenue acquired in conjunction with Dexcom's acquisition of its distributor in Australia and New Zealand, as well as the impact of foreign exchange\" (Investor Decks/_md/Q2 22 DXCM deck.md).",
+   "why": "Strips FX and small acquired/divested non-CGM revenue so the modeler sees underlying CGM volume and price growth, the base for revenue forecasts.",
+   "patterns": [
+    "total revenue\\s*-\\s*organic",
+    "organic revenue (was|of)",
+    "organic revenue"
+   ],
+   "doc_types": [
+    "deck",
+    "release"
+   ],
+   "group": "Organic Revenue"
+  },
+  {
+   "key": "organic_growth",
+   "label": "Organic Revenue Growth",
+   "units": "%",
+   "kind": "rate",
+   "definition": "Year-over-year growth of organic revenue; \"Formula for organic growth is [(current period organic revenue) / (prior year period reported revenue - divested revenue)] - 1\" (Investor Decks/_md/Q3 26 DXCM deck.md, slide 9 footnote 3).",
+   "why": "The headline growth rate management guides to and the cleanest read on CGM demand quarter to quarter.",
+   "patterns": [
+    "organic (revenue )?growth",
+    "on an organic\\d? basis",
+    "organic\\d? basis"
+   ],
+   "doc_types": [
+    "release",
+    "deck",
+    "call"
+   ],
+   "group": "Organic Revenue"
+  },
+  {
+   "key": "intl_organic_revenue",
+   "label": "Int'l Organic Revenue",
+   "units": "$ M",
+   "kind": "flow",
+   "definition": "International revenue excluding non-CGM revenue acquired or divested in the trailing twelve months and the impact of foreign exchange (Investor Decks/_md/Q3 26 DXCM deck.md, slide 9 'INT'L Revenue - Organic'). Labeled 'OUS Revenue - Organic' in 2022-early 2023 decks (Investor Decks/_md/Q2 22 DXCM deck.md).",
+   "why": "All of the FX and acquisition noise sits in international revenue, so this is the true international growth base.",
+   "patterns": [
+    "int'?l revenue\\s*-\\s*organic",
+    "ous revenue\\s*-\\s*organic",
+    "international revenue\\s*-\\s*organic"
+   ],
+   "doc_types": [
+    "deck"
+   ],
+   "group": "Organic Revenue"
+  },
+  {
+   "key": "intl_organic_growth",
+   "label": "Int'l Organic Revenue Growth",
+   "units": "%",
+   "kind": "rate",
+   "definition": "Year-over-year growth of international organic revenue, same formula as total organic growth (Investor Decks/_md/Q3 26 DXCM deck.md, slide 9; Press Releases/_md/Q3 26 DXCM release 2026-10-29.md: \"international revenue grew 5% on a reported basis and 5% on an organic basis\").",
+   "why": "Separates international market expansion (new reimbursement, go-direct markets) from currency swings.",
+   "patterns": [
+    "international revenue grew .{0,60}organic",
+    "international (revenue )?growth was .{0,40}organic",
+    "int'?l revenue\\s*-\\s*organic",
+    "ous revenue\\s*-\\s*organic",
+    "organic.{0,20}\\(.{0,20}(int'?l|ous)"
+   ],
+   "doc_types": [
+    "release",
+    "deck",
+    "call"
+   ],
+   "group": "Organic Revenue"
+  },
+  {
+   "key": "fx_impact",
+   "label": "FX Impact on Revenue",
+   "units": "$ M",
+   "kind": "flow",
+   "definition": "'Impact of Foreign Exchange' line in the organic revenue bridge (Investor Decks/_md/Q3 26 DXCM deck.md, slide 9). Before the Q1 24 deck it was combined with acquired revenue as 'Impact of Acquired Revenue and Foreign Exchange' (Investor Decks/_md/Q4 23 DXCM deck.md).",
+   "why": "Lets the modeler forecast reported revenue from an organic forecast plus a currency assumption.",
+   "patterns": [
+    "impact of foreign exchange",
+    "impact of acquired revenue and foreign exchange",
+    "foreign exchange impact"
+   ],
+   "doc_types": [
+    "deck",
+    "release"
+   ],
+   "group": "Organic Revenue"
+  },
+  {
+   "key": "sensor_revenue",
+   "label": "Sensor & Other Revenue",
+   "units": "$ M",
+   "kind": "flow",
+   "definition": "Revenue from disposable sensors plus other items; deck footnote: \"Includes services, freight, accessories, acquired revenue, etc.\" (Investor Decks/_md/Q2 22 DXCM deck.md); shown as 'Sensor and other revenue' in release tables (Press Releases/_md/Q3 25 DXCM release 2025-10-30.md).",
+   "why": "Sensors are the recurring consumable that drives revenue and margin; their share shows how much of the business is annuity-like.",
+   "patterns": [
+    "sensor (and|&) other revenue",
+    "sensor revenue"
+   ],
+   "doc_types": [
+    "release",
+    "deck",
+    "10-Q",
+    "10-K"
+   ],
+   "group": "Revenue by Product",
+   "prefer_restated": [
+    2017
+   ]
+  },
+  {
+   "key": "hardware_revenue",
+   "label": "Hardware Revenue",
+   "units": "$ M",
+   "kind": "flow",
+   "definition": "Revenue from reusable transmitters and receivers, \"collectively referred to as Reusable Hardware\" (10-Ks/_md/DXCM 2025 10-K.md, MD&A). Shown as 'Hardware revenue' from 2020; through 2019 split into 'Transmitter revenue' and 'Receiver revenue' (Press Releases/_md/Q4 19 DXCM release 2020-02-13 EX-99.01.md).",
+   "why": "Shrinking hardware revenue tracks the shift to the all-in-one G7 and to phone-as-receiver, a mix headwind to reported growth.",
+   "patterns": [
+    "hardware revenue",
+    "transmitter revenue",
+    "receiver revenue"
+   ],
+   "doc_types": [
+    "release",
+    "deck",
+    "10-Q",
+    "10-K"
+   ],
+   "group": "Revenue by Product"
+  },
+  {
+   "key": "global_customer_base",
+   "label": "Global Customer Base (YE)",
+   "units": "M",
+   "kind": "stock",
+   "definition": "Year-end count of customers globally on Dexcom CGM, stated on Q4 calls, e.g. \"ended the year with approximately 2.3 million customers globally\" (Earnings Calls/_md/Q4 23 DXCM call.md); \"more than 2.8 million customers globally on our G series and D series products\" (Earnings Calls/_md/Q4 24 DXCM call.md). Excludes Stelo where stated.",
+   "why": "The installed base of users is the volume driver behind sensor revenue; revenue per customer falls out of it.",
+   "patterns": [
+    "customers globally",
+    "global customer base",
+    "million customers",
+    "active (dexcom )?base"
+   ],
+   "doc_types": [
+    "call",
+    "event"
+   ],
+   "group": "Customers"
+  }
+ ],
+ "not_tracked": [
+  {
+   "name": "Free cash flow conversion",
+   "why": "Defined as (operating cash flow minus capex)/non-GAAP net income; first and only appearance is the Q3 26 deck (YTD). Free cash flow is already in the model."
+  },
+  {
+   "name": "U.S. organic revenue",
+   "why": "Only shown in 2022 to Q1 23 decks; U.S. organic equals U.S. reported revenue otherwise, and U.S. revenue is already in the model."
+  },
+  {
+   "name": "Impact of acquired / divested revenue",
+   "why": "Tiny bridge items (mostly zero); captured implicitly by organic revenue vs reported revenue and the FX line."
+  },
+  {
+   "name": "Stelo revenue",
+   "why": "Only point estimates: ~1% of 2024 revenue (guidance, Q2 24 call) and ~$130M in 2025 (Q4 25 call). Not reported per period."
+  },
+  {
+   "name": "G7 15 Day conversion (% of base)",
+   "why": "Guidance/commentary only (20-25% average 2026, ~50% exiting 2026; Investor Day 2026 chart to 2030)."
+  },
+  {
+   "name": "Pharmacy channel share of U.S. commercial volume",
+   "why": "Mentioned at FY20 (~50%) and FY22 (~75%, 'endpoint of a multiyear channel journey'); discontinued. Direct/distributor split already in the model."
+  },
+  {
+   "name": "Utilization / retention rates",
+   "why": "Qualitative ranges in Q&A (80-90%+ by patient type), not a reported series."
+  },
+  {
+   "name": "Category penetration / covered lives",
+   "why": "Sporadic call and Investor Day remarks (~30% of covered lives, basal 20-25%, 9M reimbursed not on CGM); no consistent series."
+  },
+  {
+   "name": "Dexcom ONE+ share of EMEA base",
+   "why": "Mentioned once (Investor Day 2026, ~30% at YE 2025)."
+  },
+  {
+   "name": "New patient starts",
+   "why": "Qualitative only ('near record levels'); never quantified."
+  },
+  {
+   "name": "Net new customers",
+   "why": "Already in the model ('net new customers, per 10k, midpoint')."
+  },
+  {
+   "name": "Employees / headcount",
+   "why": "Already in the model (employee count)."
+  },
+  {
+   "name": "Non-GAAP tax rate",
+   "why": "Not reported as a standalone measure; tax adjustments are part of the non-GAAP net income reconciliation handled elsewhere."
+  },
+  {
+   "name": "Gross/operating/EBITDA margin and growth guidance",
+   "why": "Guidance only; actuals are covered by reconciliations."
+  }
+ ],
+ "analysis": [
+  {
+   "row": "Organic Revenue",
+   "section": "KEY OPERATING METRICS",
+   "macro": "G"
+  },
+  {
+   "row": "Int'l Organic Revenue",
+   "section": "KEY OPERATING METRICS",
+   "macro": "G"
+  },
+  {
+   "row": "Sensor & Other Revenue",
+   "section": "KEY OPERATING METRICS",
+   "macro": "G"
+  },
+  {
+   "row": "Hardware Revenue",
+   "section": "KEY OPERATING METRICS",
+   "macro": "G"
+  },
+  {
+   "row": "Global Customer Base (YE)",
+   "section": "KEY OPERATING METRICS",
+   "macro": "G"
+  }
+ ],
+ "notes": [
+  "DexCom has one operating and reportable segment (10-K FY25 segment note); no segment metrics apply. Geographic (U.S./International) and channel (direct/distributor) revenue are already in the model, so they are not repeated.",
+  "Organic revenue is reported from Q3 21 (releases) and in decks from Q2 22 with quarterly history back to Q1 20. The definition widened: through 2022 it excluded only non-CGM revenue from the Australia/New Zealand distributor acquisition plus FX; from 2023 it excludes non-CGM revenue acquired or divested in the trailing twelve months plus FX. Treated as one series.",
+  "'OUS' was renamed 'INT'L' in decks around 2023; patterns include both names.",
+  "The FX bridge line was combined with acquired revenue ('Impact of Acquired Revenue and Foreign Exchange') until the Q4 23 deck, then split into acquired, divested and FX lines from the Q1 24 deck. Older values of fx_impact therefore include a small acquired-revenue amount; flag in source notes.",
+  "Judgment call: sensor and hardware revenue were reported from 2017/2018 through Q3 25 (~30 quarters) but dropped from the Q4 25 release and deck onward. Kept as rows because the history is long and the mix shift matters for G7; they will simply stop at Q3 25. Move them to not_tracked if the user only wants live metrics.",
+  "Hardware revenue before 2020 is the sum of 'Transmitter revenue' and 'Receiver revenue'; the patterns pick up both so the sum can be formed for 2017-2019.",
+  "Global customer base is annual only (Q4 calls / January JPM decks) and approximate ('close to', 'more than'); explicit values found for YE20, YE22, YE23, YE24. YE21 and YE25 were not stated as a count in the files read; the 2026 Investor Day only says '~4x growth in customer base' since 2020. Leave those cells blank rather than infer.",
+  "Organic growth uses the company's own formula (denominator is prior-year reported revenue less divested revenue), so take the reported % rather than recomputing it from organic revenue.",
+  "Sensor revenue 2017: the 2018 releases redefined the line as 'Sensor & other revenue' and restated 2017, so all of 2017 uses the restated figures (the quarters then add up to the reported FY17 of 515.6); 2016 and earlier stay on the old 'Sensor revenue' basis."
+ ]
+}

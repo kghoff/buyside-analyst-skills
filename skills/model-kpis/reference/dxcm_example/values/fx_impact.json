@@ -1,0 +1,245 @@
+[
+ {
+  "period": "Q1 21",
+  "raw": "(5.4)",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": -5.4,
+  "scale": 1
+ },
+ {
+  "period": "Q2 21",
+  "raw": "(7.3)",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": -7.3,
+  "scale": 1
+ },
+ {
+  "period": "Q3 21",
+  "raw": "(2.7)",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": -2.7,
+  "scale": 1
+ },
+ {
+  "period": "Q4 21",
+  "raw": "(0.4)",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": -0.4,
+  "scale": 1
+ },
+ {
+  "period": "Q1 22",
+  "raw": "5.3",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": 5.3,
+  "scale": 1
+ },
+ {
+  "period": "Q2 22",
+  "raw": "11.1",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": 11.1,
+  "scale": 1
+ },
+ {
+  "period": "Q3 22",
+  "raw": "15.1",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": 15.1,
+  "scale": 1
+ },
+ {
+  "period": "Q4 22",
+  "raw": "19.5",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": 19.5,
+  "scale": 1
+ },
+ {
+  "period": "Q1 23",
+  "raw": "9.3",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": 9.3,
+  "scale": 1
+ },
+ {
+  "period": "Q2 23",
+  "raw": "3.9",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": 3.9,
+  "scale": 1
+ },
+ {
+  "period": "Q3 23",
+  "raw": "(6.2)",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": -6.2,
+  "scale": 1
+ },
+ {
+  "period": "Q4 23",
+  "raw": "(8.2)",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "pure FX bridge line, prior-year column of the Q1 24 deck (earlier decks combined FX with acquired revenue)",
+  "value": -8.2,
+  "scale": 1
+ },
+ {
+  "period": "Q1 24",
+  "raw": "(3.2)",
+  "file": "Investor Decks/_md/2024 Q1 DXCM deck.md",
+  "line": 262,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": -3.2,
+  "scale": 1
+ },
+ {
+  "period": "Q2 24",
+  "raw": "0.8",
+  "file": "Investor Decks/_md/2024 Q2 DXCM deck.md",
+  "line": 276,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": 0.8,
+  "scale": 1
+ },
+ {
+  "period": "Q3 24",
+  "raw": "0.5",
+  "file": "Investor Decks/_md/2024 Q3 DXCM deck.md",
+  "line": 275,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": 0.5,
+  "scale": 1
+ },
+ {
+  "period": "Q4 24",
+  "raw": "(5.3)",
+  "file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+  "line": 280,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": -5.3,
+  "scale": 1
+ },
+ {
+  "period": "Q1 25",
+  "raw": "9.9",
+  "file": "Investor Decks/_md/2025 Q1 DXCM deck.md",
+  "line": 275,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": 9.9,
+  "scale": 1
+ },
+ {
+  "period": "Q2 25",
+  "raw": "(6.2)",
+  "file": "Investor Decks/_md/2025 Q2 DXCM deck.md",
+  "line": 274,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": -6.2,
+  "scale": 1
+ },
+ {
+  "period": "Q3 25",
+  "raw": "(11.4)",
+  "file": "Investor Decks/_md/2025 Q3 DXCM deck.md",
+  "line": 272,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": -11.4,
+  "scale": 1
+ },
+ {
+  "period": "Q4 25",
+  "raw": "(9.4)",
+  "file": "Investor Decks/_md/2025 Q4 DXCM deck.md",
+  "line": 234,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": -9.4,
+  "scale": 1
+ },
+ {
+  "period": "Q1 26",
+  "raw": "(26.6)",
+  "file": "Investor Decks/_md/2026 Q1 DXCM deck.md",
+  "line": 237,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": -26.6,
+  "scale": 1
+ },
+ {
+  "period": "Q2 26",
+  "raw": "(9.9)",
+  "file": "Investor Decks/_md/2026 Q2 DXCM deck.md",
+  "line": 244,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": -9.9,
+  "scale": 1
+ },
+ {
+  "period": "Q3 26",
+  "raw": "1.7",
+  "file": "Investor Decks/_md/2026 Q3 DXCM deck.md",
+  "line": 252,
+  "note": "own-period deck; sign as printed in bridge",
+  "value": 1.7,
+  "scale": 1
+ },
+ {
+  "period": "FY 22",
+  "raw": "51.0",
+  "file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+  "line": 280,
+  "note": "full year from Q4 24 deck; sign as printed",
+  "value": 51.0,
+  "scale": 1
+ },
+ {
+  "period": "FY 23",
+  "raw": "(1.2)",
+  "file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+  "line": 280,
+  "note": "full year from Q4 24 deck; sign as printed",
+  "value": -1.2,
+  "scale": 1
+ },
+ {
+  "period": "FY 24",
+  "raw": "(7.2)",
+  "file": "Investor Decks/_md/2024 Q4 DXCM deck.md",
+  "line": 280,
+  "note": "full year from Q4 24 deck; sign as printed",
+  "value": -7.2,
+  "scale": 1
+ },
+ {
+  "period": "FY 25",
+  "raw": "(17.1)",
+  "file": "Investor Decks/_md/2025 Q4 DXCM deck.md",
+  "line": 234,
+  "note": "full year from Q4 25 deck; sign as printed",
+  "value": -17.1,
+  "scale": 1
+ }
+]

@@ -1,0 +1,9 @@
+openpyxl
+PyMuPDF
+Pillow
+pytest
+weasyprint
+markdown
+matplotlib
+numpy
+pandas
