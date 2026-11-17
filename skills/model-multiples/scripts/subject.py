@@ -56,16 +56,21 @@ def find_rows(mm):
     return out
 
 
+def _wb(x, data_only=True):
+    """An openpyxl read-only workbook from a path, or the workbook itself if already open."""
+    return x if hasattr(x, "worksheets") else openpyxl.load_workbook(x, read_only=True, data_only=data_only)
+
+
 def eps_basis(model):
     """The GAAP / non-GAAP choice the user made in model-price-history, read from Px Data's P/E header."""
-    ws = openpyxl.load_workbook(model, read_only=True)["Px Data"]
+    ws = _wb(model)["Px Data"]
     hdr = next(ws.iter_rows(min_row=4, max_row=4, values_only=True))
     pe = next((str(h) for h in hdr if h and str(h).startswith("P/E")), "")
     return "ng" if "non-gaap" in pe.lower() else "gaap"
 
 
 def grid(values, maxrow):
-    ws = openpyxl.load_workbook(values, read_only=True, data_only=True)["MOD"]
+    ws = _wb(values)["MOD"]
     return {i: list(r) for i, r in enumerate(ws.iter_rows(min_row=1, max_row=maxrow, values_only=True), 1)}
 
 
@@ -77,7 +82,7 @@ def num(g, row, col):
 
 
 def release_dates(model):
-    ws = openpyxl.load_workbook(model, read_only=True, data_only=True)["Px Events"]
+    ws = _wb(model)["Px Events"]
     out = {}
     for r, (a, b) in enumerate(ws.iter_rows(min_row=5, max_col=2, values_only=True), 5):
         if a and isinstance(b, dt.datetime):
@@ -85,15 +90,31 @@ def release_dates(model):
     return out
 
 
+def next_q(p):
+    n, yy = p.split()
+    n, yy = int(n[1]), int(yy[:2])
+    return f"Q{n + 1} {yy:02d}" if n < 4 else f"Q1 {(yy + 1) % 100:02d}"
+
+
 def quarters(model, values):
-    """[{label, date, pxe_row, rev|gp|ebitda|eps|fcf|shares|net_debt: (value, formula)}] for reported quarters with a
-    release date and four quarters of history. values = a recalculated copy of the model (lo.recalc)."""
+    """([{label, date, pxe_row, rev|gp|ebitda|eps|fcf|shares|net_debt: (value, formula)}], notes) for reported quarters
+    with a release date and four consecutive quarters of history. values = a recalculated copy of the model
+    (lo.recalc). notes = plain-English judgment calls. A TTM or net debt with a missing cell is NM (None, and NA() in
+    the formula)."""
+    mwb, vwb = _wb(model), _wb(values)
     mm = ModMap(model)
     R = find_rows(mm)
-    basis = eps_basis(model)
-    eps_row = R["eps_ng"] if basis == "ng" and "eps_ng" in R else R["eps_gaap"]
-    g = grid(values, max(v for k, v in R.items() if k != "debt") + 5)
-    rel = release_dates(model)
+    basis = eps_basis(mwb)
+    notes = []
+    if basis == "ng" and "eps_ng" not in R:
+        raise SystemExit("model-multiples: Px Data uses non-GAAP EPS but MOD has no 'Non-GAAP EPS, Diluted' row. Add "
+                         "the row (run /model-kpis) or rebuild Px Data on the GAAP basis.")
+    eps_row = R["eps_ng"] if basis == "ng" else R["eps_gaap"]
+    ebitda_rows = [R["ebitda_ng"]] if basis == "ng" and "ebitda_ng" in R else [R["oi"], R["da"]]
+    if basis == "ng" and "ebitda_ng" not in R:
+        notes.append("EBITDA = operating income + D&A (no Adjusted EBITDA row in MOD)")
+    g = grid(vwb, max(v for k, v in R.items() if k != "debt") + 5)
+    rel = release_dates(mwb)
     qs = [p for p in mm.order if mm.is_q(p) and not p.endswith("E")]
     ref = lambda p, row: f"MOD!${mm.col(p)}${row}"
     out = []
@@ -101,26 +122,29 @@ def quarters(model, values):
         if p not in rel or i < 3:
             continue
         last4 = qs[i - 3:i + 1]
+        for a, b in zip(last4, last4[1:]):
+            if b != next_q(a):
+                raise SystemExit(f"model-multiples: MOD has no column for {next_q(a)} between {a} and {b}; TTM would "
+                                 "span five quarters. Add the column or tell Claude which quarters to use.")
 
         def ttm(rows):
-            vals = [num(g, row, mm.col(q)) for q in last4 for row in rows]
-            f = "+".join(ref(q, row) for q in last4 for row in rows)
+            cells = [(q, row) for q in last4 for row in rows]
+            vals = [num(g, row, mm.col(q)) for q, row in cells]
+            refs = [ref(q, row) for q, row in cells]
+            f = f"IF(COUNT({','.join(refs)})={len(refs)},{'+'.join(refs)},NA())"
             return (sum(vals) if all(v is not None for v in vals) else None, f)
 
-        if basis == "ng" and "ebitda_ng" in R:
-            ebitda = ttm([R["ebitda_ng"]])
-        else:
-            ebitda = ttm([R["oi"], R["da"]])
         debt = sum(num(g, r, mm.col(p)) or 0 for r in R["debt"])          # a blank debt cell = no balance
         cash = [num(g, R["cash"], mm.col(p)), num(g, R["st"], mm.col(p)) if "st" in R else 0]
-        nd_f = ("+".join(ref(p, r) for r in R["debt"]) or "0") + f"-{ref(p, R['cash'])}" + \
+        body = ("+".join(ref(p, r) for r in R["debt"]) or "0") + f"-{ref(p, R['cash'])}" + \
             (f"-{ref(p, R['st'])}" if "st" in R else "")
+        nd_f = f"IF(ISNUMBER({ref(p, R['cash'])}),{body},NA())"
         out.append({"label": p, "date": rel[p][0], "pxe_row": rel[p][1],
-                    "rev": ttm([R["rev"]]), "gp": ttm([R["gp"]]), "ebitda": ebitda, "eps": ttm([eps_row]),
+                    "rev": ttm([R["rev"]]), "gp": ttm([R["gp"]]), "ebitda": ttm(ebitda_rows), "eps": ttm([eps_row]),
                     "fcf": ttm([R["fcf"]]),
                     "shares": (num(g, R["shares"], mm.col(p)), ref(p, R["shares"])),
                     "net_debt": (debt - (cash[0] or 0) - (cash[1] or 0) if cash[0] is not None else None, nd_f)})
-    return sorted(out, key=lambda q: q["date"])
+    return sorted(out, key=lambda q: q["date"]), notes
 
 
 def asof(dates, day, strict=True):
@@ -137,7 +161,7 @@ def asof(dates, day, strict=True):
 
 def weekly(model):
     """[(date, close, Px Data row, close column letter)]: the last trading day of each ISO week."""
-    ws = openpyxl.load_workbook(model, read_only=True, data_only=True)["Px Data"]
+    ws = _wb(model)["Px Data"]
     hdr = next(ws.iter_rows(min_row=4, max_row=4, values_only=True))
     cc = next(i for i, h in enumerate(hdr) if h and str(h).endswith(" close"))
     from openpyxl.utils import get_column_letter

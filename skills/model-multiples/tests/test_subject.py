@@ -1,4 +1,5 @@
 import datetime as dt
+import re
 
 import pytest
 
@@ -28,16 +29,16 @@ def test_eps_basis_read_from_px_data_header():
 
 def test_ttm_equals_the_fiscal_year_at_q4(mm):
     # Intent: TTM at a Q4 must be the fiscal year the company reported (four quarters = the annual column).
-    qs = subject.quarters(REFERENCE, REFERENCE)
+    qs, _ = subject.quarters(REFERENCE, REFERENCE)
     q4 = next(q for q in qs if q["label"] == "Q4 24")
     fy = subject.num(subject.grid(REFERENCE, max(subject.find_rows(mm)["rev"], 1)), subject.find_rows(mm)["rev"],
                      mm.col("2024"))
     assert q4["rev"][0] == pytest.approx(fy)
-    assert q4["rev"][1].count("MOD!") == 4                       # a live formula over four MOD cells
+    assert len(set(re.findall(r"MOD!\$[A-Z]+\$\d+", q4["rev"][1]))) == 4                       # a live formula over four MOD cells
 
 
 def test_quarter_known_only_after_release(mm):
-    qs = subject.quarters(REFERENCE, REFERENCE)
+    qs, _ = subject.quarters(REFERENCE, REFERENCE)
     assert all(isinstance(q["date"], dt.date) for q in qs)
     assert [q["date"] for q in qs] == sorted(q["date"] for q in qs)
     d = qs[5]["date"]
@@ -51,3 +52,65 @@ def test_weekly_takes_last_trading_day_of_each_week():
     assert days == sorted(days)
     assert len({d.isocalendar()[:2] for d in days}) == len(days)   # one row per ISO week
     assert all(x[1] > 0 and x[2] >= 5 for x in w)                  # close, Px Data row
+
+
+def test_formulas_reproduce_the_values(mm):
+    # Intent: the live Excel formula build.py writes must give the same number (or NM) as the value we checked.
+    import re
+    qs, _ = subject.quarters(REFERENCE, REFERENCE)
+    g = subject.grid(REFERENCE, 400)
+
+    term = re.compile(r"([+-]?)MOD!\$([A-Z]+)\$(\d+)")
+
+    def terms(text):
+        return [(s or "+", subject.num(g, int(r), c)) for s, c, r in term.findall(text)]
+
+    def ev(f):
+        if not f.startswith("IF("):                                 # a bare reference
+            return terms(f)[0][1]
+        guard, rest = f[3:].split(")", 1)
+        body = rest.split(",", 1)[1] if guard.startswith("COUNT(") else rest[1:]
+        body = body.rsplit(",NA())", 1)[0]
+        if guard.startswith("COUNT("):
+            n = int(rest.split(",")[0].lstrip("="))
+            if sum(v is not None for _, v in terms(guard)) != n:
+                return None
+        elif guard.startswith("ISNUMBER(") and terms(guard)[0][1] is None:
+            return None
+        return sum((-1 if s == "-" else 1) * (v or 0) for s, v in terms(body))
+
+    n = 0
+    for q in qs:
+        for k in ("rev", "gp", "ebitda", "eps", "fcf", "shares", "net_debt"):
+            val, f = q[k]
+            got = ev(f)
+            assert (got is None and val is None) or got == pytest.approx(val), (q["label"], k)
+            n += 1
+    assert n > 100
+
+
+def test_skipped_quarter_stops_loudly(monkeypatch):
+    real = ModMap.__init__
+
+    def init(self, *a, **k):
+        real(self, *a, **k)
+        self.order.remove("Q2 20")
+    monkeypatch.setattr(ModMap, "__init__", init)
+    with pytest.raises(SystemExit, match="no column for Q2 20 between Q1 20 and Q3 20"):
+        subject.quarters(REFERENCE, REFERENCE)
+
+
+def test_ng_basis_without_ng_eps_row_stops(monkeypatch):
+    real = subject.find_rows
+    monkeypatch.setattr(subject, "eps_basis", lambda m: "ng")
+    monkeypatch.setattr(subject, "find_rows", lambda mm: {k: v for k, v in real(mm).items() if k != "eps_ng"})
+    with pytest.raises(SystemExit, match="non-GAAP EPS"):
+        subject.quarters(REFERENCE, REFERENCE)
+
+
+def test_ng_without_adjusted_ebitda_falls_back_and_says_so(monkeypatch):
+    real = subject.find_rows
+    monkeypatch.setattr(subject, "eps_basis", lambda m: "ng")
+    monkeypatch.setattr(subject, "find_rows", lambda mm: {k: v for k, v in real(mm).items() if k != "ebitda_ng"})
+    _, notes = subject.quarters(REFERENCE, REFERENCE)
+    assert any("operating income + D&A" in n for n in notes)
