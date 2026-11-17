@@ -57,4 +57,14 @@ Not read at runtime. Read before changing the scripts. Spec: docs/2026-11-17-app
 - Street EPS is the analysts' basis (usually adjusted); years match by name (Yahoo endDate year = MOD FY label).
 
 ## DXCM baseline
-Filled in by Task 13.
+Acceptance run 2026-11-17 on a copy of the DXCM model, free data, GAAP basis (comps: PODD, TNDM, ABT, MDT, SYK, BSX,
+ISRG, EW; core peers ABT, MDT, PODD; ABT XBRL from model-industry's peers folder, MDT and PODD fetched).
+- verify: "ok": true, 14,353 cells checked, 0 failed, 0 errors, no other part changed.
+- Weeks: 559, 2016-02-26 to 2026-11-04 (the model's Px Data ends 2026-11-04, so "Today" is that week's close, 88.48).
+- Cross-checks: TTM P/E 34.933 = Px Data "P/E (TTM GAAP)" on 2026-11-04 exactly (88.48 / 2.5328); PODD P/E FY1
+  18.673 = 147.71 / 7.91021 (Yahoo +1y EPS in comps/PODD.json); 5-year median P/E 81.755 recomputed by hand from the
+  last 260 weekly values (percentile 13.8% counts values <= today).
+- Forward P/E: 2026E 34.96x on EPS 2.531, 2027E 28.85x on EPS 3.067 (MOD forecast).
+- Comps' P/E FY1: TNDM 182.4, ISRG 34.6, EW 31.4, DXCM 26.2, SYK 19.4, PODD 18.7, ABT 17.7, MDT 16.1, BSX 13.8.
+- Warnings: "112 week(s) with neither a P/E nor an EV/Revenue were left out (no quarter known yet, or no data in the
+  export)."
