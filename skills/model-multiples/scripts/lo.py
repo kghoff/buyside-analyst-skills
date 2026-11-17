@@ -1,4 +1,4 @@
-"""(Copied from model-consensus, Nov 2026; keep in sync.) LibreOffice headless helpers: recalculate a workbook (every formula, not the cached values) and render one tab.
+"""(Copied from model-consensus, Nov 2026; keep in sync, except the profile folder is named model-multiples so two skills can run at once.) LibreOffice headless helpers: recalculate a workbook (every formula, not the cached values) and render one tab.
 
 A private LibreOffice profile set to "always recalculate on load" is created on first use, so the user's own
 LibreOffice settings (if they have any) are never touched."""
@@ -9,7 +9,7 @@ import tempfile
 
 SOFFICE = next((p for p in ("/Applications/LibreOffice.app/Contents/MacOS/soffice", shutil.which("soffice") or "")
                 if p and os.path.exists(p)), None)
-PROFILE = os.path.join(tempfile.gettempdir(), "model-consensus-lo-profile")
+PROFILE = os.path.join(tempfile.gettempdir(), "model-multiples-lo-profile")
 XCU = """<?xml version="1.0" encoding="UTF-8"?>
 <oor:items xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 <item oor:path="/org.openoffice.Office.Calc/Formula/Load"><prop oor:name="OOXMLRecalcMode" oor:op="fuse"><value>0</value></prop></item>

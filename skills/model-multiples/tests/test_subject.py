@@ -135,3 +135,12 @@ def test_unit_column_not_millions_is_a_warning(mm):
     fake = type("MM", (), {"lines": [(R["rev"], "k", "$ K"), (R["shares"], "k", "M")]})()
     notes = subject.unit_notes(fake, R)
     assert len(notes) == 1 and "'$ K'" in notes[0] and "revenue" in notes[0]
+
+
+def test_unit_check_matches_only_real_millions_labels():
+    # "Number" contains an m but is not millions; a units slip must warn, a real millions label must not.
+    mk = lambda u: type("MM", (), {"lines": [(1, "k", u), (2, "k", "M")]})()
+    R = {"rev": 1, "shares": 2}
+    assert len(subject.unit_notes(mk("Number"), R)) == 1
+    for ok in ("$M", "$ millions", "MM", "$ M", "Mil"):
+        assert subject.unit_notes(mk(ok), R) == [], ok

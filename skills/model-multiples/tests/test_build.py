@@ -267,3 +267,23 @@ def test_missing_typed_value_is_a_black_na_formula_not_a_typed_number():
     assert w.typed == ["A2"] and w.formulas == ["A1"]
     assert w.sh.cells[(1, 1)] == ("f", "NA()", w.style(build.BLACK, build.X))
     assert w.sh.cells[(2, 1)][2] == w.style(build.BLUE, build.X)
+
+
+def test_price_date_warning_and_as_of_headers(built):
+    # Px Data in the fixture ends weeks before the comp snapshot's asof: the two "today" prices must be called out.
+    _, out, _, summary = built
+    w = [x for x in summary["warnings"] if x.startswith("Px Data ends ")]
+    assert len(w) == 1 and "comp prices are 2026-11-17" in w[0] and "/model-price-history" in w[0]
+    ws = openpyxl.load_workbook(out)["Multiples"]
+    heads = [c.value for r in ws.iter_rows(max_col=1) for c in r if isinstance(c.value, str)]
+    assert any(h.startswith("RANGES (as of 20") for h in heads) and any(h.startswith("FORWARD (price and EV as of 20") for h in heads)
+
+
+def test_chart_titles_use_plain_hyphen(built):
+    import zipfile
+    _, out, _, _ = built
+    z = zipfile.ZipFile(out)
+    xml = "".join(z.read(n).decode() for n in z.namelist() if n.startswith("xl/charts/chart"))
+    import re
+    titles = [re.sub("<[^>]+>", "", t) for x in re.findall(r"<c:title>.*?</c:title>", xml) for t in [x]]
+    assert any("P/E - S&P 500 P/E" in t.replace("&amp;", "&") for t in titles) and not any("\u2212" in t for t in titles)

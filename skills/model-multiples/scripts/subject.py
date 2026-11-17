@@ -28,7 +28,7 @@ DEBT = r"debt|notes|borrowing|convertible|credit facilit|commercial paper|financ
 NOT_DEBT = r"^total|accounts payable|operating lease|interest payable|accrued|deferred"
 FCF = r"free cash flow$"                      # the last match: the FREE CASH FLOW section sits lowest in MOD
 METRICS = ("rev", "gp", "ebitda", "eps", "fcf")
-MILLIONS = r"\$?\s*M|mil"                    # MOD's unit column (C) for revenue and shares should say millions
+MILLIONS = r"(?i)\b(\$\s*)?(m|mm|mn|mil|millions?)\b"                    # MOD's unit column (C) for revenue and shares should say millions
 
 
 def unit_notes(mm, R):
@@ -36,7 +36,7 @@ def unit_notes(mm, R):
     unit = {i: c for i, _, c in mm.lines}
     return [f"MOD's {name} row says its unit is {unit[R[k]]!r}, not millions; the multiples assume millions. Check the "
             "row's unit." for k, name in (("rev", "revenue"), ("shares", "diluted shares"))
-            if unit.get(R[k]) and not re.search(MILLIONS, str(unit[R[k]]), re.I)]
+            if unit.get(R[k]) and not re.search(MILLIONS, str(unit[R[k]]))]
 
 
 def norm(t):

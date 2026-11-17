@@ -199,6 +199,14 @@ def build(model, work, ticker, out):
                        [C.row(snaps[c["ticker"]], c.get("group", "")) for c in cfg["comps"]])
     warnings += [f"{r['ticker']}: {r['warning']}" for r in comp_rows if r["warning"]]
 
+    try:
+        d1, d2 = dt.date.fromisoformat(str(rows[-1]["date"])[:10]), dt.date.fromisoformat(str(snaps[ticker]["asof"])[:10])
+        if (d2 - d1).days > 7:
+            warnings.append(f"Px Data ends {d1} but comp prices are {d2}: the history and forward blocks use the {d1} price "
+                            f"(${rows[-1]['price']:,.2f}), the comp sheet ${snaps[ticker]['price']:,.2f}. Rerun "
+                            "/model-price-history to refresh Px Data.")
+    except (ValueError, TypeError, KeyError):
+        pass
     # ---------------------------------------------------------------- layout: data blocks at the bottom
     R_RANGE = 5
     R_FWD = R_RANGE + len(KEYS) + 8
@@ -372,7 +380,8 @@ def build(model, work, ticker, out):
             notes[f"{L[f'{t}_known']}{R_DATA + 1}"] = "Quarter end + 45 days (Q1-Q3) or 90 days (Q4): the latest SEC filing deadlines."
 
     # ---------------------------------------------------------------- RANGES and reverse P/E
-    w.text(f"A{R_RANGE}", "RANGES", b=True)
+    last_wk = rows[-1]["date"]
+    w.text(f"A{R_RANGE}", f"RANGES (as of {last_wk}, the last weekly close in Px Data)", b=True)
     w.text(f"A{R_RANGE + 1}", "Metric", b=True, fill="FFDDEBF7")
     w.text(f"B{R_RANGE + 1}", "Today", b=True, fill="FFDDEBF7")
     cc = 3
@@ -418,7 +427,7 @@ def build(model, work, ticker, out):
     eps_row = Rw["eps_ng"] if S.eps_basis(model) == "ng" and "eps_ng" in Rw else Rw["eps_gaap"]
     g = S.grid(recalced, max(v for k, v in Rw.items() if k != "debt") + 5)
     yrs = mm.forecast_years()[:5]
-    w.text(f"A{R_FWD}", "FORWARD (today's price and EV on each forecast year)", b=True)
+    w.text(f"A{R_FWD}", f"FORWARD (price and EV as of {last_wk}, the last weekly close in Px Data, on each forecast year)", b=True)
     w.text(f"A{R_FWD + 1}", "", b=True, fill="FFDDEBF7")
     for j, y in enumerate(yrs):
         w.text(f"{colname(2 + j)}{R_FWD + 1}", y, b=True, fill="FFDDEBF7")
@@ -562,7 +571,7 @@ def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings, lab):
                                 *([(f"{ticker} FCF yield (NTM)", "fcf_yield_ntm", "NTM FCF yield", PCT)]
                                   if mode == "paid" else [])):
         if any(r.get(k) is not None for r in rows):
-            chart_list.append(line(title, cat, [ser(k, name, "1F4E79")], fmt))
+            chart_list.append(line(title.replace("\u2212", "-"), cat, [ser(k, name, "1F4E79")], fmt))
         else:                         # every week NM: an empty chart says nothing, so skip it and say so
             warnings.append(f"No week has a {lab[k]} value, so the '{title}' chart is skipped.")
     pts = [{"name": r["ticker"], "x": (f"'{TAB}'!$S${C0 + i}", r["growth1"]), "y": (f"'{TAB}'!$Q${C0 + i}", r["pe1"]),
