@@ -28,14 +28,14 @@ def _cache(vals, fmt):
     return f'<c:numCache><c:formatCode>{esc(fmt)}</c:formatCode><c:ptCount val="{len(vals)}"/>{pts}</c:numCache>'
 
 
-def _valax(ax, cross, pos, fmt, grid=True, delete=False):
+def _valax(ax, cross, pos, fmt, between, grid=True, delete=False):
     g = ('<c:majorGridlines><c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="E0E0E0"/></a:solidFill></a:ln>'
          '</c:spPr></c:majorGridlines>') if grid else ""
     return (f'<c:valAx><c:axId val="{ax}"/><c:scaling><c:orientation val="minMax"/></c:scaling>'
             f'<c:delete val="{1 if delete else 0}"/><c:axPos val="{pos}"/>{g}'
             f'<c:numFmt formatCode="{esc(fmt)}" sourceLinked="0"/><c:majorTickMark val="none"/>'
             f'<c:minorTickMark val="none"/><c:tickLblPos val="low"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>{_txt(900)}'
-            f'<c:crossAx val="{cross}"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/></c:valAx>')
+            f'<c:crossAx val="{cross}"/><c:crosses val="autoZero"/><c:crossBetween val="{between}"/></c:valAx>')
 
 
 def _wrap(title, plot, legend=True):
@@ -50,6 +50,8 @@ def _wrap(title, plot, legend=True):
 
 def line(title, cat, series, yfmt):
     """cat = (ref, excel serial dates); series = [{name, ref, vals, color, dash?}]."""
+    if not series:
+        raise ValueError("line chart needs at least one series")
     sers = ""
     for i, s in enumerate(series):
         dash = '<a:prstDash val="dash"/>' if s.get("dash") else ""
@@ -64,7 +66,7 @@ def line(title, cat, series, yfmt):
             '<c:minorTickMark val="none"/><c:tickLblPos val="low"/><c:spPr><a:ln w="9525"><a:solidFill>'
             f'<a:srgbClr val="BFBFBF"/></a:solidFill></a:ln></c:spPr>{_txt(900)}<c:crossAx val="602"/>'
             '<c:crosses val="autoZero"/><c:auto val="0"/><c:lblOffset val="100"/><c:baseTimeUnit val="days"/>'
-            '<c:majorUnit val="12"/><c:majorTimeUnit val="months"/></c:dateAx>' + _valax(602, 601, "l", yfmt))
+            '<c:majorUnit val="12"/><c:majorTimeUnit val="months"/></c:dateAx>' + _valax(602, 601, "l", yfmt, "between"))
     plot = (f'<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>{sers}<c:marker val="1"/>'
             f'<c:axId val="601"/><c:axId val="602"/></c:lineChart>{axes}')
     return _wrap(title, plot, legend=len(series) > 1)
@@ -72,6 +74,8 @@ def line(title, cat, series, yfmt):
 
 def scatter(title, points, xfmt="0%", yfmt='0"x"'):
     """points = [{name, x: (ref, value), y: (ref, value), subject}]: one series per company, labelled with its name."""
+    if not points:
+        raise ValueError("scatter chart needs at least one point")
     sers = ""
     for i, p in enumerate(points):
         col = SUBJECT if p["subject"] else OTHER
@@ -87,5 +91,5 @@ def scatter(title, points, xfmt="0%", yfmt='0"x"'):
                  '<c:smooth val="0"/></c:ser>')
     plot = (f'<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>{sers}'
             '<c:axId val="701"/><c:axId val="702"/></c:scatterChart>'
-            + _valax(701, 702, "b", xfmt, grid=False) + _valax(702, 701, "l", yfmt))
+            + _valax(701, 702, "b", xfmt, "midCat", grid=False) + _valax(702, 701, "l", yfmt, "midCat"))
     return _wrap(title, plot, legend=False)
