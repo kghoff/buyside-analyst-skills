@@ -84,7 +84,7 @@ def test_multi_ticker_file_needs_a_choice_and_filters(tmp_path):
                      "2024-01-12,abt,11,1\n")
     with pytest.raises(SystemExit, match="ABT.*DXCM"):
         importer.load(p)
-    assert [r["price"] for r in importer.load(p, ticker="ABT")] == [11.0]
+    assert [r["price"] for r in importer.load(p, ticker="ABT")] == [10.0, 11.0]
     assert [r["price"] for r in importer.load(p, ticker="dxcm")] == [50.0]
 
 
