@@ -75,7 +75,8 @@ untouched.
 ## Step 6: Build and verify
 1. `python3 "$SK/build.py" --model "$M" --work "$W" --ticker <T> --out "$W/out.xlsx"`. It never touches `M`. Keep the
    printed summary for the report: `user_kept` (cells the user had changed, agent value vs theirs) and `warnings`.
-2. `python3 "$SK/verify.py" --model "$M" --out "$W/out.xlsx" --work "$W"`. It must print `"ok": true`. It
+2. `python3 "$SK/verify.py" --model "$M" --out "$W/out.xlsx" --work "$W"` (add `--research-dir "$RD"` if not the
+   setting's). It must print `"ok": true`. It
    recalculates in LibreOffice and compares every checked cell with the chapter math, scans for errors, proves every
    other part of the file is byte-identical, checks colours and the multiple pairing, re-types each DCF scenario into
    a copy of the DCF tab, and checks the anchors again. Keep its `recalculated` path for Step 7.
@@ -86,7 +87,7 @@ untouched.
 ## Step 7: Note
 `python3 "$SK/note.py" --work "$W" --ticker <T> --out-dir "$RD/<T>/Valuation" --values <verify's recalculated file>`
 (add `--date YYYY-MM-DD` for another as-of date). This must run before Step 8 deletes `$W/verify/`. It writes
-`<date> <T> Valuation Note.md` and `.pdf`. If it prints `"pdf": null`, tell the user the PDF was skipped and why.
+`<date> <T> Valuation Note.md` and `.pdf`. If it prints `"pdf": null`, tell the user the PDF was skipped and why (`pdf_skipped`).
 
 ## Step 8: Copy over
 1. `shasum -a 256 "$M"` again. Changed since Step 1 = the user edited the model meanwhile: stop and rebuild from

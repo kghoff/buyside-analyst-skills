@@ -75,6 +75,11 @@ brief, §5 testing, §6 judgment calls); plan: docs/2026-11-17-model-valuation-p
 - The test fixture is the repo's DXCM example model.
 - `scenario_eval.py` appends its own folder to `sys.path` after model-dcf's (theirs win on shared names), and its
   stale check recalculates under `W/dcf_stale/`.
+- The note reads every number from verify's recalculated file (layout.json refs, else the tab's column-A labels) in the
+  cell's own number format, so a label renamed in `build.py` shows as "n/a" in the note: rename both together.
+- The plan has no field for a gap-flag explanation; the agent writes it in `notes` (assignment.md), and the note
+  quotes each note naming the case or "gap". None found = the note says so instead of staying quiet.
+- The note always has `## 6 Earnings power` (saying "not used" without normalization) so the numbering has no hole.
 
 ## Known issues
 - The DCF re-type check uses model-dcf's `lo.py` and its LibreOffice profile, which other skills share: don't run two
