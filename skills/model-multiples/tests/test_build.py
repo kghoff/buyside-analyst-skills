@@ -2,6 +2,7 @@
 against engine.py. Never writes any file but the copies in tmp_path."""
 import datetime as dt
 import json
+import math
 import os
 import shutil
 import zipfile
@@ -46,6 +47,42 @@ def built(tmp_path_factory):
                "files": {"ABT": {"xbrl": str(w / "ABT_xbrl.json"), "prices": str(w / "abt_us_d.csv")}}},
               open(w / "comps.json", "w"))
     json.dump({"mode": "free"}, open(w / "mode.json", "w"))
+    out = w / "out.xlsx"
+    summary = build.build(str(model), str(w), "DXCM", str(out))
+    return model, out, w, summary
+
+
+def write_export(path, header, rows):
+    with open(path, "w") as f:
+        f.write(",".join(header) + "\n")
+        for r in rows:
+            f.write(",".join(str(x) for x in r) + "\n")
+
+
+@pytest.fixture(scope="module")
+def built_paid(tmp_path_factory):
+    """Paid path: synthetic vendor exports (subject + one core peer), weekly for three years, smooth values."""
+    w = tmp_path_factory.mktemp("paid")
+    model = w / "model.xlsx"
+    shutil.copy(REFERENCE, model)                      # a copy: never the live file
+    os.makedirs(w / "comps")
+    for t, e in (("DXCM", 3.1), ("PODD", 4.0), ("TNDM", -1.0)):
+        json.dump(comp_snap(t, e), open(w / "comps" / f"{t}.json", "w"))
+    days = [dt.date(2023, 11, 17) + dt.timedelta(days=7 * i) for i in range(156)]
+    write_export(w / "dxcm_export.csv",
+                 ["Date", "Price", "EPS", "EV", "MCAP", "EBITDA", "GP", "SALES", "LTM FCF", "NTM FCF", "S&P 500 NTM P/E"],
+                 [(d.isoformat(), round(80 + 20 * math.sin(i / 9), 4), round(2 + 0.01 * i, 4),
+                   round(30000 + 50 * i + 3000 * math.sin(i / 9), 2), round(31000 + 50 * i + 3000 * math.sin(i / 9), 2),
+                   round(1200 + 4 * i, 2), round(2400 + 6 * i, 2), round(4000 + 10 * i, 2), round(600 + 2 * i, 2),
+                   round(700 + 2 * i, 2), round(20 + math.cos(i / 13), 4)) for i, d in enumerate(days)])
+    write_export(w / "abt_export.csv", ["Date", "Price", "EPS"],
+                 [(d.isoformat(), round(110 + 5 * math.cos(i / 7), 4), round(5 + 0.005 * i, 4))
+                  for i, d in enumerate(days)])
+    json.dump({"subject": "DXCM", "core": ["ABT"],
+               "comps": [{"ticker": "PODD", "group": "Diabetes devices"}, {"ticker": "TNDM", "group": "Diabetes devices"}],
+               "files": {"DXCM": {"export": str(w / "dxcm_export.csv")}, "ABT": {"export": str(w / "abt_export.csv")}}},
+              open(w / "comps.json", "w"))
+    json.dump({"mode": "paid"}, open(w / "mode.json", "w"))
     out = w / "out.xlsx"
     summary = build.build(str(model), str(w), "DXCM", str(out))
     return model, out, w, summary
@@ -98,3 +135,18 @@ def test_comp_sheet_ranked_and_nm_peer_shown(built, verified):
     assert rec.cell(rows["TNDM"], 17).value == "#N/A"                                    # P/E FY1 on a loss: NM
     built_ws = openpyxl.load_workbook(out)["Multiples"]
     assert built_ws.cell(rows["DXCM"], 1).font.b and not built_ws.cell(rows["PODD"], 1).font.b
+
+
+def test_paid_path_recalculates_and_carries_ntm_fcf_yield(built_paid):
+    # The paid path's sixth multiple, NTM FCF yield, has its own weekly column and range row, and the whole tab
+    # recalculates to engine.py's numbers just as the free path does.
+    model, out, w, s = built_paid
+    r = verify.run(str(model), str(out), str(w))
+    assert r["failed"] == [] and r["errors"] == [] and r["changed_parts"] == [] and r["ok"], r
+    ws = openpyxl.load_workbook(r["recalculated"], data_only=True)["Multiples"]
+    labels = [ws.cell(i, 1).value for i in range(5, 20)]
+    assert "FCF yield (NTM)" in labels
+    lay = json.load(open(w / "layout.json"))
+    hdr = {c.value: c.column_letter for c in ws[lay["W0"] - 1] if c.value}
+    col = hdr["NTM FCF yield"]
+    assert isinstance(ws[f"{col}{lay['WN']}"].value, float) and f"{col}{lay['WN']}" in lay["expected"]

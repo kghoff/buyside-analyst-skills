@@ -72,3 +72,11 @@ def test_paid_weekly_from_real_importer_output(tmp_path):
     assert b["peer_pe"]["AAA"] == pytest.approx(20.0)
     assert a["peer_pe"]["BBB"] is None and b["peer_pe"]["BBB"] is None      # eps <= 0 -> NM
     assert b["peer_med"] == 20.0 and b["rel_peer"] == pytest.approx(15.0 - 20.0) and a["peer_med"] is None
+
+
+def test_ranges_take_extra_keys_for_the_paid_paths_forward_fcf_yield():
+    # The paid path ranges NTM FCF yield too; the default keys stay the free path's seven (no forward-FCF history).
+    rows = [{"fcf_yield_ntm": v} for v in (0.02, 0.04, 0.03)]
+    rg = engine.ranges(rows, windows=(3,), keys=engine.KEYS + ("fcf_yield_ntm",))
+    assert rg["fcf_yield_ntm"][3]["median"] == 0.03 and rg["fcf_yield_ntm"][3]["pct"] == pytest.approx(2 / 3)
+    assert "fcf_yield_ntm" not in engine.ranges(rows, windows=(3,))

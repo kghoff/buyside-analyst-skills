@@ -26,7 +26,7 @@ BLUE, BLACK, GREEN = "FF0000FF", "FF000000", "FF008000"
 X, PCT, MILL, MONEY, DATE = '0.0"x"', "0.0%", "#,##0", "$#,##0.00", "yyyy-mm-dd"
 RAWM = '#,##0,,'                                   # raw dollars shown in millions; the typed value is unchanged
 LABELS = {"pe": "P/E", "ev_ebitda": "EV/EBITDA", "ev_gp": "EV/GP", "ev_rev": "EV/Revenue", "fcf_yield": "FCF yield",
-          "rel_sp": "P/E − S&P 500 P/E", "rel_peer": "P/E − core-peer median"}
+          "fcf_yield_ntm": "FCF yield (NTM)", "rel_sp": "P/E − S&P 500 P/E", "rel_peer": "P/E − core-peer median"}
 WLAB = {52: "1 year", 260: "5 years", 520: "10 years"}
 
 
@@ -128,7 +128,9 @@ def build(model, work, ticker, out):
         if all(r.get("sp500_pe") is None for r in subj):
             warnings.append("The export has no S&P 500 NTM P/E column, so the S&P-relative rows are #N/A.")
     rows = [r for r in rows if r.get("pe") is not None or r.get("ev_rev") is not None] or rows
-    rg = E.ranges(rows)
+    # Paid path: the sixth multiple, forward FCF yield, has a history (the export's NTM FCF); the free path has none.
+    KEYS = E.KEYS + (("fcf_yield_ntm",) if mode == "paid" else ())
+    rg = E.ranges(rows, keys=KEYS)
     rev = E.reverse(rows, rg)
     comp_rows = C.rank([C.row(snaps[ticker], "Subject")] +
                        [C.row(snaps[c["ticker"]], c.get("group", "")) for c in cfg["comps"]])
@@ -136,10 +138,10 @@ def build(model, work, ticker, out):
 
     # ---------------------------------------------------------------- layout: data blocks at the bottom
     R_RANGE = 5
-    R_FWD = R_RANGE + len(E.KEYS) + 8
+    R_FWD = R_RANGE + len(KEYS) + 8
     R_COMP = R_FWD + 16
-    # The data blocks run wider than column V, so they start below the charts (up to 8 charts, two across).
-    R_DATA = max(R_COMP + len(comp_rows) + 8, ROW0 + 4 * (NROWS + 1) + 3)
+    # The data blocks run wider than column V, so they start below the charts (up to 8 charts free, 9 paid; two across).
+    R_DATA = max(R_COMP + len(comp_rows) + 8, ROW0 + -(-(9 if mode == "paid" else 8) // 2) * (NROWS + 1) + 3)
     W0, WN = R_DATA + 2, R_DATA + 1 + len(rows)
 
     col = {}
@@ -154,7 +156,8 @@ def build(model, work, ticker, out):
 
     base = ["date", "price", "q", "rev", "gp", "ebitda", "eps", "fcf", "shares", "net_debt"] if mode == "free" else \
         ["date", "price", "eps", "rev", "gp", "ebitda", "fcf", "fcf_ntm", "shares", "net_debt"]
-    take(*base, "mcap", "ev", "ev_rev", "ev_gp", "ev_ebitda", "pe", "fcf_yield", "sp_pe", "rel_sp",
+    take(*base, "mcap", "ev", "ev_rev", "ev_gp", "ev_ebitda", "pe", "fcf_yield",
+         *(["fcf_yield_ntm"] if mode == "paid" else []), "sp_pe", "rel_sp",
          *[f"px_{t}" for t in cfg["core"]], *[f"pe_{t}" for t in cfg["core"]], "peer_med", "rel_peer")
     if mode == "free":
         take("q_label", "q_date", "q_rev", "q_gp", "q_ebitda", "q_eps", "q_fcf", "q_shares", "q_nd")
@@ -175,7 +178,8 @@ def build(model, work, ticker, out):
     hdr = {"date": "Week", "price": "Price", "q": "Quarter # known", "rev": "Revenue", "gp": "Gross profit",
            "ebitda": "EBITDA", "eps": "EPS", "fcf": "FCF", "fcf_ntm": "NTM FCF", "shares": "Diluted shares",
            "net_debt": "Net debt", "mcap": "Market cap", "ev": "EV", "ev_rev": "EV/Revenue", "ev_gp": "EV/GP",
-           "ev_ebitda": "EV/EBITDA", "pe": "P/E", "fcf_yield": "FCF yield", "sp_pe": "S&P 500 P/E",
+           "ev_ebitda": "EV/EBITDA", "pe": "P/E", "fcf_yield": "FCF yield", "fcf_yield_ntm": "NTM FCF yield",
+           "sp_pe": "S&P 500 P/E",
            "rel_sp": "P/E − S&P", "peer_med": "Core-peer median P/E", "rel_peer": "P/E − peer median"}
     for t in cfg["core"]:
         hdr[f"px_{t}"], hdr[f"pe_{t}"] = f"{t} close", f"{t} P/E"
@@ -226,6 +230,9 @@ def build(model, work, ticker, out):
                             ("pe", "price", "eps")):
             w.formula(g(k), na(f"IF({g(den)}>0,{g(num)}/{g(den)},NA())"), X, r[k])
         w.formula(g("fcf_yield"), na(f"IF({g('mcap')}>0,{g('fcf')}/{g('mcap')},NA())"), PCT, r["fcf_yield"])
+        if mode == "paid":
+            w.formula(g("fcf_yield_ntm"), na(f"IF({g('mcap')}>0,{g('fcf_ntm')}/{g('mcap')},NA())"), PCT,
+                      r["fcf_yield_ntm"])
         w.formula(g("rel_sp"), na(f"{g('pe')}-{g('sp_pe')}"), X, r["rel_sp"])
         for t in cfg["core"]:
             w.typed_(g(f"px_{t}"), r["peer_px"].get(t), MONEY)
@@ -283,6 +290,8 @@ def build(model, work, ticker, out):
                 w.formula(f"{L[f'{t}_ttm']}{n}", f, MONEY, q["ttm"])
             notes[f"{L[f'{t}_eps']}{R_DATA + 1}"] = (f"Typed from edgar-xbrl-financials ({os.path.basename(cfg['files'][t]['xbrl'])}"
                                                      "), tag diluted_earnings_per_share.")
+            notes[f"{L[f'{t}_end']}{R_DATA + 1}"] = ("Quarter end derived from edgar-xbrl-financials ttm.endDate, "
+                                                     "stepping back three months a quarter.")
             notes[f"{L[f'{t}_known']}{R_DATA + 1}"] = "Quarter end + 45 days (Q1-Q3) or 90 days (Q4): the latest SEC filing deadlines."
 
     # ---------------------------------------------------------------- RANGES and reverse P/E
@@ -295,9 +304,9 @@ def build(model, work, ticker, out):
             w.text(f"{colname(cc)}{R_RANGE + 1}", f"{WLAB[n_]} {s_ if s_ != 'pct' else 'percentile'}", b=True,
                    fill="FFDDEBF7")
             cc += 1
-    for i, k in enumerate(E.KEYS):
+    for i, k in enumerate(KEYS):
         rr = R_RANGE + 2 + i
-        fmt = PCT if k == "fcf_yield" else X
+        fmt = PCT if k.startswith("fcf_yield") else X
         w.text(f"A{rr}", LABELS[k])
         w.formula(f"B{rr}", na(f"{L[k]}{WN}"), fmt, rows[-1].get(k))
         cc = 3
@@ -312,7 +321,7 @@ def build(model, work, ticker, out):
                           ("pct", f"IF(ISNUMBER({L[k]}{WN}),SUMPRODUCT(IFERROR(({R}<={L[k]}{WN})*1,0))/COUNT({R}),NA())")):
                 w.formula(f"{colname(cc)}{rr}", na(f), PCT if s_ == "pct" else fmt, stt[s_] if stt else None)
                 cc += 1
-    rr = R_RANGE + 2 + len(E.KEYS) + 1
+    rr = R_RANGE + 2 + len(KEYS) + 1
     w.text(f"A{rr}", "Implied earnings power (today's price ÷ P/E)", b=True)
     cc = 3
     for n_ in E.WINDOWS:
@@ -435,7 +444,9 @@ def build(model, work, ticker, out):
                                 (f"{ticker} EV/EBITDA ({word})", "ev_ebitda", "EV/EBITDA", X),
                                 (f"{ticker} EV/GP ({word})", "ev_gp", "EV/GP", X),
                                 (f"{ticker} EV/Revenue ({word})", "ev_rev", "EV/Revenue", X),
-                                (f"{ticker} FCF yield", "fcf_yield", "FCF yield", PCT)):
+                                (f"{ticker} FCF yield", "fcf_yield", "FCF yield", PCT),
+                                *([(f"{ticker} FCF yield (NTM)", "fcf_yield_ntm", "NTM FCF yield", PCT)]
+                                  if mode == "paid" else [])):
         if any(r.get(k) is not None for r in rows):
             chart_list.append(line(title, cat, [ser(k, name, "1F4E79")], fmt))
         else:                         # every week NM: an empty chart says nothing, so skip it and say so

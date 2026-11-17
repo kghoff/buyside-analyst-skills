@@ -69,8 +69,9 @@ def paid_weekly(rows, peer_rows):
     return out
 
 
-def ranges(rows, windows=WINDOWS):
-    return {k: {n: M.window_stats([r.get(k) for r in rows], n) for n in windows} for k in KEYS}
+def ranges(rows, windows=WINDOWS, keys=KEYS):
+    """keys: KEYS, plus "fcf_yield_ntm" on the paid path (an export's NTM FCF; the free path has no forward history)."""
+    return {k: {n: M.window_stats([r.get(k) for r in rows], n) for n in windows} for k in keys}
 
 
 def reverse(rows, rg):
