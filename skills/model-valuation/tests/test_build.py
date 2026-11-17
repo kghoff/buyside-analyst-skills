@@ -60,7 +60,7 @@ def test_every_plan_input_is_yellow_with_its_anchor(model, work, tmp_path):
     for key, ref in lay["inputs"].items():
         c = ws[ref]
         assert c.fill.fgColor.rgb == YELLOW, key
-        assert plan["inputs"][key]["anchor"] in c.comment.text, key
+        assert build.plan_inputs(plan)[key]["anchor"] in c.comment.text, key
     yellow = {c.coordinate for r in ws.iter_rows() for c in r if c.fill and c.fill.fgColor.rgb == YELLOW}
     assert yellow == set(lay["inputs"].values())                     # nothing else is yellow
 
@@ -105,8 +105,8 @@ def test_labels_are_unique_and_found_on_the_tab(model, work, tmp_path):
     a = [c.value for r in ws.iter_rows(min_col=1, max_col=1) for c in r if c.value is not None]
     lay = json.load(open(os.path.join(work, "layout.json")))
     for key, ref in lay["inputs"].items():
-        assert a.count(build.LABEL[key]) == 1, key
-        assert ws[f"A{ws[ref].row}"].value == build.LABEL[key] and ws[ref].column_letter == build.col_of(key)
+        assert a.count(build.label_of(key)) == 1, key
+        assert ws[f"A{ws[ref].row}"].value == build.label_of(key) and ws[ref].column_letter == build.col_of(key)
 
 
 def _close(got, want):
@@ -143,6 +143,77 @@ def test_tab_sits_after_multiples(model, work, tmp_path):
     build.build(model, work, "TEST", out)
     names = openpyxl.load_workbook(out, read_only=True).sheetnames
     assert names[names.index("Multiples") + 1] == "Valuation"
+
+
+def test_rr_and_tree_recalculate_to_valmath(model, work, tmp_path):
+    """The sheet's formulas and valmath agree after LibreOffice recalculates (the spec's 'recompute in Python')."""
+    import verify
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    r = verify.compare(out, work)
+    assert r["failed"] == [] and r["errors"] == [] and r["checked"] > 80, r
+
+
+def _blended(work):
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    e, ref = lay["expected"], {k: v.replace("$", "") for k, v in lay["ref"].items()}
+    row = int(ref["blended_risk"][1:])
+    return e[ref["price"]], e[ref["blended_reward"]], e[ref["blended_risk"]], e[f"B{row + 1}"], e[f"B{row + 2}"]
+
+
+def test_short_switch_flips(model, work, tmp_path):
+    """A short makes money toward the risk price and loses toward the reward price, so reward % and risk % swap
+    meaning; the sheet's switch formulas must follow the yellow position cell."""
+    out = str(tmp_path / "long.xlsx")
+    build.build(model, work, "TEST", out)
+    price, rw, rk, up, down = _blended(work)
+    assert up == pytest.approx(rw / price - 1) and down == pytest.approx(1 - rk / price)
+    p = json.load(open(os.path.join(work, "valuation_plan.json")))
+    p["inputs"]["position"]["value"] = "short"
+    json.dump(p, open(os.path.join(work, "valuation_plan.json"), "w"))
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    import verify
+    assert verify.compare(out, work)["failed"] == []
+    price, rw, rk, up, down = _blended(work)
+    assert up == pytest.approx((price - rk) / price) and down == pytest.approx((rw - price) / price)
+    assert any(v == "below hurdle" or v == "buy" or v == "table-pound" for v in lay["expected"].values())
+
+
+def test_ladder_has_seven_rungs_around_today(model, work, tmp_path):
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    ws = _ws(out)
+    steps = [c.value for r in ws.iter_rows(min_col=1, max_col=1) for c in r if isinstance(c.value, float)
+             and -0.16 < c.value < 0.16 and c.number_format.startswith("+0%")]
+    assert steps == pytest.approx([-.15, -.10, -.05, 0, .05, .10, .15])
+
+
+def test_dcf_scenarios_are_grey_blue_and_sourced(model, work, tmp_path):
+    """The scenario values are typed from scenario_eval (model-dcf's own math), so each is blue on grey and its note
+    names the round that produced it."""
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    ws = _ws(out)
+    vps = ws[lay["ref"]["dcf_base"].replace("$", "")]
+    res = json.load(open(os.path.join(work, "scenarios_result_1.json")))
+    assert vps.value == pytest.approx(res["base"]["value_per_share"])
+    assert vps.fill.fgColor.rgb == "FFD9D9D9" and vps.font.color.rgb == "FF0000FF"
+    assert vps.comment.text.startswith("scenario_eval round 1, ")
+
+
+def test_pairing_is_in_the_formula_text(model, work, tmp_path):
+    """P/E prices equity from EPS alone; EV/EBITDA must take off net debt and divide by shares (chapter 11.2)."""
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    ft, ref = lay["formula_text"], lay["ref"]
+    nd, sh = ref["nd"], ref["sh"]
+    pe, ev = ft[ref["reward_px.pe"].replace("$", "")], ft[ref["reward_px.ev_ebitda"].replace("$", "")]
+    assert nd not in pe and sh not in pe
+    assert nd in ev and sh in ev
 
 
 @pytest.mark.skip(reason="Task 10")

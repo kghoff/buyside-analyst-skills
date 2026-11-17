@@ -82,7 +82,9 @@ def cmd_eval(a):
         out[name] = {"value_per_share": v, "tv_share": o["tv_share"], "rev_cagr5": mt["rev_cagr5"],
                      "gm_end": mt["gm_end"], "pct_vs_price": v / px["last"]["value"] - 1,
                      "pct_vs_high3y": v / px["high3y"]["value"] - 1, "pct_vs_low3y": v / px["low3y"]["value"] - 1,
-                     "implied_pe_ntm": v / a.ntm_eps, "implied_pe_ntm1": v / a.ntm1_eps, "inputs": inputs}
+                     "implied_pe_ntm": v / a.ntm_eps, "implied_pe_ntm1": v / a.ntm1_eps, "inputs": inputs,
+                     "factor_cagr5": {f: solve.metrics(inputs, ctx, f)["driver_cagr5"]
+                                      for f in dcfmath.factor_names(ctx)}}
     out["implied"] = solve.reverse(px["last"]["value"], out["base"]["inputs"], ctx)
     json.dump(out, open(a.out, "w"), indent=1)
     print(f"{'case':<6}{'value/sh':>10}{'vs price':>10}{'TV share':>10}{'rev CAGR5':>11}{'P/E NTM':>9}{'NTM+1':>8}")
