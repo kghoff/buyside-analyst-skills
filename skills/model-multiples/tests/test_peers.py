@@ -17,8 +17,13 @@ def test_our_ttm_matches_the_tools_ttm(x):
     # Intent: quarter stitching is right only if the latest four quarters sum to the tool's own TTM figure.
     q = peers.eps_quarters(x)
     t = peers.ttm(q)
-    assert t[-1]["ttm"] == pytest.approx(x["ttm"]["income"]["diluted_earnings_per_share"], rel=1e-9)
+    # The tool's TTM EPS is TTM net income / TTM average shares, so it differs from the sum of quarterly EPS by share
+    # drift (0.05% here). 0.2% still catches a misaligned quarter (a wrong quarter moves it by 20%+).
+    assert t[-1]["ttm"] == pytest.approx(x["ttm"]["income"]["diluted_earnings_per_share"], rel=2e-3)
     assert t[-1]["consecutive"] is True
+    # Exact proof of alignment: the same four quarters' net income sums to the tool's TTM net income.
+    ni = sum(x["quarterly"][str(r["fy"])]["Q%d" % r["q"]]["income"]["net_income_loss"] for r in q[-4:])
+    assert ni == x["ttm"]["income"]["net_income_loss"]
 
 
 def test_quarter_known_after_filing_deadline_never_at_quarter_end(x):
@@ -45,8 +50,8 @@ def test_missing_eps_is_kept_visible_and_breaks_ttm(x):
     assert len(q) == len(peers.eps_quarters(x))
     assert [r["eps"] for r in q if (r["fy"], r["q"]) == (2026, 2)] == [None]
     t = peers.ttm(q)
-    assert [r["consecutive"] for r in t[-3:]] == [False, False, False]
-    assert all(r["ttm"] is None for r in t[-3:])
+    assert [r["consecutive"] for r in t[-3:]] == [True, False, False]   # Q1 FY26's window ends before the hole
+    assert all(r["ttm"] is None for r in t[-2:])
 
 
 def test_weekly_close_is_last_close_on_or_before_the_week(tmp_path):
