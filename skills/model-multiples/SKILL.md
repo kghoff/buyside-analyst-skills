@@ -61,8 +61,9 @@ comparables, used for the P/E-vs-peers history). Ask with AskUserQuestion (first
    multiples. The ADV column is shares traded, in millions, not dollars.
 2. `python3 "$SK/sp500.py" --work "$W"`.
 3. Core peers' fundamentals: for each core peer use `<model dir>/Industry P&L/peers/<P>/xbrl.json` if it exists,
-   else `node "<xbrl_cli setting>" <P> --json > "$W/xbrl/<P>.json"` (`python3 "$SKILLS/../lib/settings.py" xbrl_cli`;
-   stop with model-industry's message if it is not installed).
+   else `mkdir -p "$W/xbrl"` and `node "$XBRL" <P> --json > "$W/xbrl/<P>.json"`, where
+   `XBRL=$(python3 -c "import sys; sys.path.insert(0, '$SK/../../../lib'); import settings; print(settings.xbrl_cli())")`
+   (stop with model-industry's message if it is not installed).
 4. Pause for stooq: ask the user (AskUserQuestion) to download `https://stooq.com/q/d/?s=<p>.us&i=d` for each core
    peer into `<model dir>/Price Data/`, and **wait**. Then
    `python3 "$SK/prices.py" --model "$M" --tickers <core peers> [--src DIR]`. It copies the files it finds into
@@ -96,7 +97,9 @@ commas are read. Comps still come from Yahoo (free-path step 1).
 ## Step 7: Copy over
 1. `shasum -a 256 "$M"` again. Changed since Step 1 = the user edited the model meanwhile: stop and rebuild from
    Step 6. If `~$<model file name>` exists, ask the user to close Excel and wait.
-2. Unchanged: `cp "$W/out.xlsx" "$M"`. Then delete `$W/out.xlsx` and `$W/_recalc` (no backup copies).
+2. Unchanged: `cp "$W/out.xlsx" "$M"`. Then delete every copy of the model the run made (no backup copies): `$W/out.xlsx`, `$W/values/` (build's
+   recalculated copy) and `$W/verify/` (verify's recalculation and PDF). Keep `$W/multiples.png`, `layout.json` and
+   the data caches (`comps/`, `sp500.json`, `xbrl/`).
 
 ## Step 8: Report (plain English)
 - Where the stock trades today: P/E and EV/EBITDA against their 5-year median and percentile; against the S&P 500

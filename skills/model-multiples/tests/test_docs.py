@@ -39,3 +39,12 @@ def test_description_says_when_to_use_it():
 def test_no_backup_copies_and_no_live_write_before_the_copy_over():
     assert "no backup" in TEXT.lower()
     assert TEXT.count('cp "$W/out.xlsx" "$M"') == 1
+
+
+def test_every_path_skill_deletes_is_one_the_scripts_create():
+    scripts = "".join(open(os.path.join(SK, "scripts", f)).read() for f in os.listdir(os.path.join(SK, "scripts"))
+                      if f.endswith(".py"))
+    step7 = TEXT.split("## Step 7")[1].split("## Step 8")[0]
+    for name, marker in (("$W/out.xlsx", "out.xlsx"), ("$W/values/", '"values"'), ("$W/verify/", '"verify"')):
+        assert name in step7 and marker in (scripts + TEXT), name
+    assert "_recalc" not in TEXT
