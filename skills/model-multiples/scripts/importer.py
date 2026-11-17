@@ -65,22 +65,71 @@ def _date(v):
     return None
 
 
-def _num(v):
+_THOUSANDS = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")
+_EU = re.compile(r"^-?\d{1,3}(\.\d{3})+(,\d+)?$|^-?\d+(,\d+)?$")
+
+
+def _num(v, semi=False, where=""):
+    """Cell to float. Placeholders ("n/a", "--", "#N/A", "") are None. ';' files: ',' is the decimal mark and '.' the
+    thousands mark. ',' files: a comma is valid only as a thousands separator; anything else stops the run."""
     if isinstance(v, (int, float)) and not isinstance(v, bool):
-        return float(v)
+        x = float(v)
+        return x if x == x and abs(x) != float("inf") else None
+    s = str(v if v is not None else "").strip().replace("$", "").strip()
+    if not s:
+        return None
+    neg, pct = False, False
+    if s.startswith("(") and s.endswith(")"):
+        neg, s = True, s[1:-1].strip()
+    if s.endswith("%"):
+        pct, s = True, s[:-1].strip()
+    if "," in s:
+        if semi and _EU.match(s):
+            s = s.replace(".", "").replace(",", ".")
+        elif not semi and _THOUSANDS.match(s):
+            s = s.replace(",", "")
+        else:
+            raise SystemExit(f"{where}: cannot read the number {v!r}: a comma is only valid as a thousands separator "
+                             "(1,234.5) in a comma file, or as the decimal mark in a semicolon file.")
+    elif semi and re.match(r"^-?\d{1,3}(\.\d{3})+$", s):
+        s = s.replace(".", "")
     try:
-        x = float(str(v).replace(",", "").replace("$", "").strip())
+        x = float(s)
     except ValueError:
         return None
-    return x if x == x and abs(x) != float("inf") else None
+    if x != x or abs(x) == float("inf"):
+        return None
+    x = -x if neg else x
+    return x / 100 if pct else x
 
 
 def _table(path):
+    """(rows, semicolon-delimited?)"""
     if path.lower().endswith((".xlsx", ".xlsm")):
-        ws = openpyxl.load_workbook(path, read_only=True, data_only=True).worksheets[0]
-        return [list(r) for r in ws.iter_rows(values_only=True)]
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        return [list(r) for r in wb.worksheets[0].iter_rows(values_only=True)], False
     with open(path, newline="", encoding="utf-8-sig") as f:
-        return list(csv.reader(f))
+        text = f.read()
+    try:
+        d = csv.Sniffer().sniff(text[:4096], delimiters=",;").delimiter
+    except csv.Error:
+        d = ","
+    return list(csv.reader(text.splitlines(), delimiter=d)), d == ";"
+
+
+def _symbol(v):
+    return re.split(r"[\s\-/.]+", str(v or "").strip().upper())[0]
+
+
+def _duplicates(headers):
+    seen, dup = {}, []
+    for h in headers:
+        f = next((k for k, al in ALIASES.items() if _norm(h) in al), None)
+        if f and f in seen:
+            dup.append((f, seen[f], h))
+        elif f:
+            seen[f] = h
+    return dup
 
 
 class Rows(list):
@@ -88,9 +137,14 @@ class Rows(list):
     skipped = 0
 
 
-def load(path, mapping=None):
-    """Weekly rows (last observation of each ISO week), oldest first. mapping: {field: header text} override."""
-    t = [r for r in _table(path) if any(c not in (None, "") for c in r)]
+def load(path, mapping=None, ticker=None):
+    """Weekly rows (last observation of each ISO week), oldest first. mapping: {field: header text} override.
+    ticker: pick one symbol out of a multi-ticker file (case-insensitive; "ABT US Equity" matches "ABT")."""
+    name = os.path.basename(path)
+    raw, semi = _table(path)
+    t = [r for r in raw if any(c not in (None, "") for c in r)]
+    if mapping and "date" not in mapping:
+        raise SystemExit(f'{name}: mapping.json must name the "date" column ({{"date": "<header>", ...}}).')
     if mapping:
         hi = next((i for i, r in enumerate(t) if str(mapping.get("date")) in [str(c) for c in r]), None)
     else:
@@ -107,16 +161,30 @@ def load(path, mapping=None):
         missing = [f for f in REQUIRED if f not in m]
     else:
         m, _, missing = detect(headers)
+        for f, h1, h2 in _duplicates(headers):
+            raise SystemExit(f"{name}: two columns both look like {f}: {h1!r} and {h2!r}. Pick one in mapping.json "
+                             f'({{"{f}": "{h1}"}} or {{"{f}": "{h2}"}}) and rerun.')
     require(m, missing, path)
+    body = t[hi + 1:]
+    if "ticker" in m:
+        syms = {_symbol(r[m["ticker"]]) for r in body if m["ticker"] < len(r) and r[m["ticker"]] not in (None, "")}
+        if len(syms) > 1:
+            if not ticker:
+                raise SystemExit(f"{name}: holds several tickers ({', '.join(sorted(syms))}). Rerun with the one you "
+                                 "want.")
+            want = _symbol(ticker)
+            body = [r for r in body if m["ticker"] < len(r) and _symbol(r[m["ticker"]]) == want]
     weeks, skipped = {}, 0
-    for r in t[hi + 1:]:
+    for n, r in enumerate(body, 1):
         d = _date(r[m["date"]]) if m["date"] < len(r) else None
         if d is None:
             skipped += 1
             continue
-        rec = {"date": d, **{f: ((r[i] if i < len(r) else None) if f == "ticker" else _num(r[i] if i < len(r) else None))
+        rec = {"date": d, **{f: ((r[i] if i < len(r) else None) if f == "ticker" else _num(r[i] if i < len(r) else None, semi, f"{name} data row {n}, column {headers[i]!r}"))
                              for f, i in m.items() if f != "date"}}
         k = d.isocalendar()[:2]
+        if all(v is None for f, v in rec.items() if f not in ("date", "ticker")) and k in weeks:
+            continue
         if k not in weeks or weeks[k]["date"] < d:
             weeks[k] = rec
     out = Rows(weeks[k] for k in sorted(weeks))

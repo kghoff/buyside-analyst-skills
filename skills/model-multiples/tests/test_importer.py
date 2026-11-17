@@ -71,3 +71,60 @@ def test_mapping_naming_a_missing_header_fails_loudly(tmp_path):
     p.write_text("Date,Price,EPS\n2024-01-05,10,1\n")
     with pytest.raises(SystemExit, match="Nope"):
         importer.load(str(p), {"date": "Date", "price": "Price", "eps_ntm": "Nope"})
+
+
+def _w(tmp_path, text, name="t.csv"):
+    p = tmp_path / name
+    p.write_text(text)
+    return str(p)
+
+
+def test_multi_ticker_file_needs_a_choice_and_filters(tmp_path):
+    p = _w(tmp_path, "Date,Ticker,Price,EPS\n2024-01-05,ABT US Equity,10,1\n2024-01-05,DXCM,50,2\n"
+                     "2024-01-12,abt,11,1\n")
+    with pytest.raises(SystemExit, match="ABT.*DXCM"):
+        importer.load(p)
+    assert [r["price"] for r in importer.load(p, ticker="ABT")] == [11.0]
+    assert [r["price"] for r in importer.load(p, ticker="dxcm")] == [50.0]
+
+
+def test_single_ticker_file_ignores_ticker_argument(tmp_path):
+    p = _w(tmp_path, "Date,Ticker,Price,EPS\n2024-01-05,ABT,10,1\n")
+    assert len(importer.load(p, ticker="ZZZ")) == 1
+
+
+def test_semicolon_file_uses_decimal_comma(tmp_path):
+    p = _w(tmp_path, "Date;Price;EPS\n2024-01-05;1.234,5;2,5\n")
+    r = importer.load(p)[0]
+    assert r["price"] == 1234.5 and r["eps_ntm"] == 2.5
+
+
+def test_comma_file_thousands_ok_stray_comma_stops(tmp_path):
+    ok = _w(tmp_path, 'Date,Price,EPS\n2024-01-05,"1,234.5",2\n')
+    assert importer.load(ok)[0]["price"] == 1234.5
+    bad = _w(tmp_path, 'Date,Price,EPS\n2024-01-05,"12,5",2\n', "b.csv")
+    with pytest.raises(SystemExit, match=r"b\.csv.*row 1.*12,5"):
+        importer.load(bad)
+
+
+def test_parentheses_and_percent():
+    assert importer._num("(1.23)") == -1.23 and importer._num("5.3%") == pytest.approx(0.053)
+    assert all(importer._num(x) is None for x in ("n/a", "--", "#N/A", ""))
+
+
+def test_two_columns_for_one_field_is_refused_unless_mapped(tmp_path):
+    p = _w(tmp_path, "Date,Price,Close,EPS\n2024-01-05,10,10.5,1\n")
+    with pytest.raises(SystemExit, match="Price.*Close.*mapping.json"):
+        importer.load(p)
+    assert importer.load(p, {"date": "Date", "price": "Close", "eps_ntm": "EPS"})[0]["price"] == 10.5
+
+
+def test_later_empty_row_does_not_replace_valid_one(tmp_path):
+    p = _w(tmp_path, "Date,Price,EPS\n2024-01-08,10,1\n2024-01-12,,\n")
+    assert importer.load(p)[0]["price"] == 10.0
+
+
+def test_mapping_without_date_is_a_clear_error(tmp_path):
+    p = _w(tmp_path, "Date,Price,EPS\n2024-01-05,10,1\n")
+    with pytest.raises(SystemExit, match='"date"'):
+        importer.load(p, {"price": "Price", "eps_ntm": "EPS"})
