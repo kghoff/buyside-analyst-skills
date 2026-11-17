@@ -1,11 +1,13 @@
 """The agent anchors on cell refs, so the dumps must carry them; missing prerequisites name the skill to run."""
 import json
 import os
+import re
 
 import openpyxl
 import pytest
 
 import context
+from modmap import ModMap
 
 
 def test_dump_carries_refs(model, tmp_path):
@@ -27,3 +29,24 @@ def test_missing_tabs_named(model, tmp_path):
     wb.save(model)
     with pytest.raises(SystemExit, match="/model-multiples"):
         context.run(model, str(tmp_path / "w"), "TEST", research_dir=str(tmp_path))
+
+
+def test_mod_metrics_carry_each_quarter_and_year_cell(model, tmp_path):
+    """The risk metric is anchored to MOD; the agent can only cite a MOD cell it has seen, so every quarter behind
+    NTM / NTM+1 / year 3 and every forecast-year cell is listed as ref=value, in the form anchors.py accepts."""
+    w = str(tmp_path / "w")
+    ctx = context.run(model, w, "TEST", research_dir=str(tmp_path / "none"))
+    sec = open(os.path.join(w, "context.md")).read().split("## MOD metrics")[1].split("\n## ")[0]
+    vals = openpyxl.load_workbook(ctx["values"], data_only=True)["MOD"]
+    mm = ModMap(model)
+    for k in ("eps", "rev", "gp", "ebitda", "fcf"):
+        assert f"### {k}" in sec
+        for b in ("ntm", "ntm1", "y3"):
+            for ref in re.findall(r"MOD!\$[A-Z]+\$\d+", ctx["metrics"][k][b]["formula"].split(",NA()")[0]):
+                assert f"{ref}=" in sec, (k, b, ref)
+    fy_lines = [x.split(": ", 1)[1].split(" | ") for x in sec.splitlines() if re.match(r"- \d{4}", x)]
+    assert fy_lines and all(len(set(x)) == len(x) for x in fy_lines)        # each cell once
+    eps_row = int(re.search(r"\$(\d+)", ctx["metrics"]["eps"]["ntm"]["formula"]).group(1))
+    for fy in mm.forecast_years():
+        ref = f"MOD!${mm.col(fy)}${eps_row}"
+        assert f"{ref}={context._fmt(vals[ref[4:].replace('$', '')].value)}" in sec, fy

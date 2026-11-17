@@ -20,6 +20,8 @@ LINKS = {"blended_reward", "blended_risk", "dcf_base", "dcf_bull", "dcf_bear"}
 CASES = ("base", "bull", "bear")
 CELL = re.compile(r"^[A-Za-z' &]+!\$?[A-Z]{1,3}\$?\d+$")
 LINE = re.compile(r"^.+\.md:\d+$")
+NTM = re.compile(r"^(ntm|ntm1|y3):(" + "|".join(sorted(set(valmath.METRIC.values()))) + r")$")   # a forward sum
+ONE_MULTIPLE = "One multiple:"      # a notes entry starting with this (any case) says why one multiple is enough
 TOL = 1e-9
 
 
@@ -28,7 +30,8 @@ def _num(v):
 
 
 def _anchored(name, x, judgment_ok, house_ok):
-    """Problems with one anchored input {value, anchor, [anchor_value], reason}."""
+    """Problems with one anchored input {value, anchor, [anchor_value], reason}. A cell, research line or forward-sum
+    (ntm:eps, ntm1:rev, y3:fcf ...) anchor is allowed anywhere; house and judgment only where the flags say."""
     if not isinstance(x, dict):
         return [f"{name}: expected {{value, anchor, reason}}, got {x!r}"]
     out = []
@@ -44,14 +47,16 @@ def _anchored(name, x, judgment_ok, house_ok):
             out.append(f"{name}: a 'house' anchor is only for the house inputs ({', '.join(HOUSE)})")
     elif a == "judgment":
         if not judgment_ok:
-            out.append(f"{name}: a 'judgment' anchor is only for blend weights, tree probabilities and the position")
+            out.append(f"{name}: a 'judgment' anchor is only for blend weights, tree probabilities, the position "
+                       "and normalization.years")
         elif isinstance(reason, str) and len(reason.split()) < 12:
             out.append(f"{name}: a 'judgment' anchor needs a reason of at least 12 words")
     elif isinstance(a, str):
-        if not (CELL.match(a) or LINE.match(a)):
-            out.append(f"{name}: anchor {a!r} is not a cell (Sheet!$A$1) or a research line (file.md:123)")
+        if not (CELL.match(a) or LINE.match(a) or NTM.match(a)):
+            out.append(f"{name}: anchor {a!r} is not a cell (Sheet!$A$1), a research line (file.md:123) or a "
+                       "forward sum (ntm:eps, ntm1:ebitda, y3:rev ...)")
         if "anchor_value" not in x:
-            out.append(f"{name}: a cell or line anchor needs anchor_value (the number printed there)")
+            out.append(f"{name}: a cell, line or forward-sum anchor needs anchor_value (the number it holds)")
     elif "anchor" in x:
         out.append(f"{name}: anchor must be text, got {a!r}")
     return out
@@ -76,8 +81,10 @@ def _multiples(plan):
         out.append(f"multiples: exactly one must be primary, got {roles.count('primary')}")
     if "pe" not in kinds and not any("P/E" in (m.get("reason") or "") for m in ms):
         out.append("multiples: P/E comes first unless ruled out; some multiple's reason must say why P/E is ruled out")
-    if len(ms) == 1 and not any("one multiple" in n.lower() for n in plan.get("notes") or [] if isinstance(n, str)):
-        out.append("multiples: one multiple alone needs a notes entry saying why one multiple is enough")
+    notes = [n for n in plan.get("notes") or [] if isinstance(n, str)]
+    if len(ms) == 1 and not any(n.strip().lower().startswith(ONE_MULTIPLE.lower()) for n in notes):
+        out.append(f"multiples: one multiple alone needs a notes entry starting \"{ONE_MULTIPLE}\" that says why one "
+                   "multiple is enough")
     return out, [k for k in kinds if k in valmath.METRIC]
 
 
@@ -179,8 +186,8 @@ def _normalization(plan):
     if not isinstance(n, dict):
         return [f"normalization: expected an object or null, got {n!r}"]
     out = [] if isinstance(n.get("year"), str) else ["normalization: needs a year label such as 2029E"]
-    for k in ("margin", "multiple", "years"):
-        out += _anchored(f"normalization.{k}", n.get(k), False, False)
+    for k in ("margin", "multiple", "years"):           # years to discount back are rarely printed: judgment allowed
+        out += _anchored(f"normalization.{k}", n.get(k), k == "years", False)
     return out
 
 

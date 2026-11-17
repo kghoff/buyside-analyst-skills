@@ -1,7 +1,7 @@
 """Everything the valuation-analyst agent reads, in two files: context.json (for code and exact lookups) and
 context.md (for the agent to read in one pass). Facts only: forward metrics, the DCF bridge (model-dcf's own math),
-cell-by-cell dumps of the Multiples, Consensus and DCF tabs (so anchors can cite exact refs), the valuation brief,
-the house defaults and the agent's last plan.
+cell-by-cell dumps of the Multiples, Consensus and DCF tabs and of the MOD cells behind each forward metric (so
+anchors can cite exact refs), the valuation brief, the house defaults and the agent's last plan.
 
 usage: python3 context.py --model M --work W --ticker T [--research-dir D]"""
 import argparse
@@ -17,6 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with pyt
 import brief  # noqa: E402
 import lo  # noqa: E402
 import metrics  # noqa: E402
+import valmath  # noqa: E402
+from modmap import ModMap  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "lib"))
@@ -88,7 +90,29 @@ def _dcf_summary(dcf):
     return lines
 
 
-def _md(ticker, m, dcf, dumps, b, reports, last_plan):
+def _mod_metrics(m, mm, ws):
+    """context.md lines: for each forward metric, the MOD cells (ref=value) behind NTM / NTM+1 / year 3 and the
+    metric's cells in each forecast fiscal-year column."""
+    L = ["## MOD metrics", "",
+         "NTM, NTM+1 and year 3 are each the sum of four MOD quarters. Anchor the sum as `ntm:<metric>`, "
+         "`ntm1:<metric>` or `y3:<metric>` (anchor_value = the sum below), or one cell by its ref.", ""]
+    for k in valmath.METRIC.values():
+        L += [f"### {k}", ""]
+        rows = []
+        for blk in ("ntm", "ntm1", "y3"):
+            x = m[k][blk]
+            cells = list(dict.fromkeys(re.findall(r"MOD!\$([A-Z]+)\$(\d+)", x["formula"])))
+            rows += [r for r in dict.fromkeys(r for _, r in cells) if r not in rows]
+            L.append(f"- {blk} ({', '.join(x['quarters'])}) = {_fmt(x['value'])}: "
+                     + " | ".join(f"MOD!${c}${r}={_fmt(ws[f'{c}{r}'].value)}" for c, r in cells))
+        for fy in mm.forecast_years():
+            c = mm.col(fy)
+            L.append(f"- {fy}: " + " | ".join(f"MOD!${c}${r}={_fmt(ws[f'{c}{r}'].value)}" for r in rows))
+        L.append("")
+    return L
+
+
+def _md(ticker, m, dcf, dumps, b, reports, last_plan, mod_lines):
     def num(x, f="{:,.2f}"):
         return f.format(x) if isinstance(x, (int, float)) else "n/a"
     px = {k: f"${num(v['value'])} on {v['date']}" for k, v in dcf["price"].items()}
@@ -106,7 +130,8 @@ def _md(ticker, m, dcf, dumps, b, reports, last_plan):
     for k, g in m["growth"].items():
         L.append(f"- {k}: {num(g['start'])} → {num(g['end'])} over {g['years']} years = {num(g['cagr'], '{:.1%}')} "
                  f"({g['start_ref']} → {g['end_ref']})")
-    L += ["", "## DCF (model-dcf's math, the user's current inputs)", "",
+    L += [""] + mod_lines
+    L += ["## DCF (model-dcf's math, the user's current inputs)", "",
           f"- Value per share ${num(dcf['value_per_share'])} ({dcf['refs']['vps']}); "
           f"terminal-value share {num(dcf.get('tv_share'), '{:.0%}')}"]
     if dcf.get("stale"):
@@ -153,6 +178,7 @@ def run(model, work, ticker, research_dir=None):
     dumps = {"Multiples": dump(wb["Multiples"], stop=r"^WEEKLY DATA"),
              "Consensus": dump(wb["Consensus"], cap=CONSENSUS_CAP) if "Consensus" in wb.sheetnames else None,
              "DCF": dump(wb["DCF"], last=30)}
+    mod_lines = _mod_metrics(m, ModMap(model), wb["MOD"])
     b, reports = _brief(work, ticker, research_dir)
     lp = os.path.join(work, "valuation_plan.json")
     last_plan = json.load(open(lp)) if os.path.exists(lp) else None
@@ -161,7 +187,7 @@ def run(model, work, ticker, research_dir=None):
            "house": HOUSE, "last_plan": last_plan, "values": values}
     json.dump(ctx, open(os.path.join(work, "context.json"), "w"), indent=1, default=str)
     open(os.path.join(work, "context.md"), "w", encoding="utf-8").write(
-        _md(ticker, m, dcf, dumps, b, reports, last_plan))
+        _md(ticker, m, dcf, dumps, b, reports, last_plan, mod_lines))
     return ctx
 
 

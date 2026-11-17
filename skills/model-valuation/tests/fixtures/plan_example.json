@@ -9,7 +9,7 @@
   "weight.ev_ebitda": {"value": 0.4, "anchor": "judgment", "reason": "EV/EBITDA is a cross-check that captures the net cash and the D&A ramp, so it gets the smaller share of the blend."},
   "reward_multiple.pe": {"value": 30.0, "anchor": "Multiples!B7", "anchor_value": 34.1, "reason": "The 1-year median P/E, trimmed because growth is slowing from the levels that earned that multiple."},
   "risk_multiple.pe": {"value": 24.0, "anchor": "Multiples!C6", "anchor_value": 26.2, "reason": "Below the 5-year trough P/E: a miss would reset the growth story, not just the quarter."},
-  "risk_metric.pe": {"value": 2.40, "anchor": "MOD!$BV$401", "anchor_value": 2.53, "reason": "2026E diluted EPS, cut about 5% for a downside where pricing pressure hits the gross margin."},
+  "risk_metric.pe": {"value": 2.75, "anchor": "ntm:eps", "anchor_value": 2.885609821524244, "reason": "NTM diluted EPS, cut about 5% for a downside where pricing pressure hits the gross margin."},
   "multiple_3y.pe": {"value": 28.0, "anchor": "Multiples!B7", "anchor_value": 34.1, "reason": "Three years out the multiple should drift below today's median as growth matures."},
   "reward_multiple.ev_ebitda": {"value": 20.0, "anchor": "Multiples!B9", "anchor_value": 22.4, "reason": "The 1-year median EV/EBITDA, trimmed for the same slower growth as the P/E."},
   "risk_multiple.ev_ebitda": {"value": 16.0, "anchor": "Multiples!B9", "anchor_value": 22.4, "reason": "The stub has no EV/EBITDA trough, so the risk case takes the 1-year median down by about 30%, in line with the P/E's trough-to-median gap."},
@@ -47,7 +47,7 @@
  ],
  "notes": [
   "P/E is the primary multiple and EV/EBITDA the secondary, weighted 60/40, because the stock is priced on earnings and EBITDA checks the net cash.",
-  "The risk case cuts 2026E EPS and EBITDA by about 5% and puts the multiples below their recent troughs, because a miss would reset the growth story.",
+  "The risk case cuts NTM EPS and 2026E EBITDA by about 5% and puts the multiples below their recent troughs, because a miss would reset the growth story.",
   "The fixture's Multiples tab has no EV/EBITDA trough, so the EV/EBITDA risk multiple is the 1-year median cut by about 30%.",
   "The base DCF replaces the user's fade to zero revenue growth with a fade to 3%, which lifts value per share from $67.92 to $83.79.",
   "No Consensus tab, so there are no Street EPS links."

@@ -54,7 +54,7 @@ def test_no_pe_with_reason_and_single_note_is_ok():
         for k in [k for k in p["inputs"] if k.endswith(".pe")]:
             del p["inputs"][k]
         p["inputs"]["weight.ev_ebitda"]["value"] = 1.0
-        p["notes"].append("One multiple is enough here: EV/EBITDA is the only one the Street and company use.")
+        p["notes"].append("One multiple: EV/EBITDA is the only one the Street and the company use.")
     assert problems(drop_pe) == []
 
 
@@ -66,6 +66,13 @@ def test_single_multiple_needs_a_note():
             del p["inputs"][k]
         p["inputs"]["weight.pe"]["value"] = 1.0
     assert any("one multiple" in x.lower() for x in problems(single))
+
+    def with_note(note):
+        return lambda p: (single(p), p["notes"].append(note))
+    # The rule is a notes entry that starts "One multiple:", so the agent knows exactly what to write.
+    assert problems(with_note("one MULTIPLE: EV/EBITDA is how every holder and the company frame it.")) == []
+    assert any("One multiple:" in x for x in problems(with_note("Using only one multiple here.")))
+    assert any("One multiple:" in x for x in problems(with_note("Why one multiple: it is the only one used.")))
 
 
 def test_missing_input_for_a_kind():
@@ -99,6 +106,15 @@ def test_bad_anchor_shape_refused():
 def test_research_line_anchor_accepted():
     assert problems(lambda p: p["inputs"]["reward_multiple.pe"].update(
         anchor="Filings Research/TEST_filings.md:123")) == []
+
+
+def test_ntm_anchor_kinds():
+    """The risk metric is usually an NTM sum, which sits in no single cell; ntm: / ntm1: / y3: anchors name it."""
+    assert problems(lambda p: p["inputs"]["risk_metric.pe"].update(anchor="y3:eps")) == []
+    assert problems(lambda p: p["inputs"]["risk_multiple.pe"].update(anchor="ntm1:ebitda")) == []
+    assert any("not a cell" in x for x in problems(lambda p: p["inputs"]["risk_metric.pe"].update(anchor="ntm:oi")))
+    assert any("not a cell" in x for x in problems(lambda p: p["inputs"]["risk_metric.pe"].update(anchor="ntm2:eps")))
+    assert any("anchor_value" in x for x in problems(lambda p: p["inputs"]["risk_metric.pe"].pop("anchor_value")))
 
 
 def test_cell_anchor_needs_anchor_value():
@@ -164,6 +180,14 @@ def test_normalization_checked_when_set():
                 "years": {"value": 3, "reason": "r", **years}}
     assert problems(lambda p: p.update(normalization=norm(anchor="Filings Research/x.md:9", anchor_value=3))) == []
     assert any("normalization.years" in x for x in problems(lambda p: p.update(normalization=norm(anchor="house"))))
+    # Years to discount back are rarely printed anywhere, so they may be a judgment (with a real reason); the margin
+    # and multiple may not.
+    why = "Earnings normalize once the plant ramps, which the company says takes about three more years."
+    assert problems(lambda p: p.update(normalization=norm(anchor="judgment", reason=why))) == []
+    assert any("12 words" in x for x in problems(lambda p: p.update(normalization=norm(anchor="judgment"))))
+    n = norm(anchor="judgment", reason=why)
+    n["margin"].update(anchor="judgment", reason=why)
+    assert any("normalization.margin" in x for x in problems(lambda p: p.update(normalization=n)))
     n = norm(anchor="Filings Research/x.md:9", anchor_value=3)
     n["margin"].pop("anchor_value")
     assert any("normalization.margin" in x for x in problems(lambda p: p.update(normalization=n)))

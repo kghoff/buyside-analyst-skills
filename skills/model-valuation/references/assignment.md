@@ -7,15 +7,20 @@ everything you write; a plan that fails is sent back once, then the build stops.
 **Anchors, the rule behind every number.** Each input is `{"value", "anchor", "anchor_value", "reason"}`:
 - a **cell** `Sheet!$A$1` (for example `Multiples!B7`, `MOD!$BV$401`, `DCF!$C$40`; quote a sheet with spaces:
   `'Px Data'!B5`). Code reads the recalculated model; `anchor_value` must be what the cell holds, rounded no
-  further than you write it (81.8 matches 81.755).
+  further than you write it: decimals count as written, so 81.8 matches 81.755 and 30.0 matches 29.96 but not 29.6.
 - a **research line** `<path>.md:N`, relative to the research root (for example `Filings Research/<file>.md:123`).
   Line N must print `anchor_value`: as is, as a percent (0.625 for "62.5%") or in bps (0.015 for "150 bps").
-  Commas are ignored.
+  Commas are ignored. "20-25%" prints both 20% and 25%; a number glued to letters (Q2, FY25, x2) does not count.
+  The path must stay inside the research root (no absolute paths, no `../`).
+- a **forward sum** `ntm:<metric>`, `ntm1:<metric>` or `y3:<metric>`, metric `eps`, `rev`, `gp`, `ebitda` or
+  `fcf`. `ntm` is the sum of MOD's next four forecast quarters, `ntm1` of the four after (quarters 5-8), `y3` of
+  the year-3 quarters. `anchor_value` is that sum from context.md's "MOD metrics" section. Use it for risk metrics.
 - `"house"`: only for the house inputs (chapter 11's defaults). No `anchor_value`.
-- `"judgment"`: only for `weight.*`, tree `prob` and `position`. The reason must be at least 12 words.
+- `"judgment"`: only for `weight.*`, tree `prob`, `position` and `normalization.years`. The reason must be at least
+  12 words.
 
 `value` may differ from `anchor_value`; the reason says why you moved (one line, plain English). Take cell refs
-from the tab dumps in context.md and line numbers from Grep (`-n`). Never cite a number you have not seen there.
+from the tab dumps and MOD metrics in context.md and line numbers from Grep (`-n`). Never cite a number you have not seen there.
 
 ## 1. Read first
 - `context.md`, whole.
@@ -33,7 +38,8 @@ Kinds: `pe`, `ev_ebitda`, `ev_rev`, `ev_gp`, `fcf_yield`. Roles: `primary` (exac
 - FCF yield as tiebreaker and floor (a yield: 5% is 0.05);
 - normalized EPS (section 6) when today's earnings are temporarily high or low.
 
-Never rely on one alone without writing why in `notes`. If P/E is not primary, a multiple's reason must say why
+Never rely on one alone: with a single multiple, `notes` must have an entry that starts `One multiple:` and says
+why one is enough. If P/E is not primary, a multiple's reason must say why
 ("P/E is ruled out because ..."). A multiple whose NTM metric is negative is rejected. Weights sum to 1.
 
 ## 3. Anchor the multiples
@@ -90,7 +96,8 @@ research line; not `judgment`). Each `prob` is `judgment` with a ≥ 12-word rea
 
 ## 6. Normalization
 Only when earnings are temporarily high or low; otherwise `null`. Set the normal `year` (a MOD year label such as
-2029E), the `margin` anchored to past peaks or ROIC, the `multiple`, and `years` to discount back. Code computes the
+2029E), the `margin` anchored to past peaks or ROIC, the `multiple`, and `years` to discount back (`judgment` is
+allowed here, since it is rarely printed). Code computes the
 normal EPS as MOD revenue × margin ÷ MOD diluted shares for that year.
 
 ## 7. House inputs
@@ -117,7 +124,7 @@ When context.json has `last_plan`, start from it. Change only what new facts jus
    "weight.ev_ebitda":     {"value": 0.4,  "anchor": "judgment", "reason": "..."},
    "reward_multiple.pe":   {"value": 30.0, "anchor": "Multiples!B7", "anchor_value": 34.1, "reason": "..."},
    "risk_multiple.pe":     {"value": 24.0, "anchor": "Multiples!C6", "anchor_value": 26.2, "reason": "..."},
-   "risk_metric.pe":       {"value": 2.40, "anchor": "MOD!$X$40", "anchor_value": 2.53, "reason": "..."},
+   "risk_metric.pe":       {"value": 2.40, "anchor": "ntm:eps", "anchor_value": 2.53, "reason": "..."},
    "multiple_3y.pe":       {"value": 28.0, "anchor": "Multiples!B7", "anchor_value": 34.1, "reason": "..."},
    "reward_multiple.ev_ebitda": {...}, "risk_multiple.ev_ebitda": {...}, "risk_metric.ev_ebitda": {...},
    "multiple_3y.ev_ebitda": {...},
