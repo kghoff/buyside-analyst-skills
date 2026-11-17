@@ -69,3 +69,19 @@ def test_kept_and_defaulted_cover_every_input_cell():
     assert out["defaulted"]["Units"][0] == "2031E" and out["defaulted"]["tv_mult"] == ["value"]
     assert out["defaulted"]["tax"][0] == "2029E" and out["defaulted"]["Price"][0] == "2029E"   # MOD years are links
     assert out["inputs"]["wacc"] == 0.09 and out["kept_from"] == "existing"
+
+
+def test_driver_cagr_of_a_negative_driver_is_its_own_growth_rate():
+    """A 'revenue lost' driver is negative; its levels grow as level x (1 + g), so its CAGR is (end / start)^(1/5) - 1,
+    not 'no value' (which reached the sheet as nan and broke the file)."""
+    ctx = _ctx2()
+    ctx["factors"].append({"name": "Revenue lost", "average": False, "long_run": 0.02, "level_prev": 0.0,
+                           "level0": 0.0, "mod": [-40.0, -50.0]})
+    ctx["terms"] = [[0, 1], [2], [3]]
+    ctx["mod"] = dict(ctx["mod"], rev=[4960.0, 5450.0])
+    d = defaults(ctx)
+    m = S.metrics(d, ctx, "Revenue lost")
+    lv = [-50.0]
+    for y in S.shift_years(ctx):
+        lv.append(lv[-1] * (1 + d["Revenue lost"][y]))
+    assert m["driver_cagr5"] == pytest.approx((lv[-1] / lv[0]) ** (1 / 5) - 1)

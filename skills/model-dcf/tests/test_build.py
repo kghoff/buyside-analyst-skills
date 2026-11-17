@@ -316,3 +316,15 @@ def test_reverse_table_names_each_driver_in_the_wide_label_column(built):
     names = [ws[f"B{row}"].value for row, pk, _ in L["reverse_rows"] if pk == "last"]
     assert names == ["Units", "Price", "Other revenue", "Gross margin"]
     assert {ws[f"D{row}"].value for row, _, _ in L["reverse_rows"]} == {"% pts / yr", "bps / yr"}
+
+
+def test_a_snapshot_number_with_no_value_is_left_blank_not_written_as_nan(built):
+    """A reverse-DCF figure with no meaning (e.g. the CAGR of a driver that is 0) must not reach the sheet as 'nan':
+    that is not a number to Excel and the file no longer opens cleanly."""
+    solved = json.loads(json.dumps(built["solved"]))
+    row, pk, d = next(r for r in build.layout(built["ctx"])["reverse_rows"] if r[2] != "dgm"
+                      and solved["reverse"][r[1]][r[2]].get("status") == "ok")
+    solved["reverse"][pk][d]["driver_cagr5"] = float("nan")
+    out = str(built["tmp"] / "nan.xlsx")
+    build.build(built["model"], built["ctx"], solved, out, out + ".json")
+    assert _ws(out)[f"F{row}"].value is None

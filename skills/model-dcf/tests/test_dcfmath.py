@@ -102,3 +102,19 @@ def test_run_rejects_an_identity_that_misses_year0_revenue():
     c["rev0"] = 5000.0
     with pytest.raises(ValueError):
         run(_scn(1), c)
+
+
+def test_an_additive_term_that_is_0_through_mod_stays_0_and_defaults_do_not_divide_by_0():
+    """A forecast-only term switched off (0 in every MOD year, e.g. a contract loss at its 0 default): growth on 0 has
+    no meaning, so its fade starts at its long-run rate; the level stays 0 and the DCF still values."""
+    ctx = _ctx2()
+    ctx["factors"].append({"name": "Revenue lost", "average": False, "long_run": 0.02, "level_prev": 0.0,
+                           "level0": 0.0, "mod": [0.0, 0.0]})
+    ctx["terms"] = [[0, 1], [2], [3]]
+    d = defaults(ctx)
+    assert d["Revenue lost"]["2029E"] == pytest.approx(0.02)
+    c = prepare(ctx, d)
+    r = run(to_scn(d, c), c)
+    assert all(lv[3] == 0 for lv in r["levels"])
+    base = prepare(_ctx2(), d)
+    assert r["value_per_share"] == pytest.approx(run(to_scn(d, base), base)["value_per_share"])

@@ -121,11 +121,13 @@ def _build(path, orig=None, plan=None):
         ci = openpyxl.utils.column_index_from_string(col) - 1
         return _num(grid[rows[n]][ci]), f"MOD!{col}{rows[n]}"
 
-    def need(n, label):
+    def need(n, label, blank_is_0=False):
         v, ref = cell(n, label)
         if v is None:
             if orig is None:
                 raise _Missing()
+            if blank_is_0:
+                return 0.0, ref
             raise SystemExit(f"model-dcf: MOD {ref} ({keys.get(n, n)}, {label}) has no value, even after a recalculation.")
         return v, ref
 
@@ -158,10 +160,11 @@ def _build(path, orig=None, plan=None):
     factors, terms, n = [], [], 0
     for t in ident["terms"]:
         idx = []
-        for f in t["factors"]:
+        alone = len(t["factors"]) == 1   # an additive term written only from the forecast on: empty before it = 0
+        for f in t["factors"]:           # (never inside a product: a 0 there would wipe the whole term)
             fid = f"f{n}"
-            lp, rp = need(fid, last_actual)
-            l0, r0 = need(fid, year0)
+            lp, rp = need(fid, last_actual, alone)
+            l0, r0 = need(fid, year0, alone)
             ms = [need(fid, lab) for lab in fc]
             factors.append({"name": f.get("name") or f["key"].split(" | ", 1)[-1], "key": f["key"],
                             "average": bool(f.get("average")), "long_run": float(f["long_run"]),

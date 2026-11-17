@@ -115,7 +115,8 @@ def _last_mod(ctx):
     """Last MOD year's factor growths and gross-margin change (bps): where the fades start."""
     k, F, mod = ctx["k"], ctx["factors"], ctx["mod"]
     prev = lambda f: f["mod"][k - 2] if k >= 2 else f["level0"]
-    g = {f["name"]: f["mod"][k - 1] / prev(f) - 1 for f in F}
+    # growth from 0 has no meaning (a term that is 0 until late in MOD): its fade starts at its long-run rate
+    g = {f["name"]: f["mod"][k - 1] / prev(f) - 1 if prev(f) else f["long_run"] for f in F}
     gm_k = mod["gp"][k - 1] / mod["rev"][k - 1]
     gm_p = mod["gp"][k - 2] / mod["rev"][k - 2] if k >= 2 else ctx["gm0"]
     return g, (gm_k - gm_p) * 10000

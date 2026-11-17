@@ -72,7 +72,8 @@ def metrics(inputs, ctx, driver=None):
     c = prepare(ctx, inputs)
     r = run(to_scn(inputs, c), c)
     a, e = ctx["k"] - 1, ctx["k"] + SHIFT_YEARS - 1
-    cagr = lambda x, y: (y / x) ** (1 / SHIFT_YEARS) - 1 if x and y and x > 0 and y > 0 else float("nan")
+    # same sign: a negative driver (e.g. revenue lost) grows as level x (1 + g) too
+    cagr = lambda x, y: (y / x) ** (1 / SHIFT_YEARS) - 1 if x and y and (x > 0) == (y > 0) else float("nan")
     out = {"rev_cagr5": cagr(r["rev"][a], r["rev"][e]), "rev_end": r["rev"][e], "gm_end": r["gm"][e],
            "value": r["value_per_share"]}
     if driver and driver != "dgm":

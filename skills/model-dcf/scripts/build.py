@@ -367,7 +367,9 @@ def build(model, ctx, solved, out, written_path=None):
                                f"driver's yellow cells {sy[0]}-{y5} (others at your inputs) that makes value per share "
                                f"equal the price (growth in % points, gross margin in bps). Values from the /model-dcf run "
                                f"on {as_of}; editing inputs does not move them (rerun /model-dcf to refresh).")
-    grey = lambda ref, v, fmt: P(ref, "n", float(v), GREY, fmt, i=True)
+    def grey(ref, v, fmt):
+        if v == v:                       # a figure with no value (nan) stays blank: 'nan' is not a number to Excel
+            P(ref, "n", float(v), GREY, fmt, i=True)
     kv, user_vals = R["rev_user"], solved["user"]
     T.label(kv, "Your inputs", True)
     grey(f"C{kv}", solved["value_per_share"], PX)

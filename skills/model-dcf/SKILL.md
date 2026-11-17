@@ -46,7 +46,8 @@ Px Data close, 3-year high and low), each with the cell it came from. Statement 
 pattern within their section, as /model-historicals reads its template), so any company's labels work: debt is every
 debt-like liability row summed (`cap.debt_current_labels`, `cap.debt_lt_labels` say which; tell the user in step 6),
 short-term securities are 0 if the model has none, and opex is gross profit - operating income (all operating
-expenses, however the company splits them). A missing required row stops with its plain name; pass it on. If the forecast plan has no revenue identity
+expenses, however the company splits them). A driver that is a term on its own (added, not multiplied) and only
+starts in the forecast, such as revenue lost to a contract, counts as 0 before it. A missing required row stops with its plain name; pass it on. If the forecast plan has no revenue identity
 (a forecast built before identities existed), revenue itself becomes the only driver and `identity_fallback` is
 true: tell the user in step 6 that the DCF is a growth engine until /model-forecast is rerun.
 

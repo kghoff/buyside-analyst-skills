@@ -181,3 +181,37 @@ def test_driver_sections_are_not_read_as_the_statements(model):
     wb.save(model)
     c = context.build(model)
     assert c["refs"]["mod"]["tax_rate"][0] == "MOD!J161"
+
+
+def _forecast_only_term(model, tmp_path, monkeypatch, blank_price=False):
+    """A forecast-only additive term (e.g. 'revenue lost to a contract loss'): /model-forecast writes its row from the
+    first forecast column, so the last actual year and year 0 are empty even after a recalculation."""
+    import lo
+    monkeypatch.setattr(lo, "recalc", lambda path, outdir: path)     # a recalculation cannot fill an empty cell
+    wb = openpyxl.load_workbook(model)
+    ws = wb["MOD"]
+    ws["B37"], ws["J37"], ws["K37"] = "Revenue lost", -50, -60
+    if blank_price:
+        ws["F35"] = None
+    wb.save(model)
+    ident = json.loads(json.dumps(IDENTITY))
+    ident["terms"].append({"factors": [{"key": "KEY OPERATING / ALT DATA | Revenue lost", "name": "Revenue lost",
+                                        "average": False, "long_run": 0.02, "long_run_source": "test"}]})
+    (tmp_path / "_model_work" / "forecast" / "forecast_plan.json").write_text(json.dumps({"revenue_identity": ident}))
+
+
+def test_a_forecast_only_additive_term_is_0_before_the_forecast(model, tmp_path, monkeypatch):
+    """Its own term, summed: nothing was there before the forecast, so 0 is the true level and the year-0 identity
+    still equals revenue. Stopping here blocked /model-dcf on any model whose plan gained such a term."""
+    _forecast_only_term(model, tmp_path, monkeypatch)
+    f = context.build(model)["factors"][3]
+    assert f["level_prev"] == 0.0 and f["level0"] == 0.0 and f["mod"] == [-50, -60]
+    assert f["refs"]["prev"] == "MOD!F37" and f["refs"]["year0"] == "MOD!I37"
+
+
+def test_a_blank_multiplied_factor_still_stops(model, tmp_path, monkeypatch):
+    """A factor inside a product cannot count as 0: it would wipe the whole term, so a gap there is a real error."""
+    _forecast_only_term(model, tmp_path, monkeypatch, blank_price=True)
+    with pytest.raises(SystemExit) as e:
+        context.build(model)
+    assert "MOD!F35" in str(e.value)
