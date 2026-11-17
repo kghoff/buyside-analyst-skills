@@ -16,6 +16,7 @@ plugin `buyside`. Explain everything in plain English.
 | 7 | research-street | where sell-side and investors differ from the company, and why |
 | 8 | model-forecast | driver-based quarterly 3-statement forecast (user approves the plan first) |
 | 9 | model-dcf | 30-year key-driver DCF with reverse DCF; the user owns the inputs |
+| 10 | model-multiples | where the stock trades: history, vs S&P, vs peers, ranges, reverse P/E, forward table, comp sheet (Multiples tab) |
 | – | model-industry | optional: industry P&L and peer comparison tabs |
 | – | model-consensus | optional: broker ratings, targets, estimates, rating history, consensus snapshots; rerun each print |
 
