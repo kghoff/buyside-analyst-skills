@@ -1,4 +1,4 @@
-# Copied from skills/model-forecast/scripts/modmap.py (shared helper; keep in sync).
+# Copied from skills/model-dcf/scripts/modmap.py (itself from model-forecast; shared helper; keep in sync).
 """(Copied from model-dcf, Nov 2026; keep in sync.) The user's MOD tab layout: period columns (row 2) and row keys ('<section> | <label>').
 
 usage: python3 modmap.py rowmap <model.xlsx> <out.md>     (the row list the plan agent picks keys from)
