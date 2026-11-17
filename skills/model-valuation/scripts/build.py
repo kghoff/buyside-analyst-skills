@@ -1,11 +1,14 @@
 """Writes the Valuation tab into a copy of the user's model through raw-XML editing (xlsx.py). Every other part of the
 workbook stays byte-identical. Yellow = the agent's suggestion, the user's to change (blue font on yellow fill, a note
 with the agent's value, anchor and reason); typed numbers blue with a source note; formulas black; links to other tabs
-green. A rerun keeps every yellow cell the user changed (resolve_inputs).
+green. A rerun keeps every yellow cell the user changed (resolve_inputs); with a Valuation tab but no
+inputs_written.json (deleted, say), every yellow cell that differs from the agent's value counts as the user's (model-dcf's
+rule: a missing record means theirs), and the build warns.
 
 Records in W/layout.json the value every checked cell must recalculate to (valmath on context.json's numbers and the
-resolved inputs), for verify.py, and in W/inputs_written.next.json what the agent suggested for each yellow cell (SKILL
-step 7 renames it to inputs_written.json only when OUT is copied over the model).
+resolved inputs), for verify.py, and in W/inputs_written.next.json, per yellow cell, the value this build wrote plus
+"user": true when it was the user's (SKILL step 7 renames it to inputs_written.json only when OUT is copied over the
+model). The flag keeps a user's value theirs on every later rerun, even after the agent once suggests the same value.
 
 Layout: a cursor walks down the sections; each section function takes (b, r) and returns the next free row, so a
 section's size follows the plan. Named cells go in b.ref (absolute refs such as "$B$5") for later sections.
@@ -116,8 +119,9 @@ class W:
 
     def input_(self, ref, key, v, fmt, note):
         """A yellow cell the agent chose and the user owns: blue font on yellow fill, the agent's value/anchor/reason
-        in its note. v may be a number, a string ("long"), or ("f", formula, ...) when the user typed a formula."""
-        kind, val = ("f", v[1]) if isinstance(v, tuple) else ("s" if isinstance(v, str) else "n", v)
+        in its note. v may be a number, a string ("long"), or (kind, content, value for the math) for the user's
+        formula ("f") or text typed into a number cell ("s"); the cell gets the content as the user wrote it."""
+        kind, val = v[:2] if isinstance(v, tuple) else ("s" if isinstance(v, str) else "n", v)
         self.sh.set(ref, kind, val, self.style(BLUE, fmt, fill=YELLOW))
         self.inputs[key] = ref
         self.notes[ref] = note
@@ -167,31 +171,71 @@ def _tab_cells(path, data_only):
 
 
 def resolve_inputs(model, plan, written, values=None):
-    """{key: value used} and {key: (agent value, user value)} for the cells the user changed. A cell is the user's if it
-    holds a formula or differs from what the last build wrote (written: {key: value}); then the user's value (or
-    formula) wins. Inputs are found on the existing Valuation tab by their column-A label (LABEL[key]), so a layout
-    change between versions keeps them. No tab or no written record: the agent's values.
+    """({key: value used}, {key: (agent value, user value)} for the user's cells, [warnings]).
 
-    A user's formula is used as ("f", formula, its recalculated value from `values`, the recalculated copy)."""
+    Inputs are found on the existing Valuation tab by their column-A label (LABEL[key]), so a layout change between
+    versions keeps them. No tab: the agent's values. A cell is the user's when it holds a formula, differs from what
+    the last build wrote (written: {key: {"value", ["user"]}}), or was flagged "user" by the last build; then the user's
+    value (or formula) wins. With a tab but no record (written is None), a cell that differs from the agent's value is
+    the user's, and a warning says the record is missing. A key in the record whose label is gone from the tab is
+    warned about (the user's change there may be lost).
+
+    A user's formula is used as ("f", formula, its recalculated value from `values`). A formula with no recalculated
+    number, or text typed into a number cell, is kept in the cell as written but the math uses the agent's value
+    ("f"/"s", content, agent value), with a warning."""
     agent = {k: x["value"] for k, x in plan_inputs(plan).items()}
-    used, changed = dict(agent), {}
-    f_tab = _tab_cells(model, False) if written else None
+    used, changed, warns = dict(agent), {}, []
+    f_tab = _tab_cells(model, False)
     if not f_tab:
-        return used, changed
+        return used, changed, warns
+    if written is None:
+        warns.append("There is no inputs_written.json (the record of what the last build wrote), so every yellow cell "
+                     "that differs from the agent's suggestion is treated as yours.")
     v_tab = _tab_cells(values, True) or {}
     for key, a in agent.items():
         lab, col = label_of(key), col_of(key)
-        cell = (f_tab.get(lab) or {}).get(col)
-        if cell is None or key not in written:
+        rec = (written or {}).get(key)
+        if written is not None and key not in written:
+            continue                                      # new input: the agent's
+        if lab not in f_tab:
+            if written is not None:
+                warns.append(f"The row labelled {lab!r} is no longer on the {TAB} tab, so the build used the agent's "
+                             "value there; if you had changed that cell, your change may be lost.")
             continue
+        cell = f_tab[lab].get(col)
+        if cell is None:
+            continue
+        if isinstance(rec, dict):
+            last, mine = rec.get("value"), rec.get("user", False)
+        else:                                             # no record (agent's value) or an older plain-value record
+            last, mine = (a if written is None else rec), False
         if isinstance(cell, str) and cell.startswith("="):
             cached = (v_tab.get(lab) or {}).get(col)
+            if _num(a) and not _num(cached):
+                warns.append(f"Your formula in {lab!r} ({cell}) has no calculated number yet, so the math uses the "
+                             f"agent's {a}; the formula stays in the cell. Recalculate in Excel and rerun.")
+                cached = a
             used[key] = ("f", cell[1:], cached)
             changed[key] = (a, cell)
-        elif not _same(cell, written[key]):
-            used[key] = cell
+        elif mine or not _same(cell, last):
+            if _num(a) and not _num(cell):
+                warns.append(f"{lab!r} holds text ({cell!r}) where a number belongs, so the math uses the agent's "
+                             f"{a}; your text stays in the cell.")
+                used[key] = ("s", str(cell), a)
+            else:
+                used[key] = cell
             changed[key] = (a, cell)
-    return used, changed
+    return used, changed, warns
+
+
+def written_record(used, changed):
+    """inputs_written.next.json: per key, what this build wrote (a formula as "=..."), and "user": true for the user's."""
+    out = {}
+    for k, v in used.items():
+        out[k] = {"value": ("=" + v[1] if v[0] == "f" else v[1]) if isinstance(v, tuple) else v}
+        if k in changed:
+            out[k]["user"] = True
+    return out
 
 
 def val(v):
@@ -276,6 +320,7 @@ def sec2_growth(b, r):
     g = b.ctx["metrics"]["growth"]
     header(b, r, "2. Growth algorithm", ("Start", "End", "Years", "CAGR", "Market ref"))
     r += 1
+    cagr = {}
     for k, lab, mk in (("rev", "Revenue", "mkt_rev"), ("oi", "Operating income", "mkt_oi"), ("eps", "EPS", "mkt_eps")):
         x = g[k]
         fmt = MONEY if k == "eps" else MILL
@@ -283,7 +328,8 @@ def sec2_growth(b, r):
         b.w.link(f"B{r}", x["start_ref"], fmt, x["start"])
         b.w.link(f"C{r}", x["end_ref"], fmt, x["end"])
         b.w.typed_(f"D{r}", x["years"], INT, f"MOD years {b.year_of(x['start_ref'])}→{b.year_of(x['end_ref'])}")
-        b.w.formula(f"E{r}", f"IFERROR((C{r}/B{r})^(1/D{r})-1,NA())", PCT, x["cagr"])
+        cagr[k] = valmath.cagr(x["start"], x["end"], x["years"])  # #N/A unless both ends are positive, as valmath
+        b.w.formula(f"E{r}", f"IF(AND(B{r}>0,C{r}>0),(C{r}/B{r})^(1/D{r})-1,NA())", PCT, cagr[k])
         b.w.formula(f"F{r}", b.ref[mk].replace("$", ""), PCT, val(b.used[mk]))
         b.ref[f"cagr.{k}"] = f"$E${r}"
         r += 1
@@ -298,7 +344,7 @@ def sec2_growth(b, r):
     b.w.formula(f"B{r}", f"{b.ref['price']}/B{r - 1}", X, pe)
     b.ref["pe_now"] = f"$B${r}"
     r += 1
-    c = g["eps"]["cagr"]
+    c = cagr["eps"]
     b.w.text(f"A{r}", "P/E ÷ EPS CAGR")
     b.w.formula(f"B{r}", f"IFERROR(B{r - 1}/({b.ref['cagr.eps']}*100),NA())", "0.00",
                 pe / (c * 100) if pe is not None and c else None)
@@ -824,7 +870,7 @@ def build(model, work, ticker, out):
     wp = os.path.join(work, "inputs_written.json")
     written = json.load(open(wp)) if os.path.exists(wp) else None
     values = _values_path(model, work, ctx)
-    used, changed = resolve_inputs(model, plan, written, values)
+    used, changed, warnings = resolve_inputs(model, plan, written, values)
 
     pkg = Package(model)
     st = Styles(pkg.text("xl/styles.xml"))
@@ -848,7 +894,6 @@ def build(model, work, ticker, out):
     w.sh.comments = w.notes
     w.sh.freeze = "B3"
     w.sh.widths.update({1: 40, 2: 14, 3: 14, 4: 14, 5: 14, 6: 14, 7: 3, 8: 90})
-    warnings = []
     # A workbook-wide name pointing at the old tab would dangle once it is replaced; xlsx.remove_sheet only drops
     # names scoped to the tab (localSheetId), so say so rather than edit the user's names. (From model-multiples.)
     dangling = re.findall(rf'<definedName\b(?![^>]*localSheetId)[^>]*name="([^"]*)"[^>]*>[^<]*\'?{TAB}\'?!',
@@ -864,8 +909,7 @@ def build(model, work, ticker, out):
     notebox.fix(out, out, since=model)       # this tab's note boxes open readable (other tabs untouched)
     json.dump({"expected": w.expected, "typed": w.typed, "links": w.links, "formulas": w.formulas,
                "inputs": w.inputs, "ref": b.ref, "formula_text": w.ftext, "na": w.na}, open(os.path.join(work, "layout.json"), "w"), indent=0, default=str)
-    json.dump({k: x["value"] for k, x in b.pin.items()},
-              open(os.path.join(work, "inputs_written.next.json"), "w"), indent=1)
+    json.dump(written_record(used, changed), open(os.path.join(work, "inputs_written.next.json"), "w"), indent=1)
     return {"tab": TAB, "round": rnd, "user_kept": {k: {"agent": a, "yours": u} for k, (a, u) in changed.items()},
             "warnings": warnings}
 

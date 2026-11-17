@@ -68,7 +68,7 @@ def test_every_plan_input_is_yellow_with_its_anchor(model, work, tmp_path):
 def test_user_change_survives_rerun(model, work, tmp_path):
     out = str(tmp_path / "out.xlsx")
     build.build(model, work, "TEST", out)
-    os.replace(os.path.join(work, "inputs_written.next.json"), os.path.join(work, "inputs_written.json"))
+    _promote(work)
     ref = json.load(open(os.path.join(work, "layout.json")))["inputs"]["hurdle"]
     # the user types 15% over the agent's 20% (in a fixture copy, via openpyxl: a test file, never the user's)
     wb = openpyxl.load_workbook(out)
@@ -82,19 +82,139 @@ def test_user_change_survives_rerun(model, work, tmp_path):
     assert c.value == 0.15 and "You typed" in c.comment.text and "Agent: 0.2" in c.comment.text
 
 
-def test_untouched_inputs_follow_the_agent_on_rerun(model, work, tmp_path):
-    """A cell still holding what the last build wrote is the agent's, so a new plan value replaces it; the record keeps
-    the agent's value (not the user's), so a user's change stays theirs on every later rerun."""
+def _promote(work):
+    """SKILL step 7: the record becomes inputs_written.json once OUT is copied over the model."""
+    os.replace(os.path.join(work, "inputs_written.next.json"), os.path.join(work, "inputs_written.json"))
+
+
+def _set_plan(work, key, value):
+    p = json.load(open(os.path.join(work, "valuation_plan.json")))
+    p["inputs"][key]["value"] = value
+    json.dump(p, open(os.path.join(work, "valuation_plan.json"), "w"))
+
+
+def _user_types(path, work, key, value):
+    """The user edits a yellow cell (in a test copy, via openpyxl: never the user's file)."""
+    ref = json.load(open(os.path.join(work, "layout.json")))["inputs"][key]
+    wb = openpyxl.load_workbook(path)
+    wb["Valuation"][ref] = value
+    wb.save(path)
+
+
+def _input_cell(path, work, key):
+    return _ws(path)[json.load(open(os.path.join(work, "layout.json")))["inputs"][key]]
+
+
+def test_user_value_survives_when_agent_later_agrees_then_moves(model, work, tmp_path):
+    """Run 1 the agent writes 20%, the user types 15%; run 2 the agent happens to suggest 15% too; run 3 it suggests
+    18%. The 15% is still the user's: agreeing once must not hand the cell back to the agent."""
+    out1, out2, out3 = (str(tmp_path / f"out{i}.xlsx") for i in (1, 2, 3))
+    build.build(model, work, "TEST", out1)
+    _promote(work)
+    _user_types(out1, work, "hurdle", 0.15)
+    _set_plan(work, "hurdle", 0.15)
+    build.build(out1, work, "TEST", out2)
+    _promote(work)
+    _set_plan(work, "hurdle", 0.18)
+    build.build(out2, work, "TEST", out3)
+    c = _input_cell(out3, work, "hurdle")
+    assert c.value == 0.15 and "You typed" in c.comment.text
+
+
+def test_rerun_records_what_it_wrote_and_whose_it_is(model, work, tmp_path):
+    """inputs_written.next.json records the value the build wrote and flags the user's cells, so the next rerun knows
+    a user's value from an agent's even when they are equal; an untouched cell follows the agent's new value."""
+    out, out2 = str(tmp_path / "out.xlsx"), str(tmp_path / "out2.xlsx")
+    build.build(model, work, "TEST", out)
+    _promote(work)
+    _user_types(out, work, "hurdle", 0.15)
+    _set_plan(work, "buy_rr", 2.5)
+    res = build.build(out, work, "TEST", out2)
+    rec = json.load(open(os.path.join(work, "inputs_written.next.json")))
+    assert rec["hurdle"] == {"value": 0.15, "user": True}
+    assert rec["buy_rr"] == {"value": 2.5}
+    assert _input_cell(out2, work, "buy_rr").value == 2.5 and "buy_rr" not in res["user_kept"]
+
+
+def test_user_formula_is_kept_as_a_formula(model, work, tmp_path):
+    out, out2 = str(tmp_path / "out.xlsx"), str(tmp_path / "out2.xlsx")
+    build.build(model, work, "TEST", out)
+    _promote(work)
+    _user_types(out, work, "hurdle", "=0.1+0.05")
+    shutil.rmtree(os.path.join(work, "values"))
+    lo.recalc(out, os.path.join(work, "values"))
+    build.build(out, work, "TEST", out2)
+    c = _input_cell(out2, work, "hurdle")
+    assert c.value == "=0.1+0.05" and "You typed" in c.comment.text
+    assert json.load(open(os.path.join(work, "inputs_written.next.json")))["hurdle"]["user"] is True
+
+
+def test_lost_label_is_warned(model, work, tmp_path):
+    """If the user renames an input's row label, the build can't find their cell; it must say so, naming the label."""
+    out, out2 = str(tmp_path / "out.xlsx"), str(tmp_path / "out2.xlsx")
+    build.build(model, work, "TEST", out)
+    _promote(work)
+    row = _input_cell(out, work, "hurdle").row
+    wb = openpyxl.load_workbook(out)
+    wb["Valuation"][f"A{row}"] = "My hurdle"
+    wb.save(out)
+    res = build.build(out, work, "TEST", out2)
+    assert any("IRR hurdle" in w for w in res["warnings"]), res["warnings"]
+
+
+def test_formula_without_cached_value_falls_back(model, work, tmp_path):
+    """A user formula that was never recalculated has no value to do the math with: warn, use the agent's value for
+    the math, and keep the user's formula in the cell."""
+    out, out2 = str(tmp_path / "out.xlsx"), str(tmp_path / "out2.xlsx")
+    build.build(model, work, "TEST", out)
+    _promote(work)
+    _user_types(out, work, "hurdle", "=0.1+0.05")
+    res = build.build(out, work, "TEST", out2)                  # no recalc: the formula has no cached value
+    assert _input_cell(out2, work, "hurdle").value == "=0.1+0.05"
+    assert any("IRR hurdle" in w for w in res["warnings"]), res["warnings"]
+
+
+def test_text_in_number_cell_falls_back(model, work, tmp_path):
+    out, out2 = str(tmp_path / "out.xlsx"), str(tmp_path / "out2.xlsx")
+    build.build(model, work, "TEST", out)
+    _promote(work)
+    _user_types(out, work, "hurdle", "fifteen")
+    res = build.build(out, work, "TEST", out2)
+    assert _input_cell(out2, work, "hurdle").value == "fifteen"
+    assert any("IRR hurdle" in w for w in res["warnings"]), res["warnings"]
+    used, _, _ = build.resolve_inputs(out, json.load(open(os.path.join(work, "valuation_plan.json"))),
+                                      json.load(open(os.path.join(work, "inputs_written.json"))))
+    assert build.val(used["hurdle"]) == 0.2
+
+
+def test_missing_record_treats_differences_as_the_users(model, work, tmp_path):
+    """No inputs_written.json (deleted, say) but the tab exists: model-dcf's rule, a missing record means the cell is
+    the user's wherever it differs from the agent, and the build says so."""
+    out, out2 = str(tmp_path / "out.xlsx"), str(tmp_path / "out2.xlsx")
+    build.build(model, work, "TEST", out)
+    os.remove(os.path.join(work, "inputs_written.next.json"))     # never promoted: no record
+    _user_types(out, work, "hurdle", 0.15)
+    res = build.build(out, work, "TEST", out2)
+    assert _input_cell(out2, work, "hurdle").value == 0.15 and "hurdle" in res["user_kept"]
+    assert _input_cell(out2, work, "buy_rr").value == 2.0 and "buy_rr" not in res["user_kept"]
+    assert any("inputs_written.json" in w for w in res["warnings"]), res["warnings"]
+
+
+def test_growth_cagr_mirrors_valmath_on_negative_ends(model, work, tmp_path):
+    """A CAGR from a loss is meaningless; Excel's (end/start)^(1/n) would still give a number when both ends are
+    negative, so the sheet must return #N/A exactly where valmath.cagr returns None."""
+    cp = os.path.join(work, "context.json")
+    c = json.load(open(cp))
+    g = c["metrics"]["growth"]["oi"]
+    g["start"], g["end"] = -abs(g["start"]), -abs(g["end"])
+    json.dump(c, open(cp, "w"))
     out = str(tmp_path / "out.xlsx")
     build.build(model, work, "TEST", out)
-    os.replace(os.path.join(work, "inputs_written.next.json"), os.path.join(work, "inputs_written.json"))
-    p = json.load(open(os.path.join(work, "valuation_plan.json")))
-    p["inputs"]["buy_rr"]["value"] = 2.5
-    json.dump(p, open(os.path.join(work, "valuation_plan.json"), "w"))
-    used, changed = build.resolve_inputs(out, p, json.load(open(os.path.join(work, "inputs_written.json"))),
-                                         os.path.join(work, "values", "nothing.xlsx"))
-    assert used["buy_rr"] == 2.5 and changed == {}
-    assert json.load(open(os.path.join(work, "inputs_written.json")))["hurdle"] == 0.2
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    e = lay["ref"]["cagr.oi"].replace("$", "")
+    r = e[1:]
+    assert lay["expected"][e] is None
+    assert lay["formula_text"][e] == f"IF(AND(B{r}>0,C{r}>0),(C{r}/B{r})^(1/D{r})-1,NA())"
 
 
 def test_labels_are_unique_and_found_on_the_tab(model, work, tmp_path):
