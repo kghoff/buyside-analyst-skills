@@ -17,6 +17,7 @@ plugin `buyside`. Explain everything in plain English.
 | 8 | model-forecast | driver-based quarterly 3-statement forecast (user approves the plan first) |
 | 9 | model-dcf | 30-year key-driver DCF with reverse DCF; the user owns the inputs |
 | 10 | model-multiples | where the stock trades: history, vs S&P, vs peers, ranges, reverse P/E, forward table, comp sheet (Multiples tab) |
+| 11 | model-valuation | what it's worth and whether the setup is worth owning: 1-3 multiples with reasons, 12-month R/R per multiple and blended, R/R ladder, 3-year IRR and the 3 R's, DCF bear / base / bull from an agent-run reverse DCF, probability tree, valuation note (Valuation tab) |
 | – | model-industry | optional: industry P&L and peer comparison tabs |
 | – | model-consensus | optional: broker ratings, targets, estimates, rating history, consensus snapshots; rerun each print |
 
@@ -45,7 +46,7 @@ README skills table and this file's table.
 
 ## Layout and testing
 - `skills/<name>/`: SKILL.md (what Claude follows), scripts/, tests/, references/ (prompts), NOTES.md (why things are the way they are; read it before changing scripts)
-- `agents/`: helper agents the skills dispatch (filings-analyst, street-analyst, street-researcher, forecast-planner)
+- `agents/`: helper agents the skills dispatch (filings-analyst, street-analyst, street-researcher, forecast-planner, valuation-analyst)
 - `lib/settings.py|mjs`: the settings file reader
 - `bash run-tests.sh`: every suite plus `check-refs.sh` (no personal paths or names). Must end ALL PASS.
   Personal terms to keep out of the repo go one per line in `.refs-blocklist` (git-ignored; check-refs reads it).

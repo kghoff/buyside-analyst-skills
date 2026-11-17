@@ -33,6 +33,7 @@ report.
 ```
 collect-documents → model-historicals → model-ratios → model-kpis → model-price-history
   → research-filings → research-street → model-forecast → model-dcf → model-multiples
+  → model-valuation
 
 Optional once the model exists:  model-industry,  model-consensus (rerun after each earnings print)
 ```
@@ -49,6 +50,7 @@ Optional once the model exists:  model-industry,  model-consensus (rerun after e
 | 8 | model-forecast | Builds the forecast from the key drivers | research-filings (research-street if done) | Driver-based quarterly 3-statement forecast in MOD (you approve the plan first) |
 | 9 | model-dcf | Values the company | model-forecast, model-price-history | 30-year key-driver DCF and reverse DCF; you own the inputs |
 | 10 | model-multiples | Shows where the stock trades | model-forecast | Multiples tab: history, vs S&P, vs peers, ranges, reverse P/E, forward table, comp sheet |
+| 11 | model-valuation | Says what it's worth and whether the setup is worth owning | model-dcf, model-multiples | Valuation tab: 1-3 multiples with reasons, 12-month R/R per multiple and blended, R/R ladder, 3-year IRR and the 3 R's, DCF bear / base / bull from an agent-run reverse DCF, probability tree; valuation note |
 | – | model-industry | Builds the industry view (optional) | the model; research-filings | Industry P&L and Industry Comparison tabs from public peers |
 | – | model-consensus | Tracks the Street (optional) | the model; research-street | Broker ratings, targets, estimates, rating history, consensus snapshots |
 
@@ -122,6 +124,7 @@ One ticker through the chain. Each skill tells you what it decided when it finis
 | 8 | `/buyside:model-forecast TICKER` | Your notes for the forecast; then your approval of the forecast plan |
 | 9 | `/buyside:model-dcf TICKER` | Nothing. Fill in the yellow input cells yourself. |
 | 10 | `/buyside:model-multiples TICKER` | How you get peer and market data (free or paid); which comps to use |
+| 11 | `/buyside:model-valuation TICKER` | Nothing. The agent's choices are yellow cells you own; change any and a rerun keeps it. |
 | opt | `/buyside:model-industry TICKER` | Which peers to include |
 | opt | `/buyside:model-consensus TICKER` | Nothing; rerun after each earnings print |
 
