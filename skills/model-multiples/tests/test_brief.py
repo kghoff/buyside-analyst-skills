@@ -35,16 +35,26 @@ def test_missing_sections_and_reports_are_listed_not_dropped(tmp_path):
     assert s["reports"]["Street Research"] is None
 
 
-def test_cap_cuts_lowest_priority_sections_and_says_where_to_read_the_rest(tmp_path):
+def test_cap_is_shared_by_weight_so_no_section_is_starved(tmp_path):
     report(tmp_path, "Filings Research", "2026-01-02 TST Filings Research Report.md",
            [("Summary", 40), ("The key drivers", 40), ("Gaps", 40)])
     text, s = brief.build("TST", str(tmp_path), cap=70)
-    assert "Filings Research / Summary" in s["included"]
-    cut = {c["section"] for c in s["cut"]}
-    assert "Filings Research / The key drivers" in cut        # second in priority: partly kept
-    assert "Filings Research / Gaps" in cut                   # last in priority: nothing left
+    cut = {c["section"]: c for c in s["cut"]}
+    assert set(cut) == {"Filings Research / Summary", "Filings Research / The key drivers", "Filings Research / Gaps"}
+    assert all(c["kept"] > 0 for c in cut.values())           # even the lowest-weight section keeps its heading
+    assert cut["Filings Research / Summary"]["budget"] > cut["Filings Research / Gaps"]["budget"]   # weight 2 vs 1
     assert "Cut by the brief's 70-word cap" in text
     assert s["words"] <= 70 + 60                              # headings and cut notes are the only overrun
+
+
+def test_short_section_stays_whole_and_its_unused_budget_flows_to_a_long_one(tmp_path):
+    report(tmp_path, "Filings Research", "2026-01-02 TST Filings Research Report.md",
+           [("Summary", 5), ("The key drivers", 200)])
+    _, s = brief.build("TST", str(tmp_path), cap=100)
+    assert "Filings Research / Summary" in s["included"]      # shorter than its share: kept whole
+    c = s["cut"][0]
+    assert c["section"] == "Filings Research / The key drivers"
+    assert c["budget"] > 100 * 2 / 4                          # more than an equal-weight share: it got the leftover
 
 
 def test_source_comment_points_at_the_heading_line(tmp_path):
