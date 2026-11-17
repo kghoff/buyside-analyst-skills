@@ -12,7 +12,7 @@ def _trend(s, period):
 
 
 def row(s, group):
-    r = {"ticker": s["ticker"], "group": group, "asof": s.get("asof"), "warning": None}
+    r = {"ticker": s["ticker"], "group": group, "asof": s.get("asof"), "warning": None, "ccy_mismatch": False}
     if s.get("error"):
         return {**r, **{k: None for k in KEYS}, "warning": f"Yahoo fetch failed: {s['error']}"}
     f = s.get("financial", {})
@@ -26,13 +26,20 @@ def row(s, group):
     r["ev"] = r["mcap"] + r["debt"] - r["cash"] if r["mcap"] is not None else None
     r["pe0"], r["pe1"] = ratio(r["price"], r["eps0"]), ratio(r["price"], r["eps1"])
     same_ccy = f.get("financialCurrency") in (None, s.get("currency"))
+    warns = []
     if not same_ccy:
-        r["warning"] = (f"financials in {f.get('financialCurrency')}, price in {s.get('currency')}: EV multiples "
-                        "left NM")
+        r["ccy_mismatch"] = True
+        warns.append(f"financials in {f.get('financialCurrency')}, price in {s.get('currency')}: EV multiples "
+                     "left NM")
+    if f.get("financialCurrency") is None:
+        warns.append("financial currency not reported; assumed same as price")
+    if f.get("totalDebt") is None:
+        warns.append("total debt not reported; EV assumes 0")
+    r["warning"] = "; ".join(warns) or None
     r["ev_rev0"] = ratio(r["ev"], r["rev0"]) if same_ccy else None
     r["ev_rev1"] = ratio(r["ev"], r["rev1"]) if same_ccy else None
     r["ev_ebitda"] = ratio(r["ev"], r["ebitda"]) if same_ccy else None
-    r["growth1"] = (r["rev1"] / r["rev0"] - 1) if r["rev0"] and r["rev1"] else None
+    r["growth1"] = (r["rev1"] / r["rev0"] - 1) if r["rev0"] and r["rev0"] > 0 and r["rev1"] is not None else None
     return r
 
 

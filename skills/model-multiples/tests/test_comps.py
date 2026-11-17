@@ -52,3 +52,27 @@ def test_rank_by_next_year_pe_nm_last_and_stats_skip_nm():
     assert [r["ticker"] for r in ranked] == ["C", "A", "B"]
     st = comps.stats(ranked)
     assert st["median"]["pe1"] == pytest.approx(35.0) and st["average"]["pe1"] == pytest.approx(35.0)
+
+
+def test_empty_yahoo_snapshot_is_a_visible_failed_row():
+    r = comps.row({"ticker": "EMP", "asof": "2026-11-17", "error": "Yahoo returned no price / market cap"}, "g")
+    assert r["warning"].startswith("Yahoo fetch failed") and r["pe1"] is None and r["ev_ebitda"] is None
+
+
+def test_soft_warnings_are_visible_but_keep_ev_multiples():
+    s = snap("SOFT")
+    s["financial"].pop("financialCurrency"); s["financial"].pop("totalDebt")
+    r = comps.row(s, "g")
+    assert "financial currency not reported; assumed same as price" in r["warning"]
+    assert "total debt not reported; EV assumes 0" in r["warning"] and "; " in r["warning"]
+    assert r["ccy_mismatch"] is False and r["ev_ebitda"] is not None and r["ev_rev1"] is not None
+
+
+def test_currency_mismatch_sets_flag_only_then():
+    assert comps.row(snap("A", fcur="EUR"), "g")["ccy_mismatch"] is True
+    assert comps.row(snap("B"), "g")["ccy_mismatch"] is False and comps.row(snap("B"), "g")["warning"] is None
+
+
+def test_nonpositive_rev0_gives_no_growth():
+    assert comps.row(snap("Z", rev0=0), "g")["growth1"] is None
+    assert comps.row(snap("N", rev0=-5e9), "g")["growth1"] is None

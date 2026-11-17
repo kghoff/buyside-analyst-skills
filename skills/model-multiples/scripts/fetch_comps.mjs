@@ -14,7 +14,7 @@ const yahooSymbol = (t) => (/^[A-Z]+\.[A-Z]$/.test(t) ? t.replace('.', '-') : t)
 async function retry(fn, label, waits = [5000, 15000, 45000]) {
   for (let i = 0; ; i++) {
     try { return await fn(); } catch (e) {
-      if (i >= waits.length) throw new Error(`${label}: ${e.message}`);
+      if (i >= waits.length || /not found|No data|Invalid/i.test(e.message)) throw new Error(`${label}: ${e.message}`);
       console.error(`${label} failed (${e.message}); retrying in ${waits[i] / 1000}s`);
       await sleep(waits[i]);
     }
@@ -37,10 +37,11 @@ for (const [i, t] of tickers.map((x) => x.toUpperCase()).entries()) {
       marketCap: qs.price?.marketCap ?? null, adv3m: qs.price?.averageDailyVolume3Month ?? qs.summaryDetail?.averageVolume ?? null,
       financial: qs.financialData || {}, trend: qs.earningsTrend?.trend || [],
     };
+    if (out.price == null || out.marketCap == null) out = { ticker: t, asof, error: 'Yahoo returned no price / market cap' };
   } catch (e) {
     out = { ticker: t, asof, error: e.message };
-    if (i === 0) subjectFailed = true;
   }
+  if (out.error && i === 0) subjectFailed = true;
   fs.writeFileSync(path.join(work, 'comps', `${t}.json`), JSON.stringify(out, null, 1));
   console.log(`${t}: ${out.error ? 'FAILED ' + out.error : 'ok'}`);
 }
