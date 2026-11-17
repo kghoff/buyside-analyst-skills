@@ -69,8 +69,8 @@ comparables, used for the P/E-vs-peers history). Ask with AskUserQuestion (first
    peer into `<model dir>/Price Data/`, and **wait**. Then
    `python3 "$SK/prices.py" --model "$M" --tickers <core peers> [--src DIR]`. It copies the files it finds into
    `<model dir>/Price Data/`, prints JSON, and exits 1 if any is missing or bad: ask the user for those once. If they can't supply one, drop that peer from `core`
-   in `comps.json` (it stays on the comp sheet) and tell them. If fewer than 2 core peers remain, the peer-relative
-   history is skipped: say so.
+   in `comps.json` (it stays on the comp sheet) and tell them. With one core peer left, "P/E − core-peer
+   median" is against that single peer; with none, it is #N/A throughout. Say which.
 5. Fill `comps.json` `files`: `{"<P>": {"xbrl": "<path>", "prices": "<path>"}}`.
 
 **Paid path.** Ask the user to drop one export for the subject and one per core peer into `$W/inputs/`, daily or
