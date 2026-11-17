@@ -8,6 +8,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 
 import comps as C
 import engine as E
@@ -68,8 +69,8 @@ class W:
         if check:
             self.expected[ref] = expect
 
-    def formula(self, ref, f, fmt, expect=None, check=True, b=False):
-        self.sh.set(ref, "f", f, self.style(BLACK, fmt, b=b))
+    def formula(self, ref, f, fmt, expect=None, check=True, b=False, kind="f"):
+        self.sh.set(ref, kind, f, self.style(BLACK, fmt, b=b))
         self.formulas.append(ref)
         if check:
             self.expected[ref] = expect
@@ -85,17 +86,9 @@ def load_inputs(model, work, ticker):
     return cfg, mode, snaps
 
 
-def build(model, work, ticker, out):
-    cfg, mode, snaps = load_inputs(model, work, ticker)
+def load_rows(model, work, cfg, mode, ticker, recalced):
+    """(weekly rows, subject quarters, S&P rows, {core peer: TTM rows}, basis line, warnings) for either path."""
     warnings = []
-    values = os.path.join(work, "values")
-    os.makedirs(values, exist_ok=True)
-    recalced = lo.recalc(model, values)                # cached values of the user's formulas, never saved back
-    st = Styles(Package(model).text("xl/styles.xml"))
-    w = W(st)
-    sh = w.sh
-
-    # ---------------------------------------------------------------- data
     peer_q = {}
     if mode == "free":
         quarters, q_notes = S.quarters(model, recalced)     # (rows, plain-English notes): Task 4 review, 2026-11-17
@@ -127,7 +120,26 @@ def build(model, work, ticker, out):
         basis = "NTM consensus multiples from " + ", ".join(sorted({os.path.basename(f["export"]) for f in files.values()}))
         if all(r.get("sp500_pe") is None for r in subj):
             warnings.append("The export has no S&P 500 NTM P/E column, so the S&P-relative rows are #N/A.")
-    rows = [r for r in rows if r.get("pe") is not None or r.get("ev_rev") is not None] or rows
+    return rows, quarters, sp, peer_q, basis, warnings
+
+
+def build(model, work, ticker, out):
+    cfg, mode, snaps = load_inputs(model, work, ticker)
+    warnings = []
+    values = os.path.join(work, "values")
+    os.makedirs(values, exist_ok=True)
+    recalced = lo.recalc(model, values)                # cached values of the user's formulas, never saved back
+    st = Styles(Package(model).text("xl/styles.xml"))
+    w = W(st)
+    sh = w.sh
+
+    rows, quarters, sp, peer_q, basis, notes_ = load_rows(model, work, cfg, mode, ticker, recalced)
+    warnings += notes_
+    kept = [r for r in rows if r.get("pe") is not None or r.get("ev_rev") is not None]
+    if kept and len(kept) < len(rows):
+        warnings.append(f"{len(rows) - len(kept)} week(s) with neither a P/E nor an EV/Revenue were left out "
+                        "(no quarter known yet, or no data in the export).")
+    rows = kept or rows
     # Paid path: the sixth multiple, forward FCF yield, has a history (the export's NTM FCF); the free path has none.
     KEYS = E.KEYS + (("fcf_yield_ntm",) if mode == "paid" else ())
     rg = E.ranges(rows, keys=KEYS)
@@ -316,10 +328,12 @@ def build(model, work, ticker, out):
             for s_, f in (("min", f"_xlfn.AGGREGATE(5,6,{R})"), ("median", f"_xlfn.AGGREGATE(12,6,{R})"),
                           ("max", f"_xlfn.AGGREGATE(4,6,{R})"),
                           # Not COUNTIF(R,"<="&today): that turns today into 15-digit text and can miscount today
-                          # itself. SUMPRODUCT compares numbers; IFERROR drops #N/A rows. (Task 2 review, 2026-11-17.)
-                          # NM today: #N/A, as window_stats (pct None), not 0.
-                          ("pct", f"IF(ISNUMBER({L[k]}{WN}),SUMPRODUCT(IFERROR(({R}<={L[k]}{WN})*1,0))/COUNT({R}),NA())")):
-                w.formula(f"{colname(cc)}{rr}", na(f), PCT if s_ == "pct" else fmt, stt[s_] if stt else None)
+                          # itself. A legacy array formula (kind "fa") compares numbers and evaluates IFERROR over the
+                          # array in every Excel version and LibreOffice; IFERROR drops #N/A rows. NM today: #N/A, as
+                          # window_stats (pct None), not 0.
+                          ("pct", f"IF(ISNUMBER({L[k]}{WN}),SUM(IFERROR(({R}<={L[k]}{WN})*1,0))/COUNT({R}),NA())")):
+                w.formula(f"{colname(cc)}{rr}", na(f), PCT if s_ == "pct" else fmt, stt[s_] if stt else None,
+                          kind="fa" if s_ == "pct" else "f")
                 cc += 1
     rr = R_RANGE + 2 + len(KEYS) + 1
     w.text(f"A{rr}", "Implied earnings power (today's price ÷ P/E)", b=True)
@@ -433,9 +447,40 @@ def build(model, work, ticker, out):
                       PCT if key == "growth1" else X, stt["average" if fn == 1 else "median"][key], b=True)
 
     # ---------------------------------------------------------------- charts
-    cat = (f"'{TAB}'!{rng('date', W0, WN)}", [serial(r["date"]) for r in rows])
-    ser = lambda k, name, color, dash=False: {"name": name, "ref": f"'{TAB}'!{rng(k, W0, WN)}",
-                                              "vals": [r.get(k) for r in rows], "color": color, "dash": dash}
+    chart_list = chart_specs(ticker, mode, rows, comp_rows, C0, lambda k: f"'{TAB}'!{rng(k, W0, WN)}", warnings)
+
+    sh.comments = notes
+    sh.freeze = "B5"
+    for j in range(1, max(20, c)):                 # every used column, so dates don't show as ###
+        sh.widths[j] = 13
+    sh.widths[1] = 34
+    pkg = Package(model)
+    # A workbook-wide name pointing at the old tab would dangle once it is replaced; xlsx.remove_sheet only drops
+    # names scoped to the tab (localSheetId), so say so rather than edit the user's names.
+    dangling = re.findall(rf'<definedName\b(?![^>]*localSheetId)[^>]*name="([^"]*)"[^>]*>[^<]*\'?{TAB}\'?!',
+                          pkg.text("xl/workbook.xml"))
+    if dangling:
+        warnings.append(f"Workbook name(s) {', '.join(dangling)} refer to the old {TAB} tab and will show #REF! after "
+                        "the rebuild; re-point or delete them.")
+    if TAB in [n for n, *_ in pkg.sheets()]:
+        pkg.remove_sheet(TAB)
+    write_parts(pkg, st, sh, chart_list)
+    pkg.save(out)
+    import notebox
+    notebox.fix(out, out, since=model)
+    json.dump({"expected": w.expected, "typed": w.typed, "links": w.links, "formulas": w.formulas, "weeks": len(rows),
+               "W0": W0, "WN": WN}, open(os.path.join(work, "layout.json"), "w"), indent=0, default=str)
+    return {"tab": TAB, "mode": mode, "weeks": len(rows), "first_week": rows[0]["date"].isoformat(),
+            "comps": [{"ticker": r["ticker"], "pe1": r["pe1"]} for r in comp_rows], "core": cfg["core"],
+            "ranges": {k: rg[k][260] for k in ("pe", "ev_ebitda", "rel_sp", "rel_peer")}, "reverse_pe_5y": rev[260],
+            "warnings": warnings}
+
+
+def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings):
+    """Chart XML for the tab: one line chart per multiple (skipped, with a warning, when every week is NM) and the
+    'looks like' scatter from the comp sheet. ref(k) = the absolute range of weekly column k."""
+    cat = (ref("date"), [serial(r["date"]) for r in rows])
+    ser = lambda k, name, color: {"name": name, "ref": ref(k), "vals": [r.get(k) for r in rows], "color": color}
     word = "NTM" if mode == "paid" else "TTM"
     chart_list = []
     for title, k, name, fmt in ((f"{ticker} P/E ({word})", "pe", "P/E", X),
@@ -458,25 +503,7 @@ def build(model, work, ticker, out):
         chart_list.append(scatter("Looks like: next year's P/E vs revenue growth", pts))
     else:
         warnings.append("No comp has both a next-year P/E and revenue growth, so the 'looks like' scatter is skipped.")
-
-    sh.comments = notes
-    sh.freeze = "B5"
-    for j in range(1, max(20, c)):                 # every used column, so dates don't show as ###
-        sh.widths[j] = 13
-    sh.widths[1] = 34
-    pkg = Package(model)
-    if TAB in [n for n, *_ in pkg.sheets()]:
-        pkg.remove_sheet(TAB)
-    write_parts(pkg, st, sh, chart_list)
-    pkg.save(out)
-    import notebox
-    notebox.fix(out, out, since=model)
-    json.dump({"expected": w.expected, "typed": w.typed, "links": w.links, "formulas": w.formulas, "weeks": len(rows),
-               "W0": W0, "WN": WN}, open(os.path.join(work, "layout.json"), "w"), indent=0, default=str)
-    return {"tab": TAB, "mode": mode, "weeks": len(rows), "first_week": rows[0]["date"].isoformat(),
-            "comps": [{"ticker": r["ticker"], "pe1": r["pe1"]} for r in comp_rows], "core": cfg["core"],
-            "ranges": {k: rg[k][260] for k in ("pe", "ev_ebitda", "rel_sp", "rel_peer")}, "reverse_pe_5y": rev[260],
-            "warnings": warnings}
+    return chart_list
 
 
 def write_parts(pkg, st, sh, chart_list):

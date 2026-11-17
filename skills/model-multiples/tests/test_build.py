@@ -150,3 +150,36 @@ def test_paid_path_recalculates_and_carries_ntm_fcf_yield(built_paid):
     hdr = {c.value: c.column_letter for c in ws[lay["W0"] - 1] if c.value}
     col = hdr["NTM FCF yield"]
     assert isinstance(ws[f"{col}{lay['WN']}"].value, float) and f"{col}{lay['WN']}" in lay["expected"]
+
+
+def reachable(path):
+    """Every part reachable from the workbook's sheets through their rels (drawings, charts, comments, VML...)."""
+    from xlsx import Package, relpath_of, resolve
+    pkg = Package(path)
+    todo, seen = [p for *_, p in pkg.sheets()], set()
+    while todo:
+        p = todo.pop()
+        if p in seen:
+            continue
+        seen.add(p)
+        todo += [resolve(p, t) for _, (_, t) in pkg.rels(relpath_of(p)).items() if "TargetMode" not in t]
+    return seen
+
+
+def test_rebuild_replaces_the_tab_cleanly(built, verified, tmp_path):
+    # A rerun (each print) builds over a model that already has the tab: one tab, no orphan parts left behind,
+    # every other part byte-identical, and the same numbers as the first build.
+    _, out1, w, _ = built
+    w2 = tmp_path / "work2"
+    shutil.copytree(w, w2, ignore=shutil.ignore_patterns("values", "verify", "*.xlsx", "*.png", "layout.json"))
+    out2 = w2 / "out2.xlsx"
+    build.build(str(out1), str(w2), "DXCM", str(out2))
+    assert openpyxl.load_workbook(out2, read_only=True).sheetnames.count("Multiples") == 1
+    names = zipfile.ZipFile(out2).namelist()
+    owned = [n for n in names if n.startswith(("xl/charts/", "xl/drawings/", "xl/comments")) and "/_rels/" not in n]
+    assert set(owned) <= reachable(str(out2)), set(owned) - reachable(str(out2))
+    r = verify.run(str(out1), str(out2), str(w2))
+    assert r["ok"] and r["failed"] == [] and r["errors"] == [] and r["changed_parts"] == [], r
+    a = openpyxl.load_workbook(verified["recalculated"], data_only=True)["Multiples"]
+    b = openpyxl.load_workbook(r["recalculated"], data_only=True)["Multiples"]
+    assert a["B7"].value == pytest.approx(b["B7"].value) and isinstance(a["B7"].value, float)
