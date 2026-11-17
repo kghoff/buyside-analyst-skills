@@ -44,5 +44,17 @@ Not read at runtime. Read before changing the scripts. Spec: docs/2026-11-17-app
 - The percentile is an array formula and AGGREGATE is written `_xlfn.` (Excel opens it without repair).
 - verify.py must print `"ok": true` and renders a PNG of the Multiples page.
 
+## Final review changes (2026-11-17)
+- Relative rows are GAAP vs GAAP: the S&P and XBRL peer figures are reported earnings. subject.quarters always
+  carries GAAP TTM EPS; a non-GAAP basis gets its own "P/E (GAAP)" weekly column (GAAP basis: the P/E column is it).
+- Paid path: the S&P NTM P/E column is kept as is. Vendor NTM consensus is consistent across subject, peers and the
+  S&P, so the relative rows stay NTM vs NTM.
+- Paid path unit check: the export's latest NTM sales vs MOD's last actual FY revenue (no sales: its market cap vs its
+  price × MOD's latest diluted shares; neither: a warning). Outside 0.2-5x stops the build, naming the likely unit.
+- Paid peer P/E is a formula on the peer's typed NTM EPS column. Trailing FCF yield is labelled LTM on the paid path.
+- A typed cell with no value is NA() in black and listed as a formula: it is not a number from a source.
+- Free path: MOD's unit column for revenue and shares not looking like millions is a warning.
+- Street EPS is the analysts' basis (usually adjusted); years match by name (Yahoo endDate year = MOD FY label).
+
 ## DXCM baseline
 Filled in by Task 13.

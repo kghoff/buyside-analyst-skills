@@ -91,6 +91,8 @@ commas are read. Comps still come from Yahoo (free-path step 1).
    printed summary for the report: it lists dropped weeks, skipped charts, comp warnings, quarter notes (for example
    the EBITDA fallback) and dangling names. It stops with a clear message if MOD lacks a quarter column the history
    needs, or the overlays are non-GAAP and MOD has no non-GAAP EPS row: fix the model (or tell the user) and rerun.
+   Paid path: it also stops when the export's units are not MOD's (it names the likely unit, e.g. dollars): ask the
+   user to re-export in millions.
 2. `python3 "$SK/verify.py" --model "$M" --out "$W/out.xlsx" --work "$W"`. It must print `"ok": true`. It
    recalculates in LibreOffice, compares every checked cell, scans for errors and proves every other part of the file
    is byte-identical. On failure, fix an obvious cause and rebuild once; never hand-edit the output.
@@ -116,6 +118,8 @@ commas are read. Comps still come from Yahoo (free-path step 1).
   - free history is TTM, not NTM: for fast growers TTM P/E runs above NTM; the paid path is NTM and adds the NTM FCF
     yield;
   - the S&P comparison is trailing (free path);
+  - Relative rows are GAAP vs GAAP: the S&P and XBRL peer figures are reported earnings (free path; on a non-GAAP
+    basis the tab adds a GAAP P/E column for them). The paid path stays NTM vs NTM;
   - core peers count a quarter as known 45 days after quarter end (Q1-Q3) or 90 days (Q4), the latest SEC filing
     deadlines, so never early;
   - net debt = debt-like liabilities less cash and short-term investments; operating leases excluded;
