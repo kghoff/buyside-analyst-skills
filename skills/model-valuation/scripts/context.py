@@ -13,9 +13,10 @@ import sys
 
 import openpyxl
 
-import brief
-import lo
-import metrics
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with python3 -I
+import brief  # noqa: E402
+import lo  # noqa: E402
+import metrics  # noqa: E402
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "lib"))
