@@ -118,7 +118,8 @@ def _table(path):
 
 
 def _symbol(v):
-    return re.split(r"[\s\-/.]+", str(v or "").strip().upper())[0]
+    s = (str(v or "").strip().upper().split() or [""])[0]
+    return re.sub(r"-[A-Z]{2}$", "", s).replace("/", ".")
 
 
 def _duplicates(headers):
@@ -174,6 +175,8 @@ def load(path, mapping=None, ticker=None):
                                  "want.")
             want = _symbol(ticker)
             body = [r for r in body if m["ticker"] < len(r) and _symbol(r[m["ticker"]]) == want]
+            if not body:
+                raise SystemExit(f"{name}: no rows for ticker {ticker!r}. Tickers found: {', '.join(sorted(syms))}.")
     weeks, skipped = {}, 0
     for n, r in enumerate(body, 1):
         d = _date(r[m["date"]]) if m["date"] < len(r) else None

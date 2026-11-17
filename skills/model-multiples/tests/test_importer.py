@@ -128,3 +128,18 @@ def test_mapping_without_date_is_a_clear_error(tmp_path):
     p = _w(tmp_path, "Date,Price,EPS\n2024-01-05,10,1\n")
     with pytest.raises(SystemExit, match='"date"'):
         importer.load(p, {"price": "Price", "eps_ntm": "EPS"})
+
+
+def test_share_classes_stay_distinct_and_formats_match(tmp_path):
+    p = _w(tmp_path, "Date,Ticker,Price,EPS\n2024-01-05,BRK.A,500,1\n2024-01-05,BRK/B,5,1\n"
+                     "2024-01-12,BRK.B-US,6,1\n")
+    assert [r["price"] for r in importer.load(p, ticker="BRK.B")] == [5.0, 6.0]
+    q = _w(tmp_path, "Date,Ticker,Price,EPS\n2024-01-05,ABT US Equity,1,1\n2024-01-12,ABT-US,2,1\n"
+                     "2024-01-19,abt,3,1\n2024-01-19,DXCM,9,1\n", "q.csv")
+    assert len(importer.load(q, ticker="ABT")) == 3
+
+
+def test_ticker_matching_nothing_fails_loudly(tmp_path):
+    p = _w(tmp_path, "Date,Ticker,Price,EPS\n2024-01-05,ABT,1,1\n2024-01-05,DXCM,2,1\n")
+    with pytest.raises(SystemExit, match="ZZZ.*ABT.*DXCM"):
+        importer.load(p, ticker="ZZZ")
