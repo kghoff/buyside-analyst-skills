@@ -28,6 +28,15 @@ DEBT = r"debt|notes|borrowing|convertible|credit facilit|commercial paper|financ
 NOT_DEBT = r"^total|accounts payable|operating lease|interest payable|accrued|deferred"
 FCF = r"free cash flow$"                      # the last match: the FREE CASH FLOW section sits lowest in MOD
 METRICS = ("rev", "gp", "ebitda", "eps", "fcf")
+MILLIONS = r"\$?\s*M|mil"                    # MOD's unit column (C) for revenue and shares should say millions
+
+
+def unit_notes(mm, R):
+    """A warning for each of the revenue and shares rows whose MOD unit (column C) is present and not millions."""
+    unit = {i: c for i, _, c in mm.lines}
+    return [f"MOD's {name} row says its unit is {unit[R[k]]!r}, not millions; the multiples assume millions. Check the "
+            "row's unit." for k, name in (("rev", "revenue"), ("shares", "diluted shares"))
+            if unit.get(R[k]) and not re.search(MILLIONS, str(unit[R[k]]), re.I)]
 
 
 def norm(t):
@@ -97,15 +106,16 @@ def next_q(p):
 
 
 def quarters(model, values):
-    """([{label, date, pxe_row, rev|gp|ebitda|eps|fcf|shares|net_debt: (value, formula)}], notes) for reported quarters
+    """([{label, date, pxe_row, rev|gp|ebitda|eps|eps_gaap|fcf|shares|net_debt: (value, formula)}], notes) for reported quarters
     with a release date and four consecutive quarters of history. values = a recalculated copy of the model
     (lo.recalc). notes = plain-English judgment calls. A TTM or net debt with a missing cell is NM (None, and NA() in
-    the formula)."""
+    the formula). eps is on Px Data's basis; eps_gaap is always GAAP, because the S&P and XBRL peer P/Es are on
+    reported earnings and the relative rows compare GAAP with GAAP."""
     mwb, vwb = _wb(model), _wb(values)
     mm = ModMap(model)
     R = find_rows(mm)
     basis = eps_basis(mwb)
-    notes = []
+    notes = unit_notes(mm, R)
     if basis == "ng" and "eps_ng" not in R:
         raise SystemExit("model-multiples: Px Data uses non-GAAP EPS but MOD has no 'Non-GAAP EPS, Diluted' row. Add "
                          "the row (run /model-kpis) or rebuild Px Data on the GAAP basis.")
@@ -141,6 +151,7 @@ def quarters(model, values):
         nd_f = f"IF(ISNUMBER({ref(p, R['cash'])}),{body},NA())"
         out.append({"label": p, "date": rel[p][0], "pxe_row": rel[p][1],
                     "rev": ttm([R["rev"]]), "gp": ttm([R["gp"]]), "ebitda": ttm(ebitda_rows), "eps": ttm([eps_row]),
+                    "eps_gaap": ttm([R["eps_gaap"]]),
                     "fcf": ttm([R["fcf"]]),
                     "shares": (num(g, R["shares"], mm.col(p)), ref(p, R["shares"])),
                     "net_debt": (debt - (cash[0] or 0) - (cash[1] or 0) if cash[0] is not None else None, nd_f)})

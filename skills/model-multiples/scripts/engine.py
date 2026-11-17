@@ -33,24 +33,28 @@ def free_weekly(quarters, weeks, sp, peers):
         q = quarters[k] if k is not None else None
         v = (lambda key: q[key][0] if q else None)
         row = {"date": d, "price": price, "pxrow": pxrow, "pxcol": pxcol, "q": k,
-               **{key: v(key) for key in ("rev", "gp", "ebitda", "eps", "fcf", "shares", "net_debt")}}
+               **{key: v(key) for key in ("rev", "gp", "ebitda", "eps", "eps_gaap", "fcf", "shares", "net_debt")}}
         row.update(M.six(price, row["shares"], row["net_debt"], row["rev"], row["gp"], row["ebitda"], row["eps"],
                          row["fcf"]))
+        # The relative rows are GAAP vs GAAP: multpl's S&P P/E and the peers' XBRL EPS are reported earnings.
+        row["pe_gaap"] = M.ratio(price, row["eps_gaap"])
         j = _asof(sd, d, strict=False)
         row["sp_pe"] = sp[j]["pe"] if j is not None else None
-        row["rel_sp"] = row["pe"] - row["sp_pe"] if row["pe"] is not None and row["sp_pe"] is not None else None
+        row["rel_sp"] = row["pe_gaap"] - row["sp_pe"] if row["pe_gaap"] is not None and row["sp_pe"] is not None else None
         pp = {t: peer_pe(p, d) for t, p in peers.items()}
         row["peer_px"] = {t: x[0] for t, x in pp.items()}
         row["peer_pe"] = {t: x[1] for t, x in pp.items()}
         row["peer_med"] = M.median_or_none(row["peer_pe"].values())
-        row["rel_peer"] = row["pe"] - row["peer_med"] if row["pe"] is not None and row["peer_med"] is not None else None
+        row["rel_peer"] = (row["pe_gaap"] - row["peer_med"] if row["pe_gaap"] is not None and row["peer_med"] is not None
+                           else None)
         out.append(row)
     return out
 
 
 def paid_weekly(rows, peer_rows):
     """rows: importer.load() for the subject; peer_rows: {T: importer.load()}. Same keys as free_weekly.
-    Note: "eps" here is NTM consensus, where free_weekly's is TTM as reported. The tab labels the basis."""
+    Note: "eps" here is NTM consensus, where free_weekly's is TTM as reported. The tab labels the basis. The relative
+    rows stay NTM vs NTM: one vendor's consensus is consistent across subject, peers and the S&P."""
     pdates = {t: [x["date"] for x in pr] for t, pr in peer_rows.items()}
     out = []
     for r in rows:
@@ -58,11 +62,12 @@ def paid_weekly(rows, peer_rows):
         row = {**r, **m, "eps": r.get("eps_ntm")}
         row["sp_pe"] = r.get("sp500_pe")
         row["rel_sp"] = row["pe"] - row["sp_pe"] if row["pe"] is not None and row["sp_pe"] is not None else None
-        row["peer_px"], row["peer_pe"] = {}, {}
+        row["peer_px"], row["peer_eps"], row["peer_pe"] = {}, {}, {}
         for t, pr in peer_rows.items():
             k = _asof(pdates[t], r["date"], strict=False)
             x = pr[k] if k is not None else {}
-            row["peer_px"][t], row["peer_pe"][t] = x.get("price"), M.ratio(x.get("price"), x.get("eps_ntm"))
+            row["peer_px"][t], row["peer_eps"][t] = x.get("price"), x.get("eps_ntm")
+            row["peer_pe"][t] = M.ratio(x.get("price"), x.get("eps_ntm"))
         row["peer_med"] = M.median_or_none(row["peer_pe"].values())
         row["rel_peer"] = row["pe"] - row["peer_med"] if row["pe"] is not None and row["peer_med"] is not None else None
         out.append(row)

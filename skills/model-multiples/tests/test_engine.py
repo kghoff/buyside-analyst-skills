@@ -6,9 +6,9 @@ import engine
 import importer
 
 Q = [{"label": "Q1 24", "date": dt.date(2024, 4, 25), "rev": (100.0, ""), "gp": (60.0, ""), "ebitda": (20.0, ""),
-      "eps": (1.0, ""), "fcf": (10.0, ""), "shares": (10.0, ""), "net_debt": (50.0, "")},
+      "eps": (1.0, ""), "eps_gaap": (1.0, ""), "fcf": (10.0, ""), "shares": (10.0, ""), "net_debt": (50.0, "")},
      {"label": "Q2 24", "date": dt.date(2024, 7, 25), "rev": (110.0, ""), "gp": (66.0, ""), "ebitda": (-5.0, ""),
-      "eps": (2.0, ""), "fcf": (12.0, ""), "shares": (10.0, ""), "net_debt": (40.0, "")}]
+      "eps": (2.0, ""), "eps_gaap": (2.0, ""), "fcf": (12.0, ""), "shares": (10.0, ""), "net_debt": (40.0, "")}]
 W = [(dt.date(2024, 4, 26), 20.0, 10, "B"), (dt.date(2024, 7, 25), 30.0, 11, "B"), (dt.date(2024, 7, 26), 40.0, 12, "B")]
 SP = [{"date": dt.date(2024, 4, 1), "pe": 20.0, "estimate": False}, {"date": dt.date(2024, 7, 1), "pe": 25.0, "estimate": False}]
 
@@ -30,6 +30,16 @@ def test_peer_median_ignores_nm_peers():
     rows = engine.free_weekly(Q, W, SP, peer)
     assert rows[0]["peer_pe"] == {"AAA": 20.0, "BBB": None}
     assert rows[0]["peer_med"] == 20.0 and rows[0]["rel_peer"] == pytest.approx(0.0)
+
+
+def test_relative_rows_compare_gaap_with_gaap_on_a_non_gaap_basis():
+    # multpl's S&P P/E and the peers' XBRL EPS are reported (GAAP) earnings. With a non-GAAP subject P/E, the
+    # relative rows must use the subject's GAAP P/E, or they'd mix an adjusted multiple with reported ones.
+    q = [dict(x, eps_gaap=(x["eps"][0] / 2, "")) for x in Q]            # GAAP EPS half the adjusted figure
+    peer = {"AAA": {"closes": [(dt.date(2024, 1, 1), 50.0)], "ttm": [{"known": dt.date(2024, 3, 1), "ttm": 2.5}]}}
+    r = engine.free_weekly(q, W, SP, peer)[2]
+    assert r["pe"] == pytest.approx(20.0) and r["pe_gaap"] == pytest.approx(40.0)    # 40 / 2.0 and 40 / 1.0
+    assert r["rel_sp"] == pytest.approx(40.0 - 25.0) and r["rel_peer"] == pytest.approx(40.0 - 20.0)
 
 
 def test_ranges_and_reverse_pe_from_weekly_rows():

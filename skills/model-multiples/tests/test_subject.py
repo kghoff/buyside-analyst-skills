@@ -81,7 +81,7 @@ def test_formulas_reproduce_the_values(mm):
 
     n = 0
     for q in qs:
-        for k in ("rev", "gp", "ebitda", "eps", "fcf", "shares", "net_debt"):
+        for k in ("rev", "gp", "ebitda", "eps", "eps_gaap", "fcf", "shares", "net_debt"):
             val, f = q[k]
             got = ev(f)
             assert (got is None and val is None) or got == pytest.approx(val), (q["label"], k)
@@ -114,3 +114,24 @@ def test_ng_without_adjusted_ebitda_falls_back_and_says_so(monkeypatch):
     monkeypatch.setattr(subject, "find_rows", lambda mm: {k: v for k, v in real(mm).items() if k != "ebitda_ng"})
     _, notes = subject.quarters(REFERENCE, REFERENCE)
     assert any("operating income + D&A" in n for n in notes)
+
+
+def test_ng_basis_still_carries_gaap_eps_for_the_relative_rows(monkeypatch, mm):
+    # The relative rows compare with GAAP figures (multpl, XBRL), so a non-GAAP subject must also carry GAAP TTM EPS,
+    # as a live formula over the GAAP EPS row, not the non-GAAP one.
+    monkeypatch.setattr(subject, "eps_basis", lambda m: "ng")
+    R = subject.find_rows(mm)
+    qs, _ = subject.quarters(REFERENCE, REFERENCE)
+    q = qs[-1]
+    assert f"${R['eps_ng']}" in q["eps"][1] and f"${R['eps_gaap']}" in q["eps_gaap"][1]
+    assert q["eps"][0] != pytest.approx(q["eps_gaap"][0])
+    assert "COUNT(" in q["eps_gaap"][1]
+
+
+def test_unit_column_not_millions_is_a_warning(mm):
+    # The multiples assume MOD's revenue and shares are in millions; a model kept in thousands must not pass silently.
+    R = subject.find_rows(mm)
+    assert subject.unit_notes(mm, R) == []                       # the reference model: '$ M' and 'M'
+    fake = type("MM", (), {"lines": [(R["rev"], "k", "$ K"), (R["shares"], "k", "M")]})()
+    notes = subject.unit_notes(fake, R)
+    assert len(notes) == 1 and "'$ K'" in notes[0] and "revenue" in notes[0]
