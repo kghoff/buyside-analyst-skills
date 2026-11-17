@@ -8,18 +8,24 @@ import datetime as dt
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 
 URL = "https://www.multpl.com/s-p-500-pe-ratio/table/by-month"
 # The saved page puts each cell on several lines, so every gap is \s*. The value cell holds an optional
 # <abbr title="Estimate">†</abbr> flag or an &#x2002; space, then the number.
 ROW = re.compile(r'<td>\s*([A-Z][a-z]{2} \d{1,2}, \d{4})\s*</td>\s*<td>\s*(<abbr title="Estimate">[^<]*</abbr>)?'
-                 r'\s*(?:&#x2002;)?\s*([\d.]+)\s*</td>')
+                 r'(?:\s|&#x2002;|&nbsp;)*([\d.]+)\s*</td>')
+DATE_CELL = re.compile(r'<td>\s*[A-Z][a-z]{2} \d{1,2}, \d{4}\s*</td>')
 
 
 def parse(html):
     rows = [{"date": dt.datetime.strptime(d, "%b %d, %Y").date(), "pe": float(v), "estimate": bool(est)}
             for d, est, v in ROW.findall(html)]
+    cells = len(DATE_CELL.findall(html))
+    if len(rows) < cells:
+        raise SystemExit(f"multpl: parsed {len(rows)} of {cells} rows at {URL}; the page layout changed. "
+                         "sp500.py's parser must be updated; no rows are dropped silently.")
     if len(rows) < 120:
         raise SystemExit(f"multpl: found {len(rows)} monthly P/E rows at {URL}; expected hundreds. The page layout may "
                          "have changed. The S&P-relative chart can't be built until sp500.py's parser is updated.")
@@ -27,17 +33,24 @@ def parse(html):
 
 
 def save(path, rows, asof):
-    json.dump({"asof": asof, "source": URL, "rows": [{**r, "date": r["date"].isoformat()} for r in rows]},
-              open(path, "w"), indent=0)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"asof": asof, "source": URL, "rows": [{**r, "date": r["date"].isoformat()} for r in rows]},
+                  f, indent=0)
+    os.replace(tmp, path)
 
 
 def load_cached(path, asof):
     if not os.path.exists(path):
         return None
-    d = json.load(open(path))
-    if d["asof"] != asof:
+    try:
+        with open(path) as f:
+            d = json.load(f)
+        if d["asof"] != asof:
+            return None
+        return [{**r, "date": dt.date.fromisoformat(r["date"])} for r in d["rows"]]
+    except (ValueError, KeyError, TypeError):   # JSONDecodeError is a ValueError; a bad cache is just a miss
         return None
-    return [{**r, "date": dt.date.fromisoformat(r["date"])} for r in d["rows"]]
 
 
 def get(work, asof=None):
@@ -46,7 +59,11 @@ def get(work, asof=None):
     rows = load_cached(path, asof)
     if rows is None:
         req = urllib.request.Request(URL, headers={"User-Agent": "Mozilla/5.0 (research script)"})
-        rows = parse(urllib.request.urlopen(req, timeout=60).read().decode("utf-8"))
+        try:
+            html = urllib.request.urlopen(req, timeout=60).read().decode("utf-8")
+        except (urllib.error.URLError, TimeoutError) as e:   # HTTPError is a URLError
+            raise SystemExit(f"multpl: could not fetch {URL} ({e}); rerun later.")
+        rows = parse(html)
         save(path, rows, asof)
     return rows
 
