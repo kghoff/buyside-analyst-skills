@@ -3,7 +3,7 @@
 usage: python3 prices.py --model M.xlsx --tickers ABT MDT ... [--src DIR]
 Looks for <ticker>_us_d.csv in: the model's folder, its "Price Data" subfolder, --src and ~/Downloads (newest wins).
 A file found outside "<model folder>/Price Data/" is copied (not moved) into it. Each file is checked (columns,
-coverage, stale days, |daily return| > 40%). Prints a JSON list of results; a missing ticker is reported as
+date range, |daily return| > 40%). Prints a JSON list of results; a missing ticker is reported as
 not found. Exit code 1 when any file is missing or unusable."""
 import argparse
 import json
@@ -49,7 +49,7 @@ def main():
     keep = os.path.join(mdir, "Price Data")
     dirs = [mdir, keep] + ([a.src] if a.src else []) + [os.path.expanduser("~/Downloads")]
     results = []
-    for t in a.tickers:
+    for t in dict.fromkeys(x.lower() for x in a.tickers):
         p = find(t, dirs)
         if not p:
             results.append({"ticker": t, "ok": False, "why": "not found"})
@@ -59,7 +59,10 @@ def main():
             os.makedirs(keep, exist_ok=True)
             shutil.copy2(p, dst)
             p = dst
-        results.append(check(t, p))
+        try:
+            results.append(check(t, p))
+        except Exception as e:
+            results.append({"ticker": t, "path": p, "ok": False, "why": str(e)})
     print(json.dumps(results, indent=1))
     raise SystemExit(0 if all(r["ok"] for r in results) else 1)
 
