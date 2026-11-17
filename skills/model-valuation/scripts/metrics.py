@@ -57,6 +57,9 @@ def _growth(mm, g, rows):
     start = str(int(fy[0][:4]) - 1)
     end = fy[min(3, len(fy)) - 1]
     years = int(end[:4]) - int(start)
+    if start not in mm.labels:
+        raise SystemExit(f"model-valuation: MOD has no {start} column (the last actual year, before {fy[0]}); growth "
+                         "is measured from it. Rebuild the model (/model-historicals) so the year is there.")
     out = {}
     for k in ("rev", "oi", "eps"):
         r = rows[k][0]

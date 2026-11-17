@@ -34,8 +34,12 @@ def expand(spec, base, years, names):
             if bad:
                 raise ValueError(f"{name}: {', '.join(bad)} not an input year ({years[0]}-{years[-1]})")
             row.update(v["years"])
-        elif isinstance(v, dict) and set(v) == {"from", "to", "over"} and int(v["over"]) >= 1:
-            a, b, n = v["from"], v["to"], int(v["over"])
+        elif isinstance(v, dict) and set(v) == {"from", "to", "over"}:
+            a, b, n = v["from"], v["to"], v["over"]
+            if not (isinstance(n, int) and not isinstance(n, bool) and n >= 1):
+                raise ValueError(f"{name}: 'over' must be a positive whole number of years, got {n!r}")
+            if not (_num(a) and _num(b)):
+                raise ValueError(f"{name}: 'from' and 'to' must be numbers, got {a!r} and {b!r}")
             row = {y: a + (b - a) * min(i, n) / n for i, y in enumerate(years, 1)}
         else:
             raise ValueError(f"{name}: expected a number, {{'years': {{...}}}} or {{'from', 'to', 'over'}}, got {v!r}")

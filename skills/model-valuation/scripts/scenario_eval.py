@@ -4,7 +4,7 @@ Runs ONLY as its own process: model-dcf's scripts go first on sys.path, and its 
 notebox share names with model-valuation's modules. Never import this file.
 
 usage:
-  scenario_eval.py context --model M.xlsx --out dcf.json [--plan forecast_plan.json]
+  scenario_eval.py context --model M.xlsx --out dcf.json --work DIR [--plan forecast_plan.json]
   scenario_eval.py eval --dcf dcf.json --try scenarios_try_<n>.json --ntm-eps a --ntm1-eps b --out result.json
   scenario_eval.py typecheck --after OUT.xlsx --dcf dcf.json --plan valuation_plan.json --work DIR"""
 import os
@@ -13,24 +13,29 @@ import sys
 DCF = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "model-dcf", "scripts")
 sys.path.insert(0, os.path.abspath(DCF))      # model-dcf's build/context/xlsx/lo win; never import this file
 import build, context, dcfmath, solve          # noqa: E402,E401  (model-dcf's)
-sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)))
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))   # after model-dcf's: theirs win on shared names
 import scenarios                                # noqa: E402  (model-valuation's; model-dcf has no such module)
 
 import argparse  # noqa: E402
 import json  # noqa: E402
-import tempfile  # noqa: E402
+import shutil  # noqa: E402
 
 STALE = 0.02
 
 
-def _cached_vps(model, row, work=None):
-    """The DCF tab's value per share as last calculated; a file never recalculated is recalculated in a temp copy."""
+def _cached_vps(model, row, work):
+    """The DCF tab's value per share as last calculated; a file never recalculated is recalculated under
+    work/dcf_stale/ (removed after)."""
     import openpyxl
     import lo
     read = lambda p: openpyxl.load_workbook(p, read_only=True, data_only=True)[build.TAB].cell(row, 3).value
     v = read(model)
     if v is None:
-        v = read(lo.recalc(model, work or tempfile.mkdtemp(prefix="val_dcf_")))
+        d = os.path.join(work, "dcf_stale")
+        try:
+            v = read(lo.recalc(model, d))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
     return v
 
 
@@ -48,8 +53,8 @@ def cmd_context(a):
            "input_years": [dcfmath.label(ctx, t) for t in range(ctx["k"] + 1, 31)],
            "names": dcfmath.factor_names(ctx) + ["dgm", *dcfmath.COST, "wacc", "tv_mult"],
            "refs": {"net_debt": ref("net_debt"), "shares": ref("shares"), "vps": ref("vps"), "price": ref("price")},
-           "reverse": solved["reverse"]}
-    tab = _cached_vps(a.model, R["vps"])
+           "reverse": solved["reverse"], "fade_years": dcfmath.FADE_YEARS}
+    tab = _cached_vps(a.model, R["vps"], a.work)
     if not isinstance(tab, (int, float)) or abs(tab - out["value_per_share"]) > STALE:
         shown = f"${tab:.2f}" if isinstance(tab, (int, float)) else repr(tab)
         out["stale"] = (f"the DCF tab shows {shown} but its inputs give ${out['value_per_share']:.2f}: "
@@ -146,6 +151,7 @@ def main():
     c = sub.add_parser("context")
     c.add_argument("--model", required=True)
     c.add_argument("--out", required=True)
+    c.add_argument("--work", required=True, help="a work dir; a stale check's recalc goes under DIR/dcf_stale/")
     c.add_argument("--plan", help="forecast_plan.json (default: the model's _model_work/forecast/forecast_plan.json)")
     e = sub.add_parser("eval")
     e.add_argument("--dcf", required=True)

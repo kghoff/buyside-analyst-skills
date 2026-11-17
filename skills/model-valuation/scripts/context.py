@@ -27,7 +27,6 @@ NEEDS = {"MOD": "/model-forecast", "Px Data": "/model-price-history", "DCF": "/m
 HOUSE = {"hurdle": .20, "buy_rr": 2.0, "pound_rr": 3.0, "discount": .15, "horizon_months": 12,
          "position": "long", "mkt_rev": .05, "mkt_oi": .08, "mkt_eps": .12}
 CONSENSUS_CAP = 250
-FADE_YEARS = 10      # model-dcf's dcfmath.FADE_YEARS (not imported: its modules share names with ours)
 
 
 def _fmt(v):
@@ -76,7 +75,7 @@ def _brief(work, ticker, research_dir):
 
 def _dcf_summary(dcf):
     yrs = dcf["input_years"]
-    pick = [yrs[0], yrs[min(FADE_YEARS, len(yrs) - 1)], yrs[-1]]
+    pick = [yrs[0], yrs[min(dcf["fade_years"], len(yrs) - 1)], yrs[-1]]
     lines = [f"| input | {pick[0]} (first) | {pick[1]} (after the fade) | {pick[2]} (long run) |",
              "|---|---|---|---|"]
     for n in dcf["names"]:
@@ -138,7 +137,7 @@ def run(model, work, ticker, research_dir=None):
     values = lo.recalc(model, os.path.join(work, "values"))
 
     dcf_json = os.path.join(work, "dcf_ctx.json")
-    cmd = [sys.executable, "-I", SCENARIO_EVAL, "context", "--model", model, "--out", dcf_json]
+    cmd = [sys.executable, "-I", SCENARIO_EVAL, "context", "--model", model, "--out", dcf_json, "--work", work]
     fplan = os.path.join(os.path.dirname(model), "_model_work", "forecast", "forecast_plan.json")
     if os.path.exists(fplan):
         cmd += ["--plan", fplan]
