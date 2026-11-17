@@ -3,6 +3,7 @@ import datetime as dt
 import pytest
 
 import engine
+import importer
 
 Q = [{"label": "Q1 24", "date": dt.date(2024, 4, 25), "rev": (100.0, ""), "gp": (60.0, ""), "ebitda": (20.0, ""),
       "eps": (1.0, ""), "fcf": (10.0, ""), "shares": (10.0, ""), "net_debt": (50.0, "")},
@@ -52,3 +53,22 @@ def test_ranges_and_reverse_survive_nm_today():
     rg = engine.ranges(rows, windows=(3,))
     assert rg["pe"][3]["pct"] is None and rg["pe"][3]["median"] == 15.0
     assert engine.reverse(rows, rg)[3]["max"] == pytest.approx(0.5)
+
+
+def test_paid_weekly_from_real_importer_output(tmp_path):
+    subj = tmp_path / "s.csv"
+    subj.write_text("Date,Price,EPS,EV,Sales,S&P 500 NTM P/E\n2024-01-05,20,2,,100,15\n2024-01-12,30,2,300,100,16\n")
+    peer = tmp_path / "p.csv"
+    peer.write_text("Date,Price,EPS\n2024-01-12,50,2.5\n")
+    bad = tmp_path / "b.csv"
+    bad.write_text("Date,Price,EPS\n2024-01-05,50,0\n2024-01-12,50,-1\n")
+    rows = engine.paid_weekly(importer.load(str(subj)), {"AAA": importer.load(str(peer)),
+                                                         "BBB": importer.load(str(bad))})
+    a, b = rows
+    assert a["pe"] == pytest.approx(10.0) and a["ev_rev"] is None and a["ev_ebitda"] is None   # no EV -> NM
+    assert b["ev_rev"] == pytest.approx(3.0)
+    assert a["rel_sp"] == pytest.approx(10.0 - 15.0) and b["rel_sp"] == pytest.approx(15.0 - 16.0)
+    assert a["peer_pe"]["AAA"] is None and a["peer_px"]["AAA"] is None      # peer export starts after this week
+    assert b["peer_pe"]["AAA"] == pytest.approx(20.0)
+    assert a["peer_pe"]["BBB"] is None and b["peer_pe"]["BBB"] is None      # eps <= 0 -> NM
+    assert b["peer_med"] == 20.0 and b["rel_peer"] == pytest.approx(15.0 - 20.0) and a["peer_med"] is None

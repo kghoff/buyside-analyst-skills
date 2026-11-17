@@ -49,7 +49,9 @@ def free_weekly(quarters, weeks, sp, peers):
 
 
 def paid_weekly(rows, peer_rows):
-    """rows: importer.load() for the subject; peer_rows: {T: importer.load()}. Same keys as free_weekly."""
+    """rows: importer.load() for the subject; peer_rows: {T: importer.load()}. Same keys as free_weekly.
+    Note: "eps" here is NTM consensus, where free_weekly's is TTM as reported. The tab labels the basis."""
+    pdates = {t: [x["date"] for x in pr] for t, pr in peer_rows.items()}
     out = []
     for r in rows:
         m = importer.multiples(r)
@@ -58,7 +60,7 @@ def paid_weekly(rows, peer_rows):
         row["rel_sp"] = row["pe"] - row["sp_pe"] if row["pe"] is not None and row["sp_pe"] is not None else None
         row["peer_px"], row["peer_pe"] = {}, {}
         for t, pr in peer_rows.items():
-            k = _asof([x["date"] for x in pr], r["date"], strict=False)
+            k = _asof(pdates[t], r["date"], strict=False)
             x = pr[k] if k is not None else {}
             row["peer_px"][t], row["peer_pe"][t] = x.get("price"), M.ratio(x.get("price"), x.get("eps_ntm"))
         row["peer_med"] = M.median_or_none(row["peer_pe"].values())
