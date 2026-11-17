@@ -281,24 +281,36 @@ def _blended(work):
     return e[ref["price"]], e[ref["blended_reward"]], e[ref["blended_risk"]], e[f"B{row + 1}"], e[f"B{row + 2}"]
 
 
+def _blended_recalc(out, work, tmp_path, name):
+    """(price, blended reward price, blended risk price, reward %, risk %) as LibreOffice recalculates them."""
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    ref = {k: v.replace("$", "") for k, v in lay["ref"].items()}
+    ws = _ws(lo.recalc(out, str(tmp_path / name)), data_only=True)
+    row = int(ref["blended_risk"][1:])
+    return tuple(ws[c].value for c in (ref["price"], ref["blended_reward"], ref["blended_risk"], f"B{row + 1}",
+                                       f"B{row + 2}"))
+
+
 def test_short_switch_flips(model, work, tmp_path):
     """A short makes money toward the risk price and loses toward the reward price, so reward % and risk % swap
     meaning; the sheet's switch formulas must follow the yellow position cell."""
+    import verify
     out = str(tmp_path / "long.xlsx")
     build.build(model, work, "TEST", out)
-    price, rw, rk, up, down = _blended(work)
+    price, rw, rk, up, down = _blended_recalc(out, work, tmp_path, "rl")
     assert up == pytest.approx(rw / price - 1) and down == pytest.approx(1 - rk / price)
     p = json.load(open(os.path.join(work, "valuation_plan.json")))
     p["inputs"]["position"]["value"] = "short"
     json.dump(p, open(os.path.join(work, "valuation_plan.json"), "w"))
     out = str(tmp_path / "out.xlsx")
     build.build(model, work, "TEST", out)
-    lay = json.load(open(os.path.join(work, "layout.json")))
-    import verify
-    assert verify.compare(out, work)["failed"] == []
-    price, rw, rk, up, down = _blended(work)
-    assert up == pytest.approx((price - rk) / price) and down == pytest.approx((rw - price) / price)
-    assert any(v == "below hurdle" or v == "buy" or v == "table-pound" for v in lay["expected"].values())
+    r = verify.compare(out, work)
+    assert r["failed"] == [] and r["errors"] == [], r
+    price2, rw2, rk2, up2, down2 = _blended_recalc(out, work, tmp_path, "rs")
+    assert (price2, rw2, rk2) == pytest.approx((price, rw, rk))       # same prices, only the switch moved
+    assert up2 == pytest.approx((price - rk) / price) and down2 == pytest.approx((rw - price) / price)
+    assert up != pytest.approx(down)                                  # so the swap below is visible
+    assert up2 == pytest.approx(down) and down2 == pytest.approx(up)
 
 
 def test_ladder_has_seven_rungs_around_today(model, work, tmp_path):
@@ -336,9 +348,39 @@ def test_pairing_is_in_the_formula_text(model, work, tmp_path):
     assert nd in ev and sh in ev
 
 
-@pytest.mark.skip(reason="Task 10")
 def test_only_valuation_parts_change(model, work, tmp_path):
     import verify
     out = str(tmp_path / "out.xlsx")
     build.build(model, work, "TEST", out)
     assert verify.changed_parts(model, out) == []
+
+
+def _row_of(ws, label):
+    return next(c.row for r in ws.iter_rows(min_col=1, max_col=1) for c in r if c.value == label)
+
+
+def test_anchored_tree_target_keeps_all_three_reasons(model, work, tmp_path):
+    """An anchored tree target, its probability and the story each carry a reason; the user must see all three."""
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    t = next(x for x in json.load(open(os.path.join(work, "valuation_plan.json")))["tree"] if "link" not in x["target"])
+    h = _ws(out)[f"H{_row_of(_ws(out), t['name'])}"].value
+    assert h == f"Target: {t['target']['reason'].rstrip('.')}; Probability: {t['prob']['reason'].rstrip('.')}; " \
+        f"Story: {t['story']}"
+
+
+def test_double_path_words_follow_the_multiple(model, work, tmp_path):
+    """With EV/EBITDA primary, the route to a double is multiple expansion or metric growth, not P/E or EPS."""
+    p = json.load(open(os.path.join(work, "valuation_plan.json")))
+    for m in p["multiples"]:
+        m["role"] = "primary" if m["kind"] == "ev_ebitda" else "secondary"
+    json.dump(p, open(os.path.join(work, "valuation_plan.json"), "w"))
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    ws = _ws(out)
+    ref = next(f"B{c.row}" for r in ws.iter_rows(min_col=1, max_col=1) for c in r
+               if isinstance(c.value, str) and c.value.endswith("-year double path"))
+    f = lay["formula_text"][ref]
+    assert "multiple expansion" in f and "metric growth" in f and "P/E" not in f and "EPS" not in f
+    assert lay["expected"][ref] in ("multiple expansion", "metric growth", "both", "no double path (price falls)")

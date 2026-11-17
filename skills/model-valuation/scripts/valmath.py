@@ -47,13 +47,14 @@ def irr_split(m0, m1, x0, x1, years):
     return {"irr": irr(m0 * x0, m1 * x1, years), "growth": irr(m0, m1, years), "rerate": irr(x0, x1, years)}
 
 
-def double_path(x0, x1, m0, m1):
-    """Which route to a 3-year double: by the share of the log price change that comes from the multiple."""
+def double_path(x0, x1, m0, m1, labels=("P/E expansion", "EPS growth")):
+    """Which route to a 3-year double: by the share of the log price change that comes from the multiple. labels name
+    (the multiple's route, the metric's route); EV and FCF-yield multiples use ("multiple expansion", "metric growth")."""
     total = math.log((x1 * m1) / (x0 * m0))
     if total <= 0:
         return "no double path (price falls)"
     share = math.log(x1 / x0) / total
-    return "P/E expansion" if share >= 2 / 3 else "EPS growth" if share <= 1 / 3 else "both"
+    return labels[0] if share >= 2 / 3 else labels[1] if share <= 1 / 3 else "both"
 
 
 def normalized(mult, eps, rate, years):

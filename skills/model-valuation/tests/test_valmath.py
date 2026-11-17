@@ -42,6 +42,9 @@ def test_irr_3_year_double():               # $1.00 -> $1.33, 10x -> 15x: $10 ->
     assert V.double_path(10, 15, 1.00, 1.33) == "both"
     assert V.double_path(10, 20, 1.00, 1.00) == "P/E expansion"
     assert V.double_path(40, 40, 1.00, 2.00) == "EPS growth"
+    words = ("multiple expansion", "metric growth")       # EV and FCF-yield multiples
+    assert V.double_path(10, 20, 1.00, 1.00, words) == "multiple expansion"
+    assert V.double_path(40, 40, 1.00, 2.00, words) == "metric growth"
 
 
 def test_normalized_price():                # 20x * $1.24 = $24.80 -> $16.31 at 15% over 3 years

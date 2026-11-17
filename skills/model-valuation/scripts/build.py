@@ -646,11 +646,13 @@ def sec5_irr(b, r):
         put("lev", "Leverage and other (IRR less growth and re-rating)", lambda c: w.formula(
             c, f"{R['irr']}-((1+{R['g']})*(1+{R['rr']})-1)", PCT, lev))
     # route to a double: share of log(P3/P0) from the multiple. valmath.double_path on (x, P/x) pairs gives the same.
-    dp = valmath.double_path(xa, xz, price / xa, p3 / xz) if _ok(xa, xz, p3) and xa > 0 and xz > 0 and p3 > 0 else None
+    words = ("P/E expansion", "EPS growth") if k == "pe" else ("multiple expansion", "metric growth")
+    dp = valmath.double_path(xa, xz, price / xa, p3 / xz, words) \
+        if _ok(xa, xz, p3) and xa > 0 and xz > 0 and p3 > 0 else None
     lp, lx = f"LN({R['p3']}/{R['p0']})", f"LN({R[z]}/{R[a]})"
     put("dp", f"{N}-year double path", lambda c: w.formula(
-        c, f'IF({R["p3"]}<=0,NA(),IF({lp}<=0,"no double path (price falls)",IF({lx}/{lp}>=2/3,"P/E expansion",'
-           f'IF({lx}/{lp}<=1/3,"EPS growth","both"))))', "General", dp))
+        c, f'IF({R["p3"]}<=0,NA(),IF({lp}<=0,"no double path (price falls)",IF({lx}/{lp}>=2/3,"{words[0]}",'
+           f'IF({lx}/{lp}<=1/3,"{words[1]}","both"))))', "General", dp))
     b.irr = irr
     return r + 1
 
@@ -774,7 +776,10 @@ def sec7_tree(b, r):
         pv = val(b.used[f"tree.{name}.prob"])
         w.formula(f"C{r}", f"B{r}/{P}-1", PCT, tv / price - 1 if _ok(tv) else None)
         put_input(b, r, f"tree.{name}.prob", PCT)
-        w.text(f"H{r}", f"{t.get('story', '')} Probability: {b.pin[f'tree.{name}.prob']['reason']}", wrap=True)
+        pr = b.pin[f"tree.{name}.prob"]["reason"]
+        # an anchored target has its own reason too: all three go in H (each put_input above overwrote the last)
+        w.text(f"H{r}", f"Target: {tg['reason'].rstrip('.')}; Probability: {pr.rstrip('.')}; Story: {t.get('story', '')}" if "link" not in tg
+               else f"{t.get('story', '')} Probability: {pr}", wrap=True)
         b.tree_targets.append((f"B{r}", tv, tg.get("link")))
         rows.append((tv, pv))
         r += 1
