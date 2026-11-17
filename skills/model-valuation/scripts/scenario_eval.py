@@ -42,9 +42,14 @@ def _cached_vps(model, row, work):
 def cmd_context(a):
     ctx = context.build(a.model, a.plan)
     w = os.path.join(os.path.dirname(os.path.abspath(a.model)), "_model_work", "dcf", "inputs_written.json")
-    kept, formulas, kind, _ = build.read_inputs(a.model, ctx, w if os.path.exists(w) else None)
+    kept, formulas, kind, orphans = build.read_inputs(a.model, ctx, w if os.path.exists(w) else None)
     if kind is None:
         raise SystemExit("model-valuation: the model has no DCF tab. Run /model-dcf first.")
+    old = _layout_problems(a.model, ctx, orphans)
+    if old:                      # build and typecheck would type into the wrong cells: context.py stops on this
+        json.dump({"stale": old}, open(a.out, "w"), indent=1)
+        print(json.dumps({"wrote": a.out, "stale": old}, indent=1))
+        return
     solved = solve.solve(ctx, kept, kind, formulas=formulas)
     R = build.layout(ctx)["rows"]
     ref = lambda n: f"{build.TAB}!$C${R[n]}"
@@ -57,11 +62,35 @@ def cmd_context(a):
     tab = _cached_vps(a.model, R["vps"], a.work)
     if not isinstance(tab, (int, float)) or abs(tab - out["value_per_share"]) > STALE:
         shown = f"${tab:.2f}" if isinstance(tab, (int, float)) else repr(tab)
-        out["stale"] = (f"the DCF tab shows {shown} but its inputs give ${out['value_per_share']:.2f}: "
-                        "rerun /model-dcf")
+        out["stale"] = f"the tab shows {shown} a share but its inputs give ${out['value_per_share']:.2f}"
     json.dump(out, open(a.out, "w"), indent=1)
     print(json.dumps({"wrote": a.out, "value_per_share": round(out["value_per_share"], 2),
                       "names": out["names"], "stale": out.get("stale")}, indent=1))
+
+
+def _layout_problems(model, ctx, orphans):
+    """Why the DCF tab's rows and year columns are not where model-dcf's current layout puts them (e.g. the tab was built
+    for other revenue drivers), or None. model-valuation types into the cells build.layout names, so they must match."""
+    from openpyxl.utils import column_index_from_string
+    grid = build._rows(model, False)
+    R = build.layout(ctx)["rows"]
+    at = lambda r, c: grid[r][c] if r in grid and c < len(grid[r]) else None
+    norm = lambda v: " ".join(v.split()) if isinstance(v, str) else v
+    factors = [f["name"] for f in ctx["factors"]]
+    why = [f"it has a '{o['row_label']}' row that the current forecast plan does not" for o in orphans]
+    for name in build.input_cells(ctx):
+        row = (build.driver_row(ctx, R, name) if name in factors else R["mult"] if name == "tv_mult" else R[name])
+        want = " ".join(build.input_label(name, ctx).split())
+        if norm(at(row, 1)) != want:
+            why.append(f"row {row} should be '{want}' but holds {norm(at(row, 1))!r}")
+    for t in range(ctx["k"] + 1, 31):
+        got = at(R["years"], column_index_from_string(build.tcol(t)) - 1)
+        if got != dcfmath.label(ctx, t):
+            why.append(f"column {build.tcol(t)} should be {dcfmath.label(ctx, t)} but holds {got!r}")
+            break
+    if not why:
+        return None
+    return "; ".join(why[:3]) + (f"; and {len(why) - 3} more" if len(why) > 3 else "")
 
 
 def _case(dcf, spec, ctx):

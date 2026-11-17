@@ -134,8 +134,6 @@ def _md(ticker, m, dcf, dumps, b, reports, last_plan, mod_lines):
     L += ["## DCF (model-dcf's math, the user's current inputs)", "",
           f"- Value per share ${num(dcf['value_per_share'])} ({dcf['refs']['vps']}); "
           f"terminal-value share {num(dcf.get('tv_share'), '{:.0%}')}"]
-    if dcf.get("stale"):
-        L.append(f"- STALE: {dcf['stale']}")
     L += [""] + _dcf_summary(dcf) + ["", "Reverse DCF (what each price implies):", "",
                                     "```", json.dumps(dcf["reverse"], indent=1), "```", ""]
     L += ["## Multiples (tab, down to its weekly data)", "", "```", dumps["Multiples"], "```", "",
@@ -171,6 +169,9 @@ def run(model, work, ticker, research_dir=None):
     if r.returncode:
         raise SystemExit(f"model-valuation: the DCF bridge failed:\n{r.stderr.strip()}")
     dcf = json.load(open(dcf_json))
+    if dcf.get("stale"):            # build and typecheck would type the scenarios into the wrong cells, or a stale value
+        raise SystemExit(f"model-valuation: the DCF tab is out of date ({dcf['stale']}). Rerun /model-dcf, then rerun "
+                         "/model-valuation.")
     dcf.pop("ctx", None)            # model-dcf's internal context: the eval step reads it from dcf_ctx.json
 
     m = metrics.collect(model, values)
@@ -200,7 +201,7 @@ def main():
     a = ap.parse_args()
     ctx = run(a.model, a.work, a.ticker.upper(), a.research_dir)
     print(json.dumps({"wrote": os.path.join(a.work, "context.json"), "values": ctx["values"],
-                      "stale": ctx["dcf"].get("stale"), "brief_missing": ctx["brief"]["missing"]}, indent=1))
+                      "brief_missing": ctx["brief"]["missing"]}, indent=1))
 
 
 if __name__ == "__main__":

@@ -62,6 +62,12 @@ brief, §5 testing, §6 judgment calls); plan: docs/2026-11-17-model-valuation-p
   Annualized volatility is an array formula over Px Data's last 253 closes.
 
 ## Review decisions (2026-11-17)
+- **An out-of-date DCF tab stops the run** (it used to be a warning). `scenario_eval.py context` sets `stale` when the
+  tab's value per share is more than $0.02 from what its inputs give, or when its input rows and year columns are not
+  where model-dcf's `build.layout` puts them for the current forecast plan (each input's label on its row, each input
+  year in its column, and no `orphans` from `read_inputs`). build and typecheck type into the cells the layout names,
+  so an older layout (e.g. fewer revenue drivers) would put the scenarios in the wrong cells. `context.py` raises
+  SystemExit with the reason before writing context.json.
 - Anchors gained a fifth kind, the **forward sum** `ntm:<metric>`, `ntm1:<metric>` or `y3:<metric>` (metric `eps`,
   `rev`, `gp`, `ebitda` or `fcf`), checked against the MOD sums in context. Risk metrics anchor here. Cell anchors
   match to the decimals the agent wrote.
@@ -87,4 +93,21 @@ brief, §5 testing, §6 judgment calls); plan: docs/2026-11-17-model-valuation-p
 - `subject.py`'s messages say model-multiples (it is a copy).
 
 ## DXCM baseline
-(filled by the end-to-end run)
+End-to-end run, 2026-11-17, on a scratch copy of the user's model. The Multiples tab was built first (free path);
+the DCF tab was rebuilt with /model-dcf because the forecast plan had gained a revenue term since it was built.
+- **Inputs:** price $88.48 (Px Data, 2026-11-04). NTM EPS $2.886, NTM+1 $3.592. Vol 37.7%. DCF tab $91.63.
+- **Multiples:** P/E primary (0.7), EV/EBITDA secondary (0.3); FCF yield left out because rebates flatter FCF.
+  The agent rejected the 5- and 10-year medians (81.8x P/E), which were set on depressed earnings. It anchored to
+  the 1-year window and the comps instead: this was the run's pass criterion.
+- **12-month roll-forward:**
+  - Blended reward $100.36 (+13.4%).
+  - Risk $58.20 (−34.2%).
+  - R/R 0.4x, below the hurdle.
+  - The 1σ check flags the risk case as inside one standard deviation.
+- **3-year IRR:** 11.2% on P/E, made of +20.7% a year EPS growth and −7.8% a year re-rating.
+- **DCF:** bear $49.94, base $85.41 (WACC raised to 8.5%), bull $135.23. Two rounds; round 2 trimmed the bull's
+  terminal multiple to 11x. Bull vs the blended reward is flagged as a gap over 25%.
+- **Tree:** probability-weighted $88.38; today's price sits at 45% of the range.
+- **Checks:** plan and anchor checks clean; verify ok, 118 cells checked, 0 failed, DCF re-type within $0.02. The
+  note is 4,036 words (MD + PDF).
+- **Known cosmetic issue:** two long labels in section 6 are cut off at column A's width.

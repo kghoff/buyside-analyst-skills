@@ -50,3 +50,48 @@ def test_mod_metrics_carry_each_quarter_and_year_cell(model, tmp_path):
     for fy in mm.forecast_years():
         ref = f"MOD!${mm.col(fy)}${eps_row}"
         assert f"{ref}={context._fmt(vals[ref[4:].replace('$', '')].value)}" in sec, fy
+
+
+def _set_dcf(model, cells):
+    wb = openpyxl.load_workbook(model)       # a test copy only
+    for ref, v in cells.items():
+        wb["DCF"][ref] = v
+    wb.save(model)
+
+
+def _dcf_rows(model):
+    """model-dcf's layout for this model, from its own process (its modules share names with ours)."""
+    import subprocess
+    import sys
+    from conftest import DCF
+    code = ("import sys, json; sys.path.insert(0, sys.argv[1]); import context, build;"
+            "c = context.build(sys.argv[2]); R = build.layout(c)['rows'];"
+            "print(json.dumps({'g0': R['g0'], 'vps': R['vps'], 'years': R['years'], 'col': build.tcol(c['k'] + 1)}))")
+    return json.loads(subprocess.run([sys.executable, "-c", code, DCF, model], check=True, capture_output=True,
+                                     text=True).stdout)
+
+
+@pytest.mark.parametrize("why, edit", [
+    # the tab was built for other revenue drivers: its growth row is not the current plan's
+    ("Customers growth", lambda R: {f"B{R['g0']}": "Customers growth, % yoy"}),
+    # the tab was built when the forecast ended another year: the input years sit in other columns
+    ("column", lambda R: {f"{R['col']}{R['years']}": "1999E"}),
+])
+def test_old_dcf_layout_stops(model, tmp_path, why, edit):
+    """An older DCF tab puts drivers or years in other cells; build and typecheck would type the scenarios into the
+    wrong ones, so model-valuation stops (a warning was not enough) and says which skills to rerun, in order."""
+    _set_dcf(model, edit(_dcf_rows(model)))
+    w = str(tmp_path / "w")
+    with pytest.raises(SystemExit, match=rf"DCF tab is out of date \(.*{why}.*\)\. Rerun /model-dcf, then rerun "
+                                         r"/model-valuation\."):
+        context.run(model, w, "TEST", research_dir=str(tmp_path / "none"))
+    assert not os.path.exists(os.path.join(w, "context.json"))      # the agent never sees a context built on it
+
+
+def test_stale_dcf_value_stops(model, tmp_path):
+    """The DCF tab shows a value its inputs no longer give (e.g. MOD changed since /model-dcf ran): the scenarios
+    would not match the tab, so model-valuation stops."""
+    _set_dcf(model, {f"C{_dcf_rows(model)['vps']}": 1.0})
+    with pytest.raises(SystemExit, match=r"out of date \(the tab shows \$1\.00 a share but its inputs give \$\d+\.\d\d\)"
+                                         r"\. Rerun /model-dcf"):
+        context.run(model, str(tmp_path / "w"), "TEST", research_dir=str(tmp_path / "none"))

@@ -29,7 +29,7 @@ checks every number, and the report tells the user every call. A rerun keeps any
 1. `python3 "$SKILLS/model-ratios/scripts/locate_model.py" --ticker <T>` (or the path the user names). Set `M` to the
    model and `W=<model dir>/_model_work/model-valuation` (`mkdir -p "$W"`). All working files stay in `$W`.
 2. If `~$<model file name>` exists next to `M`, ask the user to close Excel and wait.
-3. `shasum -a 256 "$M"`: keep it for Step 7. Never write to `M` before then; keep no backup copies.
+3. `shasum -a 256 "$M"`: keep it for Step 8 (copy over). Never write to `M` before then; keep no backup copies.
 4. A Valuation tab already there is normal (rerun each print). The build replaces it; the user's changed yellow
    cells are kept.
 
@@ -38,8 +38,10 @@ checks every number, and the report tells the user every call. A rerun keeps any
 folder is not the setting's). It writes `$W/context.json`, `$W/context.md`, `$W/dcf_ctx.json` and
 `$W/valuation_brief.md` (reused if newer than both reports). It stops, naming the skill to run, when MOD's forecast,
 the DCF, Multiples or Px Data tab is missing, or MOD has fewer than 8 forecast quarters.
-- If the printed `stale` is set (the DCF tab's value per share does not match its own inputs), tell the user and
-  suggest rerunning /model-dcf; carry on.
+- It also stops when the DCF tab is out of date: its value per share is not what its own inputs give, or its rows
+  and year columns are not where model-dcf now puts them (e.g. the tab was built for other revenue drivers than the
+  current forecast plan's). Tell the user the printed reason and to rerun /model-dcf, then /model-valuation. Do not
+  carry on: the scenarios would be typed into the wrong cells.
 - Tell the user which brief sections were cut or missing (`brief_missing`, and the brief's summary).
 
 ## Step 3: Agent
@@ -115,7 +117,7 @@ untouched.
   - house inputs (hurdle, buy and pound R/R, discount, horizon, market growth) are chapter 11's defaults unless the
     agent changed one with a reason;
   - every number the agent chose is anchored to a cell, a research line or a forward sum, and was checked.
-- The brief's cut and missing sections, and the stale-DCF warning if there was one.
+- The brief's cut and missing sections.
 - The build's warnings.
 - The note's path (and whether the PDF was skipped).
 - That the Valuation tab is after Multiples, and a reminder to open the file in Excel, where it recalculates.
