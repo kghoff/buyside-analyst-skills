@@ -29,12 +29,12 @@ let subjectFailed = false;
 for (const [i, t] of tickers.map((x) => x.toUpperCase()).entries()) {
   let out;
   try {
-    const qs = await retry(() => yf.quoteSummary(yahooSymbol(t), { modules: ['price', 'financialData', 'earningsTrend'] }),
+    const qs = await retry(() => yf.quoteSummary(yahooSymbol(t), { modules: ['price', 'summaryDetail', 'financialData', 'earningsTrend'] }),
       `Yahoo ${t}`);
     out = {
-      ticker: t, asof, source: 'Yahoo Finance quoteSummary (price, financialData, earningsTrend)',
+      ticker: t, asof, source: 'Yahoo Finance quoteSummary (price, summaryDetail, financialData, earningsTrend)',
       price: qs.price?.regularMarketPrice ?? null, currency: qs.price?.currency ?? null,
-      marketCap: qs.price?.marketCap ?? null, adv3m: qs.price?.averageDailyVolume3Month ?? null,
+      marketCap: qs.price?.marketCap ?? null, adv3m: qs.price?.averageDailyVolume3Month ?? qs.summaryDetail?.averageVolume ?? null,
       financial: qs.financialData || {}, trend: qs.earningsTrend?.trend || [],
     };
   } catch (e) {
