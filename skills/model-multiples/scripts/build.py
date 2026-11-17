@@ -7,6 +7,7 @@ usage: python3 build.py --model M --work W --ticker T --out OUT"""
 import argparse
 import datetime as dt
 import json
+import math
 import os
 import re
 
@@ -29,6 +30,17 @@ RAWM = '#,##0,,'                                   # raw dollars shown in millio
 LABELS = {"pe": "P/E", "ev_ebitda": "EV/EBITDA", "ev_gp": "EV/GP", "ev_rev": "EV/Revenue", "fcf_yield": "FCF yield",
           "fcf_yield_ntm": "FCF yield (NTM)", "rel_sp": "P/E − S&P 500 P/E", "rel_peer": "P/E − core-peer median"}
 WLAB = {52: "1 year", 260: "5 years", 520: "10 years"}
+
+
+def labels(mode):
+    """Free path: the relative rows are GAAP P/E (multpl's S&P and the peers' XBRL EPS are reported earnings). Paid:
+    they stay NTM vs NTM, and the export's trailing FCF is LTM."""
+    lab = dict(LABELS)
+    if mode == "free":
+        lab.update(rel_sp="GAAP P/E − S&P 500 P/E", rel_peer="GAAP P/E − core-peer median")
+    else:
+        lab["fcf_yield"] = "FCF yield (LTM)"
+    return lab
 
 
 def serial(d):
@@ -57,11 +69,12 @@ class W:
         self.sh.set(ref, "s", t, self.style(**kw))
 
     def typed_(self, ref, v, fmt, kind="n"):
-        if v is None:
-            self.sh.set(ref, "f", "NA()", self.style(BLUE, fmt))
+        if v is None:                     # no number to type: NA() is a formula, not a typed number, so black
+            self.sh.set(ref, "f", "NA()", self.style(BLACK, fmt))
+            self.formulas.append(ref)
         else:
             self.sh.set(ref, kind, v, self.style(BLUE, fmt))
-        self.typed.append(ref)
+            self.typed.append(ref)
 
     def link(self, ref, f, fmt, expect=None, check=True):
         self.sh.set(ref, "f", f, self.style(GREEN, fmt))
@@ -84,6 +97,39 @@ def load_inputs(model, work, ticker):
         p = os.path.join(work, "comps", f"{t}.json")
         snaps[t] = json.load(open(p)) if os.path.exists(p) else {"ticker": t, "error": "no snapshot file"}
     return cfg, mode, snaps
+
+
+def paid_unit_check(path, subj, model, values):
+    """The export must be in MOD's units (millions). Compares its latest NTM sales with MOD's last actual FY revenue,
+    or, with no sales column, its market cap with its price × MOD's latest diluted shares. Off by more than 5x either
+    way: SystemExit naming the likely unit. Returns warnings (a check it could not make)."""
+    mm = ModMap(model)
+    R = S.find_rows(mm)
+    g = S.grid(values, max(R["rev"], R["shares"]) + 1)
+    name = os.path.basename(path)
+
+    def last(periods, row):
+        return next((v for p in reversed(periods) if (v := S.num(g, row, mm.col(p))) is not None), None)
+
+    sales = next((r["sales_ntm"] for r in reversed(subj) if r.get("sales_ntm") is not None), None)
+    if sales is not None:
+        x, y = sales, last([p for p in mm.order if re.fullmatch(r"\d{4}", p)], R["rev"])
+        what = ("sales", "revenue")
+    else:
+        r = next((r for r in reversed(subj) if r.get("mcap") is not None and r.get("price") is not None), None)
+        sh = last([p for p in mm.order if mm.is_q(p) and not p.endswith("E")], R["shares"])
+        x, y = (r["mcap"], r["price"] * sh) if r and sh is not None else (None, None)
+        what = ("market cap", "price × diluted shares")
+    if not x or not y or x <= 0 or y <= 0:
+        return [f"{name}: no sales or market cap to compare with MOD, so the export's units were not checked. They "
+                "must be millions, as MOD's."]
+    ratio = x / y
+    if 0.2 <= ratio <= 5:
+        return []
+    unit = {1: "thousands", 2: "dollars", -1: "billions"}.get(round(math.log10(ratio) / 3), "different units")
+    raise SystemExit(f"{name}: the export's {what[0]} ({x:,.0f}) and MOD's {what[1]} ({y:,.0f}) differ by about "
+                     f"{max(ratio, 1 / ratio):,.0f}x. The export looks like it's in {unit} while MOD is in millions. "
+                     "Re-export in millions (or the same units as MOD) and rerun.")
 
 
 def load_rows(model, work, cfg, mode, ticker, recalced):
@@ -115,6 +161,7 @@ def load_rows(model, work, cfg, mode, ticker, recalced):
             if rs.skipped:
                 warnings.append(f"{os.path.basename(files[t]['export'])}: {rs.skipped} row(s) with no readable date "
                                 "were skipped.")
+        warnings += paid_unit_check(files[ticker]["export"], subj, model, recalced)
         rows = E.paid_weekly(subj, pr)
         quarters, sp = [], []
         basis = "NTM consensus multiples from " + ", ".join(sorted({os.path.basename(f["export"]) for f in files.values()}))
@@ -132,6 +179,10 @@ def build(model, work, ticker, out):
     st = Styles(Package(model).text("xl/styles.xml"))
     w = W(st)
     sh = w.sh
+    LAB = labels(mode)
+    # Non-GAAP history: a GAAP P/E column of its own for the relative rows. GAAP basis: the P/E column already is.
+    ng = mode == "free" and S.eps_basis(model) == "ng"
+    PG = "pe_gaap" if ng else "pe"
 
     rows, quarters, sp, peer_q, basis, notes_ = load_rows(model, work, cfg, mode, ticker, recalced)
     warnings += notes_
@@ -166,13 +217,16 @@ def build(model, work, ticker, out):
             c += 1
         c += 1
 
-    base = ["date", "price", "q", "rev", "gp", "ebitda", "eps", "fcf", "shares", "net_debt"] if mode == "free" else \
+    base = ["date", "price", "q", "rev", "gp", "ebitda", "eps", *(["eps_gaap"] if ng else []), "fcf", "shares",
+            "net_debt"] if mode == "free" else \
         ["date", "price", "eps", "rev", "gp", "ebitda", "fcf", "fcf_ntm", "shares", "net_debt"]
-    take(*base, "mcap", "ev", "ev_rev", "ev_gp", "ev_ebitda", "pe", "fcf_yield",
+    take(*base, "mcap", "ev", "ev_rev", "ev_gp", "ev_ebitda", "pe", *(["pe_gaap"] if ng else []), "fcf_yield",
          *(["fcf_yield_ntm"] if mode == "paid" else []), "sp_pe", "rel_sp",
-         *[f"px_{t}" for t in cfg["core"]], *[f"pe_{t}" for t in cfg["core"]], "peer_med", "rel_peer")
+         *[f"px_{t}" for t in cfg["core"]], *([f"eps_{t}" for t in cfg["core"]] if mode == "paid" else []),
+         *[f"pe_{t}" for t in cfg["core"]], "peer_med", "rel_peer")
     if mode == "free":
-        take("q_label", "q_date", "q_rev", "q_gp", "q_ebitda", "q_eps", "q_fcf", "q_shares", "q_nd")
+        take("q_label", "q_date", "q_rev", "q_gp", "q_ebitda", "q_eps", *(["q_eps_gaap"] if ng else []), "q_fcf",
+             "q_shares", "q_nd")
         take("sp_date", "sp_val", "sp_est")
         for t in cfg["core"]:
             take(f"{t}_end", f"{t}_known", f"{t}_eps", f"{t}_ttm")
@@ -188,13 +242,13 @@ def build(model, work, ticker, out):
 
     # ---------------------------------------------------------------- weekly block
     hdr = {"date": "Week", "price": "Price", "q": "Quarter # known", "rev": "Revenue", "gp": "Gross profit",
-           "ebitda": "EBITDA", "eps": "EPS", "fcf": "FCF", "fcf_ntm": "NTM FCF", "shares": "Diluted shares",
+           "ebitda": "EBITDA", "eps": "EPS", "eps_gaap": "EPS (GAAP)", "pe_gaap": "P/E (GAAP)", "fcf": "FCF", "fcf_ntm": "NTM FCF", "shares": "Diluted shares",
            "net_debt": "Net debt", "mcap": "Market cap", "ev": "EV", "ev_rev": "EV/Revenue", "ev_gp": "EV/GP",
-           "ev_ebitda": "EV/EBITDA", "pe": "P/E", "fcf_yield": "FCF yield", "fcf_yield_ntm": "NTM FCF yield",
+           "ev_ebitda": "EV/EBITDA", "pe": "P/E", "fcf_yield": LAB["fcf_yield"], "fcf_yield_ntm": "NTM FCF yield",
            "sp_pe": "S&P 500 P/E",
-           "rel_sp": "P/E − S&P", "peer_med": "Core-peer median P/E", "rel_peer": "P/E − peer median"}
+           "rel_sp": LAB["rel_sp"], "peer_med": "Core-peer median P/E", "rel_peer": LAB["rel_peer"]}
     for t in cfg["core"]:
-        hdr[f"px_{t}"], hdr[f"pe_{t}"] = f"{t} close", f"{t} P/E"
+        hdr[f"px_{t}"], hdr[f"eps_{t}"], hdr[f"pe_{t}"] = f"{t} close", f"{t} NTM EPS", f"{t} P/E"
     w.text(f"A{R_DATA}", "WEEKLY DATA", b=True)
     for k, h in hdr.items():
         if k in L:
@@ -210,14 +264,16 @@ def build(model, work, ticker, out):
             w.link(f"{L['price']}{n}", f"'Px Data'!${r['pxcol']}${r['pxrow']}", MONEY, r["price"])
             w.formula(f"{L['q']}{n}", na(f"MATCH({L['date']}{n}-1,{QR('q_date')},1)"), "0",
                       r["q"] + 1 if r["q"] is not None else None)
-            for k in ("rev", "gp", "ebitda", "eps", "fcf", "shares", "net_debt"):
-                w.formula(f"{L[k]}{n}", na(f"INDEX({QR('q_' + {'eps': 'eps', 'net_debt': 'nd'}.get(k, k))},"
-                                           f"{L['q']}{n})"), MONEY if k == "eps" else MILL, r[k])
+            for k in ("rev", "gp", "ebitda", "eps", *(["eps_gaap"] if ng else []), "fcf", "shares", "net_debt"):
+                w.formula(f"{L[k]}{n}", na(f"INDEX({QR('q_' + {'net_debt': 'nd'}.get(k, k))},"
+                                           f"{L['q']}{n})"), MONEY if k.startswith("eps") else MILL, r[k])
             w.formula(f"{L['sp_pe']}{n}", na(f"INDEX({rng('sp_val', SP0, SPN)},MATCH({L['date']}{n},"
                                              f"{rng('sp_date', SP0, SPN)},1))"), X, r["sp_pe"])
         notes[f"{L['date']}{R_DATA + 1}"] = "Last trading day of each week, linked to Px Data (model-price-history)."
         notes[f"{L['q']}{R_DATA + 1}"] = ("Which row of the quarter block is known that week: MATCH(week − 1, release "
                                           "dates). A quarter counts from the day after its full-results release.")
+        notes[f"{L[PG]}{R_DATA + 1}"] = ("The relative columns use the GAAP P/E: the S&P 500 P/E (multpl) and the core "
+                                         "peers' XBRL EPS are reported (GAAP) earnings, so GAAP is compared with GAAP.")
     else:
         for i, r in enumerate(rows):
             n = W0 + i
@@ -241,11 +297,13 @@ def build(model, work, ticker, out):
         for k, num, den in (("ev_rev", "ev", "rev"), ("ev_gp", "ev", "gp"), ("ev_ebitda", "ev", "ebitda"),
                             ("pe", "price", "eps")):
             w.formula(g(k), na(f"IF({g(den)}>0,{g(num)}/{g(den)},NA())"), X, r[k])
+        if ng:
+            w.formula(g("pe_gaap"), na(f"IF({g('eps_gaap')}>0,{g('price')}/{g('eps_gaap')},NA())"), X, r["pe_gaap"])
         w.formula(g("fcf_yield"), na(f"IF({g('mcap')}>0,{g('fcf')}/{g('mcap')},NA())"), PCT, r["fcf_yield"])
         if mode == "paid":
             w.formula(g("fcf_yield_ntm"), na(f"IF({g('mcap')}>0,{g('fcf_ntm')}/{g('mcap')},NA())"), PCT,
                       r["fcf_yield_ntm"])
-        w.formula(g("rel_sp"), na(f"{g('pe')}-{g('sp_pe')}"), X, r["rel_sp"])
+        w.formula(g("rel_sp"), na(f"{g(PG)}-{g('sp_pe')}"), X, r["rel_sp"])
         for t in cfg["core"]:
             w.typed_(g(f"px_{t}"), r["peer_px"].get(t), MONEY)
             if mode == "free":
@@ -253,20 +311,26 @@ def build(model, work, ticker, out):
                 e = f"INDEX({T},MATCH({g('date')},{K},1))"
                 w.formula(g(f"pe_{t}"), na(f"IF({e}>0,{g(f'px_{t}')}/{e},NA())"), X, r["peer_pe"].get(t))
             else:
-                w.typed_(g(f"pe_{t}"), r["peer_pe"].get(t), X)
+                e = g(f"eps_{t}")
+                w.typed_(e, r["peer_eps"].get(t), MONEY)
+                w.formula(g(f"pe_{t}"), na(f"IF({e}>0,{g(f'px_{t}')}/{e},NA())"), X, r["peer_pe"].get(t))
         if cfg["core"]:
             pr = f"{L['pe_' + cfg['core'][0]]}{n}:{L['pe_' + cfg['core'][-1]]}{n}"
             w.formula(g("peer_med"), na(f"_xlfn.AGGREGATE(12,6,{pr})"), X, r["peer_med"])
-        w.formula(g("rel_peer"), na(f"{g('pe')}-{g('peer_med')}") if cfg["core"] else "NA()", X, r["rel_peer"])
+        w.formula(g("rel_peer"), na(f"{g(PG)}-{g('peer_med')}") if cfg["core"] else "NA()", X, r["rel_peer"])
     for t in cfg["core"]:
         notes[f"{L['px_' + t]}{R_DATA + 1}"] = (f"{t} close on or before the week (stooq daily file "
                                                 f"{os.path.basename(cfg['files'][t].get('prices', ''))})."
                                                 if mode == "free" else "Typed from the peer's export.")
+        if mode == "paid":
+            notes[f"{L['eps_' + t]}{R_DATA + 1}"] = (f"Typed from {os.path.basename(cfg['files'][t]['export'])} (NTM "
+                                                     "EPS column). The P/E beside it is price ÷ this EPS.")
 
     # ---------------------------------------------------------------- quarter, S&P and peer blocks (free path)
     if mode == "free":
         for k, h in (("q_label", "Quarter"), ("q_date", "Release date"), ("q_rev", "TTM revenue"),
                      ("q_gp", "TTM gross profit"), ("q_ebitda", "TTM EBITDA"), ("q_eps", "TTM EPS"),
+                     *([("q_eps_gaap", "TTM EPS (GAAP)")] if ng else []),
                      ("q_fcf", "TTM FCF"), ("q_shares", "Diluted shares"), ("q_nd", "Net debt"),
                      ("sp_date", "Month"), ("sp_val", "S&P 500 P/E (trailing)"), ("sp_est", "multpl estimate?")):
             w.text(f"{L[k]}{R_DATA + 1}", h, b=True, fill="FFDDEBF7")
@@ -274,12 +338,13 @@ def build(model, work, ticker, out):
             n = W0 + i
             w.text(f"{L['q_label']}{n}", q["label"])
             w.link(f"{L['q_date']}{n}", f"'Px Events'!$B${q['pxe_row']}", DATE, serial(q["date"]))
-            for k, src in (("q_rev", "rev"), ("q_gp", "gp"), ("q_ebitda", "ebitda"), ("q_eps", "eps"), ("q_fcf", "fcf"),
+            for k, src in (("q_rev", "rev"), ("q_gp", "gp"), ("q_ebitda", "ebitda"), ("q_eps", "eps"),
+                           *([("q_eps_gaap", "eps_gaap")] if ng else []), ("q_fcf", "fcf"),
                            ("q_shares", "shares"), ("q_nd", "net_debt")):
                 f_ = q[src][1]
                 if src == "shares":          # a bare MOD ref: blank is 0 in Excel but None in Python (Task 4 review)
                     f_ = f"IF(ISNUMBER({f_}),{f_},NA())"
-                w.link(f"{L[k]}{n}", na(f_), MONEY if k == "q_eps" else MILL, q[src][0])
+                w.link(f"{L[k]}{n}", na(f_), MONEY if k.startswith("q_eps") else MILL, q[src][0])
         notes[f"{L['q_rev']}{R_DATA + 1}"] = "Sum of the last four reported quarters in MOD (live formulas)."
         notes[f"{L['q_nd']}{R_DATA + 1}"] = ("Every debt-like liability row − cash − short-term investments at the "
                                              "quarter end. Operating leases are not debt.")
@@ -319,7 +384,7 @@ def build(model, work, ticker, out):
     for i, k in enumerate(KEYS):
         rr = R_RANGE + 2 + i
         fmt = PCT if k.startswith("fcf_yield") else X
-        w.text(f"A{rr}", LABELS[k])
+        w.text(f"A{rr}", LAB[k])
         w.formula(f"B{rr}", na(f"{L[k]}{WN}"), fmt, rows[-1].get(k))
         cc = 3
         for n_ in E.WINDOWS:
@@ -390,9 +455,13 @@ def build(model, work, ticker, out):
                                                                  is not None else None)
             w.formula(f"{colname(2 + j)}{rr}", na(f), fmt, v)
     subj = next(r for r in comp_rows if r["ticker"] == ticker)
-    for i, (lab, key) in enumerate((("Street EPS (Yahoo)", "eps"), ("Street P/E", "pe"))):
+    for i, (lab, key) in enumerate((("Street EPS (Yahoo consensus, analysts' basis)", "eps"), ("Street P/E", "pe"))):
         rr = R_FWD + 14 + i
         w.text(f"A{rr}", lab)
+        if key == "eps":
+            notes[f"A{rr}"] = ("Analysts' EPS is usually adjusted (non-GAAP), so it may not match the model's EPS above "
+                               "when that is GAAP. Years are matched by name: Yahoo's endDate year = MOD's fiscal-year "
+                               "label, both named by the year the fiscal year ends.")
         for j, y in enumerate(yrs):
             yi = int(y.rstrip("E"))
             hit = "0" if subj.get("fy0") == yi else ("1" if subj.get("fy1") == yi else None)
@@ -447,7 +516,7 @@ def build(model, work, ticker, out):
                       PCT if key == "growth1" else X, stt["average" if fn == 1 else "median"][key], b=True)
 
     # ---------------------------------------------------------------- charts
-    chart_list = chart_specs(ticker, mode, rows, comp_rows, C0, lambda k: f"'{TAB}'!{rng(k, W0, WN)}", warnings)
+    chart_list = chart_specs(ticker, mode, rows, comp_rows, C0, lambda k: f"'{TAB}'!{rng(k, W0, WN)}", warnings, LAB)
 
     sh.comments = notes
     sh.freeze = "B5"
@@ -476,7 +545,7 @@ def build(model, work, ticker, out):
             "warnings": warnings}
 
 
-def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings):
+def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings, lab):
     """Chart XML for the tab: one line chart per multiple (skipped, with a warning, when every week is NM) and the
     'looks like' scatter from the comp sheet. ref(k) = the absolute range of weekly column k."""
     cat = (ref("date"), [serial(r["date"]) for r in rows])
@@ -484,18 +553,18 @@ def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings):
     word = "NTM" if mode == "paid" else "TTM"
     chart_list = []
     for title, k, name, fmt in ((f"{ticker} P/E ({word})", "pe", "P/E", X),
-                                (f"{ticker} P/E − S&P 500 P/E", "rel_sp", "P/E − S&P 500", X),
-                                (f"{ticker} P/E − core-peer median", "rel_peer", "P/E − peers", X),
+                                (f"{ticker} {lab['rel_sp']}", "rel_sp", lab["rel_sp"], X),
+                                (f"{ticker} {lab['rel_peer']}", "rel_peer", lab["rel_peer"], X),
                                 (f"{ticker} EV/EBITDA ({word})", "ev_ebitda", "EV/EBITDA", X),
                                 (f"{ticker} EV/GP ({word})", "ev_gp", "EV/GP", X),
                                 (f"{ticker} EV/Revenue ({word})", "ev_rev", "EV/Revenue", X),
-                                (f"{ticker} FCF yield", "fcf_yield", "FCF yield", PCT),
+                                (f"{ticker} {lab['fcf_yield']}", "fcf_yield", lab["fcf_yield"], PCT),
                                 *([(f"{ticker} FCF yield (NTM)", "fcf_yield_ntm", "NTM FCF yield", PCT)]
                                   if mode == "paid" else [])):
         if any(r.get(k) is not None for r in rows):
             chart_list.append(line(title, cat, [ser(k, name, "1F4E79")], fmt))
         else:                         # every week NM: an empty chart says nothing, so skip it and say so
-            warnings.append(f"No week has a {LABELS[k]} value, so the '{title}' chart is skipped.")
+            warnings.append(f"No week has a {lab[k]} value, so the '{title}' chart is skipped.")
     pts = [{"name": r["ticker"], "x": (f"'{TAB}'!$S${C0 + i}", r["growth1"]), "y": (f"'{TAB}'!$Q${C0 + i}", r["pe1"]),
             "subject": r["ticker"] == ticker} for i, r in enumerate(comp_rows) if r["pe1"] is not None
            and r["growth1"] is not None]

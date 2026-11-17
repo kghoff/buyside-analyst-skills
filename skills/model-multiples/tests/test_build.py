@@ -89,6 +89,20 @@ def built_paid(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
+def built_ng(built, tmp_path_factory):
+    """The free path with Px Data on the non-GAAP basis (the reference model has a non-GAAP EPS row)."""
+    model, _, w0, _ = built
+    w = tmp_path_factory.mktemp("ng")
+    shutil.copytree(w0, w, dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns("values", "verify", "out.xlsx", "*.png", "layout.json"))
+    out = w / "out.xlsx"
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(build.S, "eps_basis", lambda m: "ng")
+        summary = build.build(str(model), str(w), "DXCM", str(out))
+    return model, out, w, summary
+
+
+@pytest.fixture(scope="module")
 def verified(built):
     model, out, w, _ = built
     return verify.run(str(model), str(out), str(w))
@@ -183,3 +197,73 @@ def test_rebuild_replaces_the_tab_cleanly(built, verified, tmp_path):
     a = openpyxl.load_workbook(verified["recalculated"], data_only=True)["Multiples"]
     b = openpyxl.load_workbook(r["recalculated"], data_only=True)["Multiples"]
     assert a["B7"].value == pytest.approx(b["B7"].value) and isinstance(a["B7"].value, float)
+
+
+def weekly_header(path, w):
+    lay = json.load(open(w / "layout.json"))
+    ws = openpyxl.load_workbook(path)["Multiples"]
+    return ws, lay, {c.value: c.column_letter for c in ws[lay["W0"] - 1] if c.value}
+
+
+def test_relative_rows_use_gaap_pe_on_a_non_gaap_basis(built_ng):
+    # multpl's S&P P/E and the peers' XBRL EPS are GAAP, so with non-GAAP history the relative columns subtract from a
+    # GAAP P/E column of their own, and the tab still recalculates to engine.py's numbers.
+    model, out, w, _ = built_ng
+    r = verify.run(str(model), str(out), str(w))
+    assert r["ok"] and r["failed"] == [] and r["errors"] == [], r
+    ws, lay, hdr = weekly_header(out, w)
+    n = lay["WN"]
+    assert ws[f"{hdr['GAAP P/E − S&P 500 P/E']}{n}"].value == f"=IFERROR({hdr['P/E (GAAP)']}{n}-{hdr['S&P 500 P/E']}{n},NA())"
+    assert ws[f"{hdr['GAAP P/E − core-peer median']}{n}"].value.startswith(f"=IFERROR({hdr['P/E (GAAP)']}{n}-")
+    rec = openpyxl.load_workbook(r["recalculated"], data_only=True)["Multiples"]
+    assert rec[f"{hdr['P/E']}{n}"].value != pytest.approx(rec[f"{hdr['P/E (GAAP)']}{n}"].value)
+
+
+def test_gaap_basis_has_one_pe_column_and_gaap_labels(built):
+    # On the GAAP basis the P/E column already is the GAAP P/E: no duplicate column, and the relative rows use it.
+    _, out, w, _ = built
+    ws, lay, hdr = weekly_header(out, w)
+    n = lay["WN"]
+    assert "P/E (GAAP)" not in hdr and "EPS (GAAP)" not in hdr
+    assert ws[f"{hdr['GAAP P/E − S&P 500 P/E']}{n}"].value == f"=IFERROR({hdr['P/E']}{n}-{hdr['S&P 500 P/E']}{n},NA())"
+    labels = [ws.cell(i, 1).value for i in range(1, lay["W0"])]
+    assert "GAAP P/E − S&P 500 P/E" in labels and "GAAP P/E − core-peer median" in labels
+    assert "Street EPS (Yahoo consensus, analysts' basis)" in labels
+
+
+def test_paid_peer_pe_is_a_formula_on_typed_ntm_eps(built_paid):
+    # A peer's P/E is price ÷ its NTM EPS, live (black), from a typed (blue) EPS column, not a typed ratio.
+    _, out, w, _ = built_paid
+    ws, lay, hdr = weekly_header(out, w)
+    n = lay["WN"]
+    pe, eps, px = hdr["ABT P/E"], hdr["ABT NTM EPS"], hdr["ABT close"]
+    assert ws[f"{pe}{n}"].value == f"=IFERROR(IF({eps}{n}>0,{px}{n}/{eps}{n},NA()),NA())"
+    assert f"{pe}{n}" in lay["formulas"] and f"{pe}{n}" in lay["expected"] and f"{eps}{n}" in lay["typed"]
+    assert "FCF yield (LTM)" in hdr
+    assert "FCF yield (LTM)" in [ws.cell(i, 1).value for i in range(5, 20)]
+    assert "GAAP P/E − S&P 500 P/E" not in hdr                  # paid: NTM vs NTM, not GAAP
+
+
+def test_paid_export_in_dollars_stops(built_paid, tmp_path):
+    # A vendor export in dollars against a model in millions would make every EV multiple a million times off.
+    model, _, w, _ = built_paid
+    import importer
+    rows = importer.load(str(w / "dxcm_export.csv"))
+    dollars = importer.Rows(dict(r, sales_ntm=r["sales_ntm"] * 1e6) for r in rows)
+    with pytest.raises(SystemExit, match=r"dxcm_export.csv: the export's sales .* differ by about [\d,]+x\. The export "
+                                         r"looks like it's in dollars while MOD is in millions"):
+        build.paid_unit_check(str(w / "dxcm_export.csv"), dollars, str(model), str(model))
+    assert build.paid_unit_check(str(w / "dxcm_export.csv"), rows, str(model), str(model)) == []
+    bare = importer.Rows({"date": r["date"], "price": r["price"], "eps_ntm": r["eps_ntm"]} for r in rows)
+    assert "not checked" in build.paid_unit_check("x.csv", bare, str(model), str(model))[0]
+
+
+def test_missing_typed_value_is_a_black_na_formula_not_a_typed_number():
+    # NA() is not a number from a source: it must not be blue or listed as typed (which would claim a source note).
+    from xlsx import Package, Styles
+    w = build.W(Styles(Package(REFERENCE).text("xl/styles.xml")))
+    w.typed_("A1", None, build.X)
+    w.typed_("A2", 1.5, build.X)
+    assert w.typed == ["A2"] and w.formulas == ["A1"]
+    assert w.sh.cells[(1, 1)] == ("f", "NA()", w.style(build.BLACK, build.X))
+    assert w.sh.cells[(2, 1)][2] == w.style(build.BLUE, build.X)
