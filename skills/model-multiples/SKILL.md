@@ -56,7 +56,8 @@ comparables, used for the P/E-vs-peers history). Ask with AskUserQuestion (first
 ## Step 5: Data
 **Free path**
 1. `node "$SK/fetch_comps.mjs" "$W" <T> <every comp>`. Exit 1 = the subject failed (Yahoo returned no price or
-   market cap): wait a few minutes and rerun. A failed comp stays on the sheet with its error. Soft warnings
+   market cap): wait a few minutes and rerun once. If it fails again, stop and tell the user Yahoo has no data now;
+   offer the paid path, or trying later. No endless retries. A failed comp stays on the sheet with its error. Soft warnings
    (missing currency or debt) keep the numbers; a currency different from the subject's blanks that comp's EV
    multiples. The ADV column is shares traded, in millions, not dollars.
 2. `python3 "$SK/sp500.py" --work "$W"`.
@@ -67,7 +68,9 @@ comparables, used for the P/E-vs-peers history). Ask with AskUserQuestion (first
 4. Pause for stooq: ask the user (AskUserQuestion) to download `https://stooq.com/q/d/?s=<p>.us&i=d` for each core
    peer into `<model dir>/Price Data/`, and **wait**. Then
    `python3 "$SK/prices.py" --model "$M" --tickers <core peers> [--src DIR]`. It copies the files it finds into
-   `<model dir>/Price Data/`, prints JSON, and exits 1 if any is missing or bad: ask for those again.
+   `<model dir>/Price Data/`, prints JSON, and exits 1 if any is missing or bad: ask the user for those once. If they can't supply one, drop that peer from `core`
+   in `comps.json` (it stays on the comp sheet) and tell them. If fewer than 2 core peers remain, the peer-relative
+   history is skipped: say so.
 5. Fill `comps.json` `files`: `{"<P>": {"xbrl": "<path>", "prices": "<path>"}}`.
 
 **Paid path.** Ask the user to drop one export for the subject and one per core peer into `$W/inputs/`, daily or
@@ -90,7 +93,9 @@ commas are read. Comps still come from Yahoo (free-path step 1).
    needs, or the overlays are non-GAAP and MOD has no non-GAAP EPS row: fix the model (or tell the user) and rerun.
 2. `python3 "$SK/verify.py" --model "$M" --out "$W/out.xlsx" --work "$W"`. It must print `"ok": true`. It
    recalculates in LibreOffice, compares every checked cell, scans for errors and proves every other part of the file
-   is byte-identical. On failure fix the cause and rebuild; never hand-edit the output.
+   is byte-identical. On failure, fix an obvious cause and rebuild once; never hand-edit the output.
+   If it still fails, stop and do not copy over: show the user the first failed cells and errors in plain English.
+   The model stays untouched.
 3. Look at the PNG of the Multiples page it names (`$W/multiples.png`): charts drawn, no `#` errors except #N/A where
    a multiple is not meaningful, comp sheet filled.
 
@@ -103,7 +108,8 @@ commas are read. Comps still come from Yahoo (free-path step 1).
 
 ## Step 8: Report (plain English)
 - Where the stock trades today: P/E and EV/EBITDA against their 5-year median and percentile; against the S&P 500
-  and the core peers; the reverse P/E (what earnings power today's price implies at the 5-year low, median, high).
+  and the core peers; the reverse P/E (the earnings power today's price implies if the stock traded at its 5-year low, median or high
+  P/E; one plain sentence saying so the first time it appears).
 - The comp sheet: where the subject ranks, the cheapest and most expensive comps, anything the scatter shows as off
   the line.
 - Every judgment call:
