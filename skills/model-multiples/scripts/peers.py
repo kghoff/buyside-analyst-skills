@@ -1,6 +1,7 @@
 """Core peers' point-in-time TTM P/E history (free path, spec §3.1): quarterly diluted EPS from the edgar-xbrl-
-financials JSON, weekly closes from stooq. Peers have no release dates in the model, so a quarter counts as known 40
-days after its end (Q1-Q3) or 60 days (Q4): the SEC 10-Q / 10-K deadlines for large accelerated filers. Conservative:
+financials JSON, weekly closes from stooq. Peers have no release dates in the model, so a quarter counts as known 45
+days after its end (Q1-Q3) or 90 days (Q4): the SEC 10-Q / 10-K deadlines for non-accelerated filers, the latest of
+any filer type, since a peer's filer status is unknown. So a quarter is never used before it was public. Conservative:
 never hindsight, sometimes a few weeks late. Told to the user as a judgment call."""
 import bisect
 import calendar
@@ -8,7 +9,7 @@ import csv
 import datetime as dt
 import re
 
-LAG = {1: 40, 2: 40, 3: 40, 4: 60}
+LAG = {1: 45, 2: 45, 3: 45, 4: 90}
 
 
 def _month_end(y, m):
@@ -57,17 +58,19 @@ def ttm(quarters):
 
 
 def load_closes(path):
-    """[(date, close)] ascending from a stooq daily CSV."""
-    rows = []
+    """[(date, close)] ascending from a stooq daily CSV. Duplicate dates keep the last row in the file."""
+    by_date = {}
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
             try:
-                rows.append((dt.date.fromisoformat(r["Date"]), float(r["Close"])))
-            except (KeyError, ValueError):
+                by_date[dt.date.fromisoformat(r["Date"])] = float(r["Close"])
+            except (KeyError, ValueError, TypeError):
                 continue
-    return sorted(rows)
+    if not by_date:
+        raise SystemExit(f"{path}: no Date/Close rows; is this a stooq daily CSV? (expected header Date,Open,High,Low,Close,Volume)")
+    return sorted(by_date.items())
 
 
 def close_on(closes, day):
-    i = bisect.bisect_right([d for d, _ in closes], day)
+    i = bisect.bisect_right(closes, day, key=lambda r: r[0])
     return closes[i - 1][1] if i else None

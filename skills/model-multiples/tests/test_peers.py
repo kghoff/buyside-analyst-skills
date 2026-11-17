@@ -30,8 +30,9 @@ def test_quarter_known_after_filing_deadline_never_at_quarter_end(x):
     q = peers.eps_quarters(x)
     for r in q:
         lag = (r["known"] - r["end"]).days
-        assert lag == (60 if r["q"] == 4 else 40)
-    assert q[-1]["end"] == dt.date.fromisoformat(x["ttm"]["endDate"])
+        assert lag == (90 if r["q"] == 4 else 45)
+    # within 7 days, not equal: 52/53-week fiscal years end on a weekday near the month end
+    assert abs((q[-1]["end"] - dt.date.fromisoformat(x["ttm"]["endDate"])).days) <= 7
 
 
 def test_gap_in_quarters_breaks_ttm(x):
@@ -60,3 +61,19 @@ def test_weekly_close_is_last_close_on_or_before_the_week(tmp_path):
     closes = peers.load_closes(str(p))
     assert peers.close_on(closes, dt.date(2026, 1, 9)) == 102
     assert peers.close_on(closes, dt.date(2026, 1, 4)) is None
+
+
+def test_bad_price_file_stops_loudly(tmp_path):
+    p = tmp_path / "x.csv"
+    p.write_text("<html>blocked</html>\n")
+    with pytest.raises(SystemExit, match="no Date/Close rows"):
+        peers.load_closes(str(p))
+    p.write_text("Date,Open\n2026-01-05,1\n")
+    with pytest.raises(SystemExit, match="no Date/Close rows"):
+        peers.load_closes(str(p))
+
+
+def test_closes_sorted_and_duplicate_date_keeps_last(tmp_path):
+    p = tmp_path / "a.csv"
+    p.write_text("Date,Open,High,Low,Close,Volume\n2026-01-07,1,1,1,102,1\n2026-01-05,1,1,1,100,1\n2026-01-05,1,1,1,101,1\n")
+    assert peers.load_closes(str(p)) == [(dt.date(2026, 1, 5), 101.0), (dt.date(2026, 1, 7), 102.0)]
