@@ -44,7 +44,17 @@ def test_window_stats_skip_nm_and_rank_today():
     s = [20.0, None, 15.0, 30.0, 25.0]
     w = M.window_stats(s, 4)                      # last 4 points: None, 15, 30, 25
     assert w == {"min": 15.0, "max": 30.0, "median": 25.0, "pct": pytest.approx(2 / 3), "n": 3}
-    assert M.window_stats([1.0, None], 2) is None  # today NM -> no stats (the tab shows #N/A)
+    w = M.window_stats([1.0, None], 2)             # today NM: AGGREGATE still works, only the percentile is #N/A
+    assert w["min"] == 1.0 and w["pct"] is None
+
+
+def test_window_stats_edges():
+    assert M.window_stats([None, None], 2) is None
+    assert M.window_stats([], 3) is None
+    assert M.window_stats([1.0, 2.0], 0) is None
+    assert M.window_stats([1.0, 3.0], 10)["n"] == 2          # n larger than the list uses the whole list
+    assert M.window_stats([10.0, 20.0, 20.0], 3)["pct"] == 1.0   # tie: today equal to another value counts as <=
+    assert M.window_stats([20.0, 10.0, 20.0], 3)["pct"] == 1.0
 
 
 def test_median_or_none():

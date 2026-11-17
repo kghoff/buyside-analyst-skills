@@ -27,14 +27,18 @@ def six(price, shares, net_debt, rev, gp, ebitda, eps, fcf):
 
 
 def window_stats(values, n):
-    """Min / max / median / today's percentile over the last n points (None skipped). Today = the last point; None
-    when today is NM. Mirrors the tab's AGGREGATE(5|4|12, 6, range) and COUNTIF(range, "<="&today) / COUNT(range)."""
-    if not values or values[-1] is None:
+    """Min / max / median / n over the last n points (None skipped); None when n < 1 or the window has no values.
+    pct = share of window values <= today (the last point), or None when today is NM. Mirrors the tab's
+    AGGREGATE(5|4|12, 6, range), which still works when today is #N/A, and COUNTIF(range, "<="&today) / COUNT(range),
+    which becomes #N/A."""
+    if not values or n < 1:
         return None
     tail = [v for v in values[-n:] if v is not None]
+    if not tail:
+        return None
     last = values[-1]
-    return {"min": min(tail), "max": max(tail), "median": statistics.median(tail),
-            "pct": sum(1 for v in tail if v <= last) / len(tail), "n": len(tail)}
+    pct = None if last is None else sum(1 for v in tail if v <= last) / len(tail)
+    return {"min": min(tail), "max": max(tail), "median": statistics.median(tail), "pct": pct, "n": len(tail)}
 
 
 def reverse_pe(price, pe):
