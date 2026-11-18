@@ -12,6 +12,7 @@ from conftest import REFERENCE, snap_path
 HERE = os.path.dirname(__file__)
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(lo.SOFFICE is None, reason="LibreOffice not installed")
 def test_verify_passes_on_a_fresh_build(tmp_path):
     w = tmp_path / "w"; os.makedirs(w / "snapshots")

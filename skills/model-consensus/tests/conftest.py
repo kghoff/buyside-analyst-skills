@@ -17,3 +17,7 @@ def snap_path(t):
 
 def snap(t):
     return json.load(open(snap_path(t)))
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: starts LibreOffice; skipped by run-tests.sh unless --full")

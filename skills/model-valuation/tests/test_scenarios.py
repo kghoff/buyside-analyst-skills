@@ -59,6 +59,7 @@ def dcf(fixture_model, tmp_path_factory):
     return d, json.load(open(d))
 
 
+@pytest.mark.slow
 def test_context_matches_dcf_tab(dcf):
     """The bridge reads the same inputs and value the DCF tab shows; the tab's cells are found by layout, not hardcoded."""
     _, c = dcf
@@ -70,6 +71,7 @@ def test_context_matches_dcf_tab(dcf):
     assert c["fade_years"] == 10                    # model-dcf's own fade length, passed on (not hardcoded here)
 
 
+@pytest.mark.slow
 def test_eval_matches_dcf_tab_for_unchanged_base(dcf, tmp_path):
     d, c = dcf
     t = tmp_path / "try_1.json"
@@ -85,6 +87,7 @@ def test_eval_matches_dcf_tab_for_unchanged_base(dcf, tmp_path):
     assert set(r["implied"]) >= {"price"}
 
 
+@pytest.mark.slow
 def test_eval_requires_all_three_cases(dcf, tmp_path):
     d, _ = dcf
     t = tmp_path / "try_1.json"
@@ -94,6 +97,7 @@ def test_eval_requires_all_three_cases(dcf, tmp_path):
     assert p.returncode != 0 and "bull" in p.stderr
 
 
+@pytest.mark.slow
 def test_typecheck_types_every_input(fixture_model, dcf, tmp_path):
     """Each case changes WACC, the terminal multiple and a driver, with the value eval gives for exactly those inputs:
     the tab only matches if typecheck really typed all three, so a typecheck that skips one is caught."""
@@ -122,6 +126,7 @@ def test_typecheck_types_every_input(fixture_model, dcf, tmp_path):
     assert rep == {"checked": 3, "problems": []} and p.returncode == 0
 
 
+@pytest.mark.slow
 def test_typecheck_catches_wrong_value(fixture_model, dcf, tmp_path):
     """A plan value the tab doesn't reproduce is flagged."""
     d, c = dcf

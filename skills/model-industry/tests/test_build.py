@@ -80,6 +80,7 @@ def test_build_refuses_existing_tabs_without_replace(tmp_path):
 import lo
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not lo.SOFFICE, reason="LibreOffice not installed")
 def test_verify_passes_on_a_fresh_build(tmp_path):
     # every formula, recalculated by LibreOffice, must equal the Python prototype; nothing else may change
@@ -111,6 +112,7 @@ def test_margin_and_roic_axes_ignore_peer_outliers(tmp_path):
         assert -1 <= mn <= 0, (title, mn)
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not lo.SOFFICE, reason="LibreOffice not installed")
 def test_verify_passes_on_a_replace_rebuild_against_the_model_with_old_tabs(tmp_path):
     # --replace frees the old tabs' part names (sheetN, chartN, commentsN, vmlDrawingN...) and the rebuild reuses

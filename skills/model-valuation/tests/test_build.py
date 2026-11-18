@@ -15,29 +15,9 @@ import build
 import lo
 from conftest import FIX, SCRIPTS
 
+pytestmark = pytest.mark.slow   # starts LibreOffice (run-tests.sh --full)
+
 YELLOW = "FFFFFF99"
-
-
-@pytest.fixture
-def work(model, tmp_path):
-    """W with context.json, dcf_ctx.json, the example plan and a scenario result, as the skill leaves them."""
-    w = tmp_path / "w"
-    w.mkdir()
-    subprocess.run([sys.executable, "-I", os.path.join(SCRIPTS, "context.py"), "--model", model, "--work", str(w),
-                    "--ticker", "TEST", "--research-dir", str(tmp_path / "none")], check=True)
-    shutil.copy(os.path.join(FIX, "plan_example.json"), w / "valuation_plan.json")
-    # scenario result for round 1 from the example plan's final cases
-    plan = json.load(open(w / "valuation_plan.json"))
-    t = {"round": 1, "final": True, "why": "x", "cases": {k: {"inputs": v["inputs"], "story": v["story"]}
-                                                          for k, v in plan["scenarios"]["final"].items()}}
-    (w / "scenarios_try_1.json").write_text(json.dumps(t))
-    c = json.load(open(w / "context.json"))
-    subprocess.run([sys.executable, "-I", os.path.join(SCRIPTS, "scenario_eval.py"), "eval", "--dcf",
-                    str(w / "dcf_ctx.json"), "--try", str(w / "scenarios_try_1.json"),
-                    "--ntm-eps", str(c["metrics"]["eps"]["ntm"]["value"]),
-                    "--ntm1-eps", str(c["metrics"]["eps"]["ntm1"]["value"]),
-                    "--out", str(w / "scenarios_result_1.json")], check=True)
-    return str(w)
 
 
 def _ws(p, data_only=False):

@@ -1,5 +1,7 @@
 """check.py: the tab must equal dcfmath, the MOD years tie to MOD, error cells, stray changes and a reverse-DCF row
 that does not hit its price are caught."""
+import pytest
+
 import check
 
 
@@ -50,6 +52,7 @@ def _run(built, after):
                            "--solved", p["solved"], "--work", str(built["tmp"] / "w")], capture_output=True, text=True)
 
 
+@pytest.mark.slow
 def test_cli_passes_on_a_correct_build(built):
     r = _run(built, built["out"])
     assert r.returncode == 0, r.stdout + r.stderr
@@ -57,6 +60,7 @@ def test_cli_passes_on_a_correct_build(built):
     assert out["ok"] is True and out["reverse_rows_recalculated"] >= 1   # each row typed into the tab and recalculated
 
 
+@pytest.mark.slow
 def test_cli_fails_when_another_tab_was_changed(built):
     from xlsx import Package
     from xledit import set_cells
@@ -69,6 +73,7 @@ def test_cli_fails_when_another_tab_was_changed(built):
     assert r.returncode == 1 and "After" in r.stdout
 
 
+@pytest.mark.slow
 def test_cli_fails_when_a_reverse_row_misses_its_price(built):
     row = next(r for r, pk, d in build.layout(built["ctx"])["reverse_rows"]
                if built["solved"]["reverse"][pk][d]["status"] == "ok")
@@ -78,6 +83,7 @@ def test_cli_fails_when_a_reverse_row_misses_its_price(built):
     assert r.returncode == 1 and f"reverse row {row}" in r.stdout
 
 
+@pytest.mark.slow
 def test_cli_fails_when_an_input_disagrees_with_solved(built):
     R = build.layout(built["ctx"])["rows"]
     bad = str(built["tmp"] / "inp.xlsx")
@@ -91,6 +97,7 @@ def test_error_cells_exact_set_and_err_prefix():
     assert check.error_cells(g) == ["A1", "B1", "C1", "F1"]
 
 
+@pytest.mark.slow
 def test_cli_fails_when_the_users_formula_moved_from_what_solve_used(built):
     """The snapshot (reverse DCF, value) was solved on the formula's old value; if it recalculates differently, say so."""
     from test_build import _build

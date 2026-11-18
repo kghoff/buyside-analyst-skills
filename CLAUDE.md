@@ -41,14 +41,18 @@ Naming: `collect-` gathers raw material, `model-` adds to the Excel model, `rese
 - Settings come only from `lib/settings.*`; never hardcode them. The five settings are `sec_contact`, `research_dir`, `alpha_vantage_keys`, `chrome_path` and `xbrl_cli` (the path to the separate edgar-xbrl-financials CLI, which model-industry uses).
 
 ## Adding or changing a skill
-Brainstorm → spec and plan in `docs/` (git-ignored, local only) → build with tests → `bash run-tests.sh` → update the
+Brainstorm → spec and plan in `docs/` (git-ignored, local only) → build with tests → `bash run-tests.sh --full` → update the
 README skills table and this file's table.
 
 ## Layout and testing
 - `skills/<name>/`: SKILL.md (what Claude follows), scripts/, tests/, references/ (prompts), NOTES.md (why things are the way they are; read it before changing scripts)
 - `agents/`: helper agents the skills dispatch (filings-analyst, street-analyst, street-researcher, forecast-planner, valuation-analyst)
 - `lib/settings.py|mjs`: the settings file reader
-- `bash run-tests.sh`: every suite plus `check-refs.sh` (no personal paths or names). Must end ALL PASS.
+- `bash run-tests.sh`: every suite plus `check-refs.sh` (no personal paths or names), skipping tests marked `slow`
+  (they start LibreOffice); use it while working, and on one skill run only that skill's suite.
+  `bash run-tests.sh --full` runs everything; run it before any merge. Both must end ALL PASS.
+- A new test starts LibreOffice only when the recalculation is what it checks: share one recalculated copy per
+  suite (a session fixture) and mark such tests `@pytest.mark.slow`.
   Personal terms to keep out of the repo go one per line in `.refs-blocklist` (git-ignored; check-refs reads it).
 
 ---
@@ -120,7 +124,7 @@ Default to surfacing uncertainty, not hiding it.
 1. **Diagnose with `/investigate`** (gstack, if installed). Four-phase root cause analysis.
 2. **Write a failing test.** Prove the bug exists. Use a pytest or vitest test in the skill's tests folder.
 3. **Fix with a subagent.** Give it the failing test and specific files.
-4. **Verify.** All tests pass, `bash run-tests.sh` ends ALL PASS.
+4. **Verify.** All tests pass, `bash run-tests.sh --full` ends ALL PASS.
 
 ---
 

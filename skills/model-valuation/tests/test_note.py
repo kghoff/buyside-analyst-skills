@@ -13,15 +13,26 @@ import pytest
 import build
 import note
 import verify
-from test_build import work  # noqa: F401
+from conftest import copy_work
+
+pytestmark = pytest.mark.slow   # starts LibreOffice (run-tests.sh --full)
+
+
+@pytest.fixture(scope="session")
+def noted_base(fixture_model, work_base, tmp_path_factory):
+    """One build + verify per session (about 35 s of LibreOffice); each test gets its own copy of the work folder."""
+    w = str(tmp_path_factory.mktemp("noted") / "w")
+    copy_work(work_base, w)
+    out = os.path.join(os.path.dirname(w), "out.xlsx")
+    build.build(fixture_model, w, "TEST", out)
+    return w, verify.run(fixture_model, out, w)["recalculated"]
 
 
 @pytest.fixture
-def noted(model, work, tmp_path):  # noqa: F811
-    out = str(tmp_path / "out.xlsx")
-    build.build(model, work, "TEST", out)
-    r = verify.run(model, out, work)
-    return work, r["recalculated"]
+def noted(noted_base, tmp_path):
+    base, values = noted_base
+    w = copy_work(base, str(tmp_path / "w"))
+    return w, values.replace(base, w)
 
 
 def test_note_has_sections_and_calls(noted):

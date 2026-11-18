@@ -12,8 +12,8 @@ from modmap import ModMap
 
 
 @pytest.fixture(scope="module")
-def got(fixture_model, tmp_path_factory):
-    vals = lo.recalc(fixture_model, str(tmp_path_factory.mktemp("v")))
+def got(fixture_model, fixture_values):
+    vals = fixture_values
     return metrics.collect(fixture_model, vals), vals
 
 

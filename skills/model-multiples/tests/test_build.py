@@ -116,6 +116,7 @@ def test_tab_added_and_every_other_part_byte_identical(built):
     assert all(a.read(n) == b.read(n) for n in same)
 
 
+@pytest.mark.slow
 def test_recalculated_tab_matches_engine(verified):
     # Every checked cell recalculates in LibreOffice to engine.py's number: the live formulas and the Python agree.
     r = verified
@@ -136,6 +137,7 @@ def test_colours_follow_house_rules(built):
         assert ws[ref].comment is None or ws[ref].comment.text   # source notes live on the column headers
 
 
+@pytest.mark.slow
 def test_comp_sheet_ranked_and_nm_peer_shown(built, verified):
     # Ranked most expensive first on next year's P/E; a loss-maker (TNDM, EPS FY1 < 0) is NM and sorts last, shown as
     # #N/A rather than a negative multiple; the subject's row stands out in bold.
@@ -151,6 +153,7 @@ def test_comp_sheet_ranked_and_nm_peer_shown(built, verified):
     assert built_ws.cell(rows["DXCM"], 1).font.b and not built_ws.cell(rows["PODD"], 1).font.b
 
 
+@pytest.mark.slow
 def test_paid_path_recalculates_and_carries_ntm_fcf_yield(built_paid):
     # The paid path's sixth multiple, NTM FCF yield, has its own weekly column and range row, and the whole tab
     # recalculates to engine.py's numbers just as the free path does.
@@ -180,6 +183,7 @@ def reachable(path):
     return seen
 
 
+@pytest.mark.slow
 def test_rebuild_replaces_the_tab_cleanly(built, verified, tmp_path):
     # A rerun (each print) builds over a model that already has the tab: one tab, no orphan parts left behind,
     # every other part byte-identical, and the same numbers as the first build.
@@ -205,6 +209,7 @@ def weekly_header(path, w):
     return ws, lay, {c.value: c.column_letter for c in ws[lay["W0"] - 1] if c.value}
 
 
+@pytest.mark.slow
 def test_relative_rows_use_gaap_pe_on_a_non_gaap_basis(built_ng):
     # multpl's S&P P/E and the peers' XBRL EPS are GAAP, so with non-GAAP history the relative columns subtract from a
     # GAAP P/E column of their own, and the tab still recalculates to engine.py's numbers.

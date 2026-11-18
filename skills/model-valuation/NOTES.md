@@ -79,6 +79,9 @@ brief, §5 testing, §6 judgment calls); plan: docs/2026-11-17-model-valuation-p
 - No `inputs_written.json` record (first run over an older tab, or the record was deleted) = every yellow value that
   differs from the plan is treated as the user's, and the build warns.
 - The test fixture is the repo's DXCM example model.
+- Tests share LibreOffice work per session (the suite took 12m49s when each test did its own): `fixture_values` (one
+  recalculation), `work_base` (context.py once; each test gets a copy via `copy_work`) and `noted_base` (one build +
+  verify). Files that need a recalculated work folder are marked `slow` (run-tests.sh --full).
 - `scenario_eval.py` appends its own folder to `sys.path` after model-dcf's (theirs win on shared names), and its
   stale check recalculates under `W/dcf_stale/`.
 - The note reads every number from verify's recalculated file (layout.json refs, else the tab's column-A labels) in the

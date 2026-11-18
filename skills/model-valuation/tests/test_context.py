@@ -9,6 +9,8 @@ import pytest
 import context
 from modmap import ModMap
 
+pytestmark = pytest.mark.slow   # starts LibreOffice (run-tests.sh --full)
+
 
 def test_dump_carries_refs(model, tmp_path):
     w = str(tmp_path / "w")

@@ -8,7 +8,8 @@ import pytest
 
 import build
 import verify
-from test_build import work  # noqa: F401
+
+pytestmark = pytest.mark.slow   # starts LibreOffice (run-tests.sh --full)
 
 
 @pytest.fixture

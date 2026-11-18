@@ -7,7 +7,6 @@ import os
 import pytest
 
 import anchors
-import lo
 import metrics
 from conftest import FIX
 
@@ -17,14 +16,13 @@ CTX = {"ticker": "TEST", "house": {"hurdle": .2, "buy_rr": 2.0, "pound_rr": 3.0,
 
 
 @pytest.fixture(scope="module")
-def ctx(fixture_model, tmp_path_factory):
+def ctx(fixture_model, fixture_values):
     """CTX plus the forward metrics context.json carries (the ntm: / ntm1: / y3: anchors are checked against them)."""
-    v = lo.recalc(fixture_model, str(tmp_path_factory.mktemp("v")))
-    return dict(CTX, metrics=metrics.collect(fixture_model, v))
+    return dict(CTX, metrics=metrics.collect(fixture_model, fixture_values))
 
 
-def test_cells_and_rounding(fixture_model, tmp_path, ctx):
-    v = lo.recalc(fixture_model, str(tmp_path))
+def test_cells_and_rounding(fixture_model, fixture_values, tmp_path, ctx):
+    v = fixture_values
     assert anchors.check(OK, v, str(tmp_path), ctx) == []
     p = copy.deepcopy(OK)
     p["inputs"]["reward_multiple.pe"]["anchor_value"] = 36.0
@@ -33,8 +31,8 @@ def test_cells_and_rounding(fixture_model, tmp_path, ctx):
     assert anchors.check(p, v, str(tmp_path), ctx) == []
 
 
-def test_research_line(fixture_model, tmp_path):
-    v = lo.recalc(fixture_model, str(tmp_path / "v"))
+def test_research_line(fixture_model, fixture_values, tmp_path):
+    v = fixture_values
     rd = tmp_path / "Filings Research"
     rd.mkdir()
     (rd / "r.md").write_text("intro\nGross margin reached 62.5% in 2025, with 1,234 sites.\n")
@@ -45,9 +43,9 @@ def test_research_line(fixture_model, tmp_path):
     assert anchors.check(p, v, str(tmp_path), CTX)
 
 
-def test_line_thousands_and_bps(fixture_model, tmp_path):
+def test_line_thousands_and_bps(fixture_model, fixture_values, tmp_path):
     """A count printed with commas and a change printed in bps are read as a reader would read them."""
-    v = lo.recalc(fixture_model, str(tmp_path / "v"))
+    v = fixture_values
     (tmp_path / "r.md").write_text("Sites rose to 1,234; gross margin fell 150 bps.\n")
     p = copy.deepcopy(OK)
     p["inputs"]["risk_metric.pe"].update(anchor="r.md:1", anchor_value=1234)
@@ -60,9 +58,9 @@ def test_line_thousands_and_bps(fixture_model, tmp_path):
     assert anchors.check(p, v, str(tmp_path), CTX)
 
 
-def test_house_and_tree(fixture_model, tmp_path, ctx):
+def test_house_and_tree(fixture_model, fixture_values, tmp_path, ctx):
     """A house input may leave chapter 11's default only with a real reason; tree targets are checked like inputs."""
-    v = lo.recalc(fixture_model, str(tmp_path / "v"))
+    v = fixture_values
     p = copy.deepcopy(OK)
     p["inputs"]["hurdle"].update(value=0.25, reason="Higher.")
     assert any("hurdle" in x for x in anchors.check(p, v, str(tmp_path), ctx))
@@ -74,8 +72,8 @@ def test_house_and_tree(fixture_model, tmp_path, ctx):
     assert any("DCF!$C$40" in x for x in anchors.check(p, v, str(tmp_path), ctx))
 
 
-def test_missing_sheet_or_file_is_named(fixture_model, tmp_path):
-    v = lo.recalc(fixture_model, str(tmp_path / "v"))
+def test_missing_sheet_or_file_is_named(fixture_model, fixture_values, tmp_path):
+    v = fixture_values
     p = copy.deepcopy(OK)
     p["inputs"]["reward_multiple.pe"]["anchor"] = "Nope!B7"
     p["inputs"]["risk_metric.pe"].update(anchor="Filings Research/missing.md:3")
@@ -106,7 +104,7 @@ def test_line_numbers_glued_to_letters_do_not_count(tmp_path):
     assert _line_check(tmp_path, "In Q2 of FY25 the x2 sensor launched 2 models.", 2) == []
 
 
-def test_decimals_come_from_the_anchor_value_as_written(fixture_model, tmp_path):
+def test_decimals_come_from_the_anchor_value_as_written(fixture_model, fixture_values, tmp_path):
     """30.0 is stated to one decimal (spec), so it vouches for 29.96 but not for 29.6; 30 vouches for 29.6."""
     assert _line_check(tmp_path, "trades at 29.96x", 30.0) == []
     assert _line_check(tmp_path, "trades at 29.6x", 30.0)
