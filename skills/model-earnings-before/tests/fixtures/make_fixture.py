@@ -125,6 +125,14 @@ def _px_data(ws):
         ws.cell(r, 3, spy[i])
         if i:
             ws.cell(r, 4, px[i] / px[i - 1] - 1)
+    # model-price-history's weekly block shares header row 4 and repeats "TEST close" / "SPY close": the reader must
+    # keep the daily ones (columns B and C), not these
+    for c, h in enumerate(("Week-end", "TEST close", "SPY close"), start=6):
+        ws.cell(4, c, h)
+    for k, i in enumerate(range(0, len(px), 5)[:20]):
+        ws.cell(5 + k, 6, trading_days()[i]).number_format = "yyyy-mm-dd"
+        ws.cell(5 + k, 7, px[i] * 2)
+        ws.cell(5 + k, 8, spy[i] * 2)
 
 
 def _px_events(ws):

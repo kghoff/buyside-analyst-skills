@@ -28,9 +28,14 @@ def _day(v):
 
 
 def _header(g, wanted, max_row=10):
-    """(row, {header text: column}) of the first row up to max_row holding `wanted`."""
+    """(row, {header text: column}) of the first row up to max_row holding `wanted`. A header that repeats in the
+    row keeps its first (leftmost) column: Px Data's weekly block repeats "<T> close" and "SPY close" to the right
+    of the daily ones."""
     for r in range(1, max_row + 1):
-        heads = {str(v).strip(): c for (rr, c), v in g.items() if rr == r and isinstance(v, str)}
+        heads = {}
+        for (rr, c), v in sorted(g.items()):
+            if rr == r and isinstance(v, str):
+                heads.setdefault(str(v).strip(), c)
         if wanted in heads:
             return r, heads
     return None, {}
