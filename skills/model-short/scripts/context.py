@@ -155,9 +155,9 @@ def multiples_links(g):
     for name, row, head in (("pe_today", pe, "Today"), ("pe_pct", pe, "5 years percentile"),
                             ("peer_gap", peer, "Today"), ("peer_pct", peer, "5 years percentile")):
         c = heads.get(head)
-        if row and c:
-            v = g.get((row, c))
-            out[name] = {"ref": f"Multiples!${L(c)}${row}", "value": v if _num(v) else None}
+        v = g.get((row, c)) if row and c else None
+        if _num(v):                           # a blank shows as 0 in Excel, None here: no link, the tick is ?
+            out[name] = {"ref": f"Multiples!${L(c)}${row}", "value": v}
     return out
 
 

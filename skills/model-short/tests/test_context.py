@@ -97,3 +97,18 @@ def test_missing_required_tab_stops(fixture_model, tmp_path):
     wb.save(m)
     with pytest.raises(SystemExit, match="model-multiples"):
         context.run(m, str(tmp_path), "TEST", values=m)
+
+
+def test_link_to_a_blank_cell_is_not_recorded(fixture_model, tmp_path):
+    """A blank cell shows as 0 in Excel but None in Python: recording the link would make verify fail and the tick
+    wrong. A link is kept only when its cell holds a number; the row's tick is then ?."""
+    import openpyxl
+    import context
+    m = str(tmp_path / "m.xlsx")
+    wb = openpyxl.load_workbook(fixture_model)
+    wb["Multiples"]["J7"] = None
+    wb.save(m)
+    (tmp_path / "short.json").write_text(json.dumps(mf.SHORT))
+    c = context.run(m, str(tmp_path), "TEST", values=m)
+    assert "pe_pct" not in c["links"] and "pe_today" in c["links"]
+    assert c["code_ticks"]["vs_history"] == "unknown"
