@@ -27,6 +27,7 @@ import re
 import openpyxl
 
 import xlcharts
+from modeldata import is_total_return
 from xledit import add_cf, add_merges, arrow, drawing_part, put_anchors, set_cells, textbox
 from xlsx import CT, Package, Sheet, Styles, colname, colnum, comments_parts, esc, vml_blocks
 
@@ -1030,7 +1031,7 @@ def _stock_col(pkg, ss):
     cells = _cells(pkg.text(_sheet_part(pkg, "Px Data")), ss)
     for ref, v in sorted(cells.items(), key=lambda kv: colnum(re.match(r"[A-Z]+", kv[0]).group(0))):
         m = re.match(r"([A-Z]+)4$", ref)
-        if m and isinstance(v, str) and v.endswith("total return (dividends in)"):
+        if m and is_total_return(v):
             return m.group(1)
     return "B"
 

@@ -62,3 +62,34 @@ def test_cached_value_used_when_evaluator_cannot_calculate():
     assert _number(ERR, 12.5) == 12.5
     assert _number(3, 12.5) == 3
     assert _number(ERR, "x") is None
+
+
+def _px(tmp_path, headers, row):
+    # a throwaway Px Data tab: title, note, blank, headers in row 4, one day of data in row 5
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Px Data"
+    ws["A1"] = "title"
+    for i, h in enumerate(headers):
+        ws.cell(row=4, column=i + 1, value=h)
+    for i, v in enumerate(row):
+        ws.cell(row=5, column=i + 1, value=v)
+    p = str(tmp_path / "m.xlsx")
+    wb.save(p)
+    return p
+
+
+def test_price_from_tab_reads_the_total_return_column_when_there_is_one(tmp_path):
+    # Yahoo-era Px Data: B is the traded price, D the total return. The driver math compares the stock with SPY (a
+    # total return), so it must read D, or a dividend payer looks worse than it did every year.
+    p = _px(tmp_path, ["Date", "ABT close", "SPY close", " ABT total return (dividends in) ", "ABT daily return"],
+            [datetime.datetime(2024, 1, 2), 100.0, 470.1, 104.0, None])
+    assert price_from_tab(p) == [("2024-01-02", 104.0, 470.1)]
+
+
+def test_price_from_tab_reads_column_b_on_models_without_a_total_return_column(tmp_path):
+    # older stooq models: B is already dividend-adjusted and D is the daily return
+    p = _px(tmp_path, ["Date", "DXCM close", "SPY close", "DXCM daily return"],
+            [datetime.datetime(2024, 1, 2), 100.0, 470.1, 0.01])
+    assert price_from_tab(p) == [("2024-01-02", 100.0, 470.1)]

@@ -1,4 +1,4 @@
-import csv, os
+import csv, os, re
 
 import handoff
 from handoff import _auto_axis, guide_paths, _table_rows
@@ -98,3 +98,36 @@ def test_stock_returns_read_column_b_on_models_without_a_total_return_column(tmp
     p = _px_model(tmp_path, ["Date", "DXCM close", "SPY close", "DXCM daily return"])
     pkg = Package(p)
     assert handoff._stock_col(pkg, handoff._strings(pkg)) == "B"
+
+
+def test_stock_col_ignores_stray_spaces_in_the_header(tmp_path):
+    from xlsx import Package
+    p = _px_model(tmp_path, ["Date", "ABT close", "SPY close", " ABT total return (dividends in) "])
+    pkg = Package(p)
+    assert handoff._stock_col(pkg, handoff._strings(pkg)) == "D"
+
+
+def test_stock_blocks_read_the_stock_from_the_column_they_are_given(tmp_path):
+    # _stock_col picks D on Yahoo-era models; every stock lookup in the blocks (yearly returns, Total, the moves with
+    # no company event) must then read D, never the traded price in B. SPY stays C.
+    import openpyxl
+    from xlsx import Package, Styles
+    wb = openpyxl.Workbook()
+    wb.active.title = "Idio Chart"
+    wb.active["A1"] = handoff.MARK              # the block starts at its marker (no drawing needed)
+    wb.create_sheet("Px Data")
+    p = str(tmp_path / "m.xlsx")
+    wb.save(p)
+    pkg = Package(p)
+    st = Styles(pkg.text("xl/styles.xml"))
+    part = handoff._sheet_part(pkg, "Idio Chart")
+    H = {"returns_years": [2023, 2024], "stock_col": "D",
+         "no_event_moves": [{"from": "2024-03-01", "to": "2024-03-08", "what": "no news"}]}
+    handoff.stock_blocks(pkg, st, part, H, "ABT", None)
+    fs = dict(re.findall(r'<c r="([A-Z]+\d+)"[^>]*><f>(.*?)</f>', pkg.text(part)))
+    stock = [f for r, f in fs.items() if r.startswith("B") and "LOOKUP" in f]          # 2 years + Total
+    stock += [f for r, f in fs.items() if r.startswith("C") and "LOOKUP(B" in f]       # the move with no event
+    assert len(stock) == 4, fs
+    for f in stock:
+        assert "$D$5:$D$20000" in f and "$B$5" not in f, f
+    assert any(r.startswith("C") and "$C$5:$C$20000" in f for r, f in fs.items())     # SPY still reads C
