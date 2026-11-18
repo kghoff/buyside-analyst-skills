@@ -82,17 +82,24 @@ def rows_summary(rows):
     return "\n".join(lines) + "\n"
 
 
+def is_total_return(header):
+    """Px Data's stock total-return header ('ABT total return (dividends in)'), on models built since the Yahoo switch.
+    Shared with handoff.py: both read the stock's return from that column, else from B (older stooq models)."""
+    return isinstance(header, str) and header.strip().endswith("total return (dividends in)")
+
+
 def price_from_tab(path):
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     if "Px Data" not in wb.sheetnames:
         return None
-    out, started = [], False
+    out, started, sc = [], False, 1
     for row in wb["Px Data"].iter_rows(values_only=True):
         row = tuple(row) + (None, None, None)
         if not started:
             started = row[0] == "Date"
+            sc = next((i for i, h in enumerate(row) if is_total_return(h)), 1) if started else 1   # leftmost, else B
             continue
-        d, px, spy = row[:3]
+        d, px, spy = row[0], row[sc] if sc < len(row) else None, row[2]
         if isinstance(d, (datetime.date, datetime.datetime)) and isinstance(px, (int, float)):
             day = d.date() if isinstance(d, datetime.datetime) else d
             out.append((day.isoformat(), px, spy if isinstance(spy, (int, float)) else None))
@@ -100,8 +107,11 @@ def price_from_tab(path):
 
 
 def _stooq(path):
+    """Total-return prices: Adj Close when the file has it (Yahoo, dividends in), else Close (stooq, already adjusted)."""
     with open(path, newline="") as f:
-        return {r["Date"]: float(r["Close"]) for r in csv.DictReader(f) if r.get("Close")}
+        rows = list(csv.DictReader(f))
+    col = "Adj Close" if rows and "Adj Close" in rows[0] else "Close"
+    return {r["Date"]: float(r[col]) for r in rows if r.get(col)}
 
 
 def price_from_csv(folder, ticker):

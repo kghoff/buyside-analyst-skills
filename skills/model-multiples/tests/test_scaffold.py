@@ -13,3 +13,12 @@ def test_fixtures_present():
 
 def test_helpers_import():
     import lo, modmap, notebox, prices, xlsx  # noqa: F401
+
+
+def test_price_fetch_copies_match_model_price_history():
+    # House rule: shared helpers are copies; a drifted copy would fetch peers differently from the subject.
+    import filecmp
+    here = os.path.join(os.path.dirname(__file__), "..", "scripts")
+    there = os.path.join(os.path.dirname(__file__), "..", "..", "model-price-history", "scripts")
+    for f in ("pricecsv.mjs", "fetch_prices.mjs"):
+        assert filecmp.cmp(os.path.join(here, f), os.path.join(there, f), shallow=False), f

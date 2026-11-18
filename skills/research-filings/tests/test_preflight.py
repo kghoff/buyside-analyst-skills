@@ -30,12 +30,12 @@ def test_missing_model_stops_and_names_the_model_skills(tmp_path):
     assert any(m["what"] == "model" and "/model-historicals" in m["fix"] for m in r["missing"])
 
 
-def test_missing_price_asks_for_stooq_csvs_in_price_data(tmp_path):
+def test_missing_price_points_to_model_price_history(tmp_path):
     src = research(tmp_path)
     make_model(str(src / "TEST_model.xlsx"))
     r = check("TEST", home=str(tmp_path))
     fix = next(m["fix"] for m in r["missing"] if m["what"] == "price history")
-    assert "stooq" in fix and os.path.join(str(src), "Price Data") in fix
+    assert "/model-price-history" in fix and "stooq" not in fix and os.path.join(str(src), "Price Data") in fix
 
 
 def test_price_csvs_in_price_data_are_found(tmp_path):

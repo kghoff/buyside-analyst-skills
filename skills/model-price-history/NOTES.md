@@ -9,7 +9,8 @@ golden reference model, a copy of which lives at `tests/fixtures/dxcm/reference_
 |---|---|
 | `modmap.py` | MOD period columns + rows by label (role → ordered patterns; the DXCM example labels and /model-ratios's) |
 | `events.py` | proposes release dates / events from the gather folder; classifies full results by a diluted-EPS table line |
-| `prices.py` | finds + checks the stooq CSVs, copies them to `<model>/Price Data/` |
+| `fetch_prices.mjs`, `pricecsv.mjs` | Yahoo daily history per ticker into `<model>/Price Data/` as stooq-format CSVs plus Adj Close |
+| `prices.py` | finds + checks the price CSVs (Yahoo or stooq), copies them to `<model>/Price Data/` |
 | `engine.py` | pandas prototype: every number, and the layout decisions (start rows, block lengths, years) |
 | `xlsx.py` | raw-XML package editing: add/remove tabs with drawings/charts/comments, append styles |
 | `build.py` | writes the three tabs (formulas), fills chart templates from `assets/` |
@@ -102,3 +103,26 @@ prices.py's fill / stale checks are not exercised by them.
 - **Stale `<dimension>`** in the model hid MOD rows below 469 from read-only readers, so `modmap` picked the leverage
   section's FCF helper row; fixed at the source in safe_save (see model-historicals NOTES).
 
+## Yahoo prices (2026-11-18)
+
+- **Why**: stooq's only Close is adjusted for dividends as well as splits (ABT: 0.81x the traded price in Jan 2016,
+  0.89x in Jan 2021). One series was doing two jobs, so a dividend payer's historical P/E ran low. Yahoo gives both.
+- **Two series**: Close (traded price, split-adjusted) feeds P/E, the price chart and the monthly close; Adj Close
+  (dividends in) feeds every return: daily return, beta, idio, the weekly close and the 3-factor alpha. SPY, the
+  sector ETF and MTUM use Adj Close (they are returns only). `engine.load_tr` falls back to Close when a file has no
+  Adj Close.
+- **Column D**: Px Data adds "<T> total return (dividends in)" at D, after "SPY close"; the daily return moved to E.
+  A, B and C are frozen: research-filings `handoff.py` reads A-C by letter (C = SPY) and model-dcf reads B. Since
+  B is now the traded price, research-filings picks the stock's return column by the header ending
+  "total return (dividends in)", else B (older models, where B was stooq's dividend-adjusted close).
+- **Headers**: "SPY close" is unchanged (it was already total return on stooq; its note says dividends in). The factor
+  headers read "<ETF> close (dividends in)", not "(stooq adj.)"; handoff.py's `SECTOR_HDR` accepts both.
+  The A2 line and the D4 note say which source the closes came from.
+- **One source per run**: `prices.py` stops (a `problems` line) when the files mix Yahoo and stooq, or when Adj Close
+  is missing, above Close, or differs from Close on the last day. Mixed series would put the stock's returns and the
+  factors on different dividend treatments.
+- **Fallback**: `fetch_prices.mjs` exits 1 when Yahoo fails for any ticker (one try plus one retry, no loops). The
+  skill deletes that run's Yahoo files and asks for all four from stooq, telling the user P/E history runs low for a
+  dividend payer. model-multiples keeps copies of the two .mjs files (its test fails if they drift).
+- **Tests**: `test_refresh.py` pins the returns to column D by formula (the fixtures pay no dividend, so the values
+  of B and D are equal and only the formulas show which one a return reads).

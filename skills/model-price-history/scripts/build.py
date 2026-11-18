@@ -78,7 +78,8 @@ def prepare(model, work):
     full = {q: pd.Timestamp(E["full"][q]["date"]) for q in actual}
     events = [{**e, "date": pd.Timestamp(e["date"])} for e in E["events"]]
     files = {k: P["files"][k]["path"] for k in ("stock", "spy", "etf", "mom")}
-    prices = {k: engine.load_close(p) for k, p in files.items()}
+    prices = {"stock": engine.load_close(files["stock"]), "stock_tr": engine.load_tr(files["stock"]),
+              **{k: engine.load_tr(files[k]) for k in ("spy", "etf", "mom")}}
     run = engine.run(cfg, prices, mod, full, events)
     return {"C": C, "E": E, "P": P, "mod": mod, "cfg": cfg, "run": run, "files": files,
             "tick": {k: P["files"][k]["ticker"].upper() for k in files}}
@@ -93,7 +94,7 @@ def px_data_layout(okeys):
         for n in names:
             L[n] = colname(c); c += 1
         c += 1                                                  # one empty column between blocks
-    take(["date", "close", "spy", "ret", "spy_ret", "beta", "idio", "event"] + [f"ov_{k}" for k in okeys]
+    take(["date", "close", "spy", "tr", "ret", "spy_ret", "beta", "idio", "event"] + [f"ov_{k}" for k in okeys]
          + ["ttm_eps", "pe"])
     take(["m_date", "m_close", "m_pe", "m_ttm_eps"])
     take(["a_fy", "a_fcf", "a_bb", "a_pe", "a_n"])
@@ -101,6 +102,18 @@ def px_data_layout(okeys):
     take(["w_date", "w_close", "w_spy", "w_etf", "w_mom", "w_ret", "w_spy_ret", "w_ind_x", "w_mom_x", "w_end",
           "w_b_mkt", "w_b_ind", "w_b_mom", "w_r2", "w_idio3", "w_idx3", "w_pct3"] + [f"w_ov_{k}" for k in okeys])
     return L
+
+
+def price_notes(T, src):
+    """Px Data's A2 clause and the total-return column's note, by price source: only Yahoo has a traded price (Close)
+    beside a dividends-in series (Adj Close); stooq's one Close is already dividend-adjusted."""
+    feeds = " Feeds the daily and weekly returns, beta, idio and alpha."
+    if src == "yahoo":
+        return {"a2": f"{T} close = traded price for P/E; total-return columns include dividends",
+                "tr": "Adj Close: dividends reinvested." + feeds}
+    return {"a2": f"stooq closes are dividend-adjusted, so P/E history runs low for a dividend payer; total-return "
+                  "columns include dividends",
+            "tr": "stooq Close, already dividend-adjusted." + feeds}
 
 
 def px_events_layout(okeys):
@@ -266,20 +279,23 @@ def build(model, work, out, replace=False, refresh=False):
     pdx = Sheet(); pdx.freeze = "D5"
     first_file = os.path.basename(S["files"]["stock"])
     pdx.set("A1", "s", f"{T} and SPY daily closes, returns, rolling β, idiosyncratic (alpha) return and P/E", sty["title"])
-    pdx.set("A2", "s", f"Closes: stooq daily files {first_file} / {os.path.basename(S['files']['spy'])} (adjusted for "
-                       f"splits and dividends, so SPY = total return). The first 252 rows are a warm-up for the first "
+    src_of = lambda k: S["P"]["files"][k].get("source", "stooq")
+    pdx.set("A2", "s", f"Closes: {'Yahoo' if src_of('stock') == 'yahoo' else 'stooq'} daily files {first_file} / "
+                       f"{os.path.basename(S['files']['spy'])} ({price_notes(T, src_of('stock'))['a2']}). The first 252 rows are a warm-up for the first "
                        f"252-day β. Index base = {dates[b].date()}. Point-in-time columns use the latest full-results "
                        "release dated before each day.", sty["note"])
-    hd = {"date": "Date", "close": f"{T} close", "spy": "SPY close", "ret": f"{T} daily return",
+    hd = {"date": "Date", "close": f"{T} close", "spy": "SPY close", "tr": f"{T} total return (dividends in)",
+          "ret": f"{T} daily return",
           "spy_ret": "SPY daily return", "beta": "β (252d, through prior day)", "idio": f"Idio return  ({T} − β×SPY)",
           "event": "Event (reaction day)", **{f"ov_{k}": ov_name[k] for k in okeys},
           "ttm_eps": f"TTM {epsb} EPS", "pe": f"P/E (TTM {epsb})",
           "m_date": "Month-end", "m_close": "Close", "m_pe": f"P/E (TTM {epsb})",
           "m_ttm_eps": f"TTM EPS ({epsb})", "a_fy": "Fiscal year", "a_fcf": "Free cash flow ($M)",
           "a_bb": "Net share repurchases ($M; negative = net issuance)", "a_pe": f"Avg P/E (TTM {epsb}, month-ends)",
-          "a_n": "# month-ends in P/E avg", "f_etf": f"{ETF} close (stooq adj.)", "f_mom": f"{MOM} close (stooq adj.)",
+          "a_n": "# month-ends in P/E avg", "f_etf": f"{ETF} close (dividends in)", "f_mom": f"{MOM} close (dividends in)",
           "f_spy_ret": "SPY daily return", "f_ind_x": f"{ind.capitalize()} excess daily return  ({ETF} − SPY)",
-          "f_mom_x": f"Momentum excess daily return  ({MOM} − SPY)", "w_date": "Week-end", "w_close": f"{T} close",
+          "f_mom_x": f"Momentum excess daily return  ({MOM} − SPY)", "w_date": "Week-end",
+          "w_close": f"{T} total return (dividends in)",
           "w_spy": "SPY close", "w_etf": f"{ETF} close", "w_mom": f"{MOM} close", "w_ret": f"{T} weekly return",
           "w_spy_ret": "SPY weekly return", "w_ind_x": f"{ind.capitalize()} excess weekly return  ({ETF} − SPY)",
           "w_mom_x": f"Momentum excess weekly return  ({MOM} − SPY)",
@@ -292,10 +308,15 @@ def build(model, work, out, replace=False, refresh=False):
         pdx.widths[colnum(DL[k])] = 12
     pdx.widths[1] = 11; pdx.widths[colnum(DL["event"])] = 28
     pdx.heights[4] = 51
-    sfile = lambda k: (f"Source: {os.path.basename(S['files'][k])} from stooq.com (split- and dividend-adjusted "
-                       f"closes), file dated {S['P']['files'][k].get('downloaded', '?')}.")
-    pdx.comments[f"{DL['close']}4"] = sfile("stock")
-    pdx.comments[f"{DL['spy']}4"] = sfile("spy") + " Dividend-adjusted, so returns are total returns."
+    sfile = lambda k: (f"Source: {os.path.basename(S['files'][k])} from "
+                       + ("Yahoo Finance (Close = traded price, split-adjusted; Adj Close = dividends in)"
+                          if src_of(k) == "yahoo" else "stooq.com (split- and dividend-adjusted closes only)")
+                       + f", file dated {S['P']['files'][k].get('downloaded', '?')}.")
+    pdx.comments[f"{DL['close']}4"] = sfile("stock") + ("" if src_of("stock") == "yahoo" else
+        " stooq has no unadjusted price: P/E history runs low if the company paid dividends.")
+    pdx.comments[f"{DL['tr']}4"] = sfile("stock") + " " + price_notes(T, src_of("stock"))["tr"]
+    pdx.comments[f"{DL['spy']}4"] = sfile("spy") + (" C = Adj Close (dividends in), so returns are total returns." if src_of("spy") == "yahoo"
+                                          else " Dividend-adjusted, so returns are total returns.")
     pdx.comments[f"{DL['beta']}4"] = (f"SLOPE of {T} daily returns on SPY daily returns over the previous 252 trading "
                                       "days (~1 year), ending the day before, so today's move never feeds today's β.")
     pdx.comments[f"{DL['ov_' + okeys[0]]}4"] = ("Steps on the trading day after each full-results release, so the line "
@@ -317,8 +338,9 @@ def build(model, work, out, replace=False, refresh=False):
         pdx.set(f"{D_['date']}{r}", "d", serial(dates[i]), sty["in_date"])
         pdx.set(f"{D_['close']}{r}", "n", round(float(px[i]), 6), sty["in_num"])
         pdx.set(f"{D_['spy']}{r}", "n", round(float(sp[i]), 6), sty["in_num"])
+        pdx.set(f"{D_['tr']}{r}", "n", round(float(run['tr'][i]), 6), sty["in_num"])
         if i:
-            pdx.set(f"{D_['ret']}{r}", "f", f"{D_['close']}{r}/{D_['close']}{r - 1}-1", sty["grey_pct2" if warm else "pct2"])
+            pdx.set(f"{D_['ret']}{r}", "f", f"{D_['tr']}{r}/{D_['tr']}{r - 1}-1", sty["grey_pct2" if warm else "pct2"])
             pdx.set(f"{D_['spy_ret']}{r}", "f", f"{D_['spy']}{r}/{D_['spy']}{r - 1}-1", sty["grey_pct2" if warm else "pct2"])
             pdx.set(f"{D_['f_spy_ret']}{r}", "f", f"{D_['spy']}{r}/{D_['spy']}{r - 1}-1", sty["pct2"])
             for key, src in (("f_ind_x", "f_etf"), ("f_mom_x", "f_mom")):
@@ -384,7 +406,7 @@ def build(model, work, out, replace=False, refresh=False):
     W = run["weekly"]
     WN = 4 + len(W["date"])
     fl = lambda k: ", ".join(d.date().isoformat() for d in fills[k]) or "none"
-    pdx.set(f"{D_['f_etf']}2", "s", f"FACTOR PRICES — stooq split/dividend-adjusted closes, pasted as values. If stooq has "
+    pdx.set(f"{D_['f_etf']}2", "s", f"FACTOR PRICES — dividend-adjusted closes, pasted as values. If the file has "
                                     f"no price for a date, the prior day's close is used ({ETF}: {fl('etf')}; {MOM}: "
                                     f"{fl('mom')}). {ETF} history starts {run['first']['etf'].date()}; {MOM} "
                                     f"{run['first']['mom'].date()}.", sty["note"])
@@ -403,7 +425,7 @@ def build(model, work, out, replace=False, refresh=False):
             f"({D_['w_date']}{r - 1}+14-WEEKDAY({D_['w_date']}{r - 1},16))"
         pdx.set(wd, "f", f'_xlfn.MAXIFS({A_},{A_},"<="&{lim})', sty["date"])
         mt = f"MATCH({wd},{A_},0)"
-        for key, src in (("w_close", "close"), ("w_spy", "spy"), ("w_etf", "f_etf"), ("w_mom", "f_mom")):
+        for key, src in (("w_close", "tr"), ("w_spy", "spy"), ("w_etf", "f_etf"), ("w_mom", "f_mom")):
             pdx.set(f"{D_[key]}{r}", "f", f"INDEX({rng(src)},{mt})", sty["eps"])
         for k in okeys:
             # IF(ISNUMBER(..)): a week-end on the index base date points at a blank daily cell, which INDEX reads as 0

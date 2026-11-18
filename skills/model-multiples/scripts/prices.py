@@ -1,4 +1,6 @@
 """(Copied from model-price-history, Nov 2026; trimmed to find/check plus a core-peer CLI. Keep find/check in sync.)
+Multiples deliberately reads Close only (P/E uses the traded price) and skips the Adj Close / source checks that
+model-price-history's copy has.
 
 usage: python3 prices.py --model M.xlsx --tickers ABT MDT ... [--src DIR]
 Looks for <ticker>_us_d.csv in: the model's folder, its "Price Data" subfolder, --src and ~/Downloads (newest wins).

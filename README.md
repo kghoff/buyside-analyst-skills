@@ -38,7 +38,7 @@ report.
 | 2 | model-historicals | Builds the historical model | collect-documents (runs it if missing) | 10-year quarterly + annual income statement, balance sheet, cash flow (MOD tab) |
 | 3 | model-ratios | Analyzes the historicals | model-historicals | Growth, margins, ROIC / ROE / ROA, leverage, cash conversion, FCF inside MOD |
 | 4 | model-kpis | Backfills non-GAAP and company KPIs | model-ratios | Non-GAAP reconciliations and company-specific operating metrics |
-| 5 | model-price-history | Ties the stock price to fundamentals | model-kpis | Px Data, Px Events, Idio Chart tabs |
+| 5 | model-price-history | Ties the stock price to fundamentals | model-kpis | Px Data, Px Events, Idio Chart tabs (daily prices from Yahoo) |
 | 6 | research-filings | Researches the company from its own documents only | steps 1-5 | PDF report; key drivers; recommended forecast structure; Filings Charts tab |
 | 7 | research-street | Compares outside views with the company's claims | research-filings | PDF report on where the sell-side and investors differ, and why |
 | 8 | model-forecast | Builds the forecast from the key drivers | research-filings (research-street if done) | Driver-based quarterly 3-statement forecast in MOD (you approve the plan first) |
@@ -85,8 +85,8 @@ Commands are `/buyside:<skill> TICKER`, e.g. `/buyside:collect-documents DXCM`.
 ### One-time setup
 
 1. Python packages: `pip install -r requirements.txt`
-2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus` and
-   `skills/model-short` in the installed plugin folder (`/plugin` shows where it is).
+2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus`,
+   `skills/model-short`, `skills/model-price-history` and `skills/model-multiples` in the installed plugin folder (`/plugin` shows where it is).
 3. LibreOffice (recalculates and renders the workbooks): `brew install --cask libreoffice`
 4. PDF, OCR and report tools: `brew install poppler tesseract pango` (pango is needed by WeasyPrint)
 5. Google Chrome, used to save web pages as PDFs.
@@ -114,7 +114,7 @@ One ticker through the chain. Each skill tells you what it decided when it finis
 | 2 | `/buyside:model-historicals TICKER` | Only if the company changed its business segments (how to handle the recast) |
 | 3 | `/buyside:model-ratios TICKER` | Only if the analysis is already there (replace it?) |
 | 4 | `/buyside:model-kpis TICKER` | Only if the sections are already there (rebuild?) |
-| 5 | `/buyside:model-price-history TICKER` | GAAP or non-GAAP margins for the overlays; then waits while you download the free price files from stooq |
+| 5 | `/buyside:model-price-history TICKER` | GAAP or non-GAAP margins for the overlays. Prices download from Yahoo; only if Yahoo fails does it wait while you download the free price files from stooq |
 | 6 | `/buyside:research-filings TICKER` | The as-of date and any notes or questions you have; at the end, whether to run model-forecast |
 | 7 | `/buyside:research-street TICKER` | The as-of date and your notes or questions |
 | 8 | `/buyside:model-forecast TICKER` | Your notes for the forecast; then your approval of the forecast plan |
