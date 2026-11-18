@@ -45,6 +45,7 @@ report.
 | 9 | model-dcf | Values the company | model-forecast, model-price-history | 30-year key-driver DCF and reverse DCF; you own the inputs |
 | 10 | model-multiples | Shows where the stock trades | model-forecast | Multiples tab: history, vs S&P, vs peers, ranges, reverse P/E, forward table, comp sheet |
 | 11 | model-valuation | Says what it's worth and whether the setup is worth owning | model-dcf, model-multiples | Valuation tab: 1-3 multiples with reasons, 12-month R/R per multiple and blended, R/R ladder, 3-year IRR and the 3 R's, DCF bear / base / bull from an agent-run reverse DCF, probability tree; valuation note |
+| 12 | model-short | Checks whether there's a short, and what kind | model-valuation | Short Check tab: FEV scorecard with code and agent ticks, short type and alpha bucket, verdict against a fixed rule, subpar-algorithm IRR wedge, risk case and R/R, print move, short interest, borrow drag, VaR max position; short note |
 | – | model-industry | Builds the industry view (optional) | the model; research-filings | Industry P&L and Industry Comparison tabs from public peers |
 | – | model-consensus | Tracks the Street (optional) | the model; research-street | Broker ratings, targets, estimates, rating history, consensus snapshots |
 
@@ -83,8 +84,8 @@ Commands are `/buyside:<skill> TICKER`, e.g. `/buyside:collect-documents DXCM`.
 ### One-time setup
 
 1. Python packages: `pip install -r requirements.txt`
-2. Node packages: run `npm install` inside `skills/collect-documents` and `skills/model-consensus` in the installed
-   plugin folder (`/plugin` shows where it is).
+2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus` and
+   `skills/model-short` in the installed plugin folder (`/plugin` shows where it is).
 3. LibreOffice (recalculates and renders the workbooks): `brew install --cask libreoffice`
 4. PDF, OCR and report tools: `brew install poppler tesseract pango` (pango is needed by WeasyPrint)
 5. Google Chrome, used to save web pages as PDFs.
@@ -119,6 +120,7 @@ One ticker through the chain. Each skill tells you what it decided when it finis
 | 9 | `/buyside:model-dcf TICKER` | Nothing. Fill in the yellow input cells yourself. |
 | 10 | `/buyside:model-multiples TICKER` | How you get peer and market data (free or paid); which comps to use |
 | 11 | `/buyside:model-valuation TICKER` | Nothing. The agent's choices are yellow cells you own; change any and a rerun keeps it. |
+| 12 | `/buyside:model-short TICKER` | Your prime broker's borrow rate if you know it. The agent's choices are yellow cells you own. |
 | opt | `/buyside:model-industry TICKER` | Which peers to include |
 | opt | `/buyside:model-consensus TICKER` | Nothing; rerun after each earnings print |
 
