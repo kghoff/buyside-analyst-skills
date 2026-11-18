@@ -29,8 +29,11 @@ Skills and agents are named here without a prefix. Installed as a plugin, Claude
 2. `python3 "$SK/modmap.py" --model "$M"`. It prints the MOD rows found by label. Check each `label` is the row
    the handoff means (income-statement revenue, not a segment total; FCF from the FREE CASH FLOW section). If a role
    is missing or wrong, add a pattern to `ROLES` in `modmap.py` and say so in the report. Never use row numbers.
-3. If the model already has `Idio Chart`, `Px Events` or `Px Data`, **ask the user** before going on (AskUserQuestion).
-   Rebuilding replaces all three tabs, **including any text boxes, arrows or notes they added there**. Name them.
+3. If the model already has `Idio Chart`, `Px Events` and `Px Data`, this is a **refresh** (new prices after a print
+   or when the price is stale): follow Steps 2-4 as usual (reuse `$W/price_history.json` if it exists instead of asking
+   Step 3 again), then **Step 5R** instead of Step 5. A refresh keeps the user's own shapes and typed notes and the
+   /research-filings annotations. Offer a plain rebuild (Step 5 with `--replace`) only if the user asks for one, and
+   then name what it deletes: their text boxes, arrows and notes on those tabs.
 
 ## Step 2: Events
 
@@ -114,6 +117,32 @@ which and ask again. Read every `notes` line:
 6. Before writing, run `shasum "$M"` again. If it changed, the user edited the model meanwhile: **stop**, re-run from
    step 2 on the new file. Never overwrite their edits. Otherwise `cp "$W/built.xlsx" "$M"`, then confirm with
    `python3 -c "import openpyxl;print(openpyxl.load_workbook('$M',read_only=True).sheetnames)"`.
+
+## Step 5R: Refresh (the three tabs exist)
+`H=<research_dir>/<T>/Filings Research/_work/model_handoff.json` (may not exist), `SRC` as in Step 1.
+1. Lock file and `shasum "$M"` as in Step 5.
+2. `python3 "$SK/refresh.py" extract --model "$M" --work "$W" --handoff "$H"`. It lists the user's shapes it will carry
+   (not the build's four charts; not /research-filings' 'P1 ...' notes when `$H` exists, since handoff.py redraws
+   those by date), anything it can't carry (a chart or linked object of their own: tell them to redraw it), the typed
+   notes, and the tabs' positions.
+3. `python3 "$SK/build.py" --model "$M" --work "$W" --out "$W/built.xlsx" --refresh`.
+4. `python3 "$SK/refresh.py" restore --model "$M" --built "$W/built.xlsx" --work "$W" --out "$W/carried.xlsx"`.
+   Exit 3 = another tab reads something that moved (a column whose header changed, or a row that no longer holds the
+   same date or event): show the user the `stops` and stop; nothing is written. `reference_warnings` (a range that
+   ends above the new last row, so it misses the new days) go in the report.
+5. If `$H` exists: `python3 "$SKILLS/research-filings/scripts/handoff.py" --src "$SRC" --model "$W/carried.xlsx"
+   --out "$W/final.xlsx" --idio-only` (redraws the research notes on the new axis, fills empty note cells, rewrites
+   the yearly-returns block; Filings Charts is not touched). If it stops (e.g. MOD rows moved), tell the user and use
+   `carried.xlsx` as final: the research notes are then missing until /research-filings reruns; say so. No `$H`:
+   `carried.xlsx` is final (refresh carried the 'P1' notes as they were).
+6. `python3 "$SK/verify.py" --before "$M" --built "$W/final.xlsx" --work "$W" --refresh`: must say PASS, including
+   "your shapes carried back unchanged: N of N". Look at `$W/idio_chart.png` as in Step 5.
+7. `shasum "$M"` again; unchanged = `cp "$W/final.xlsx" "$M"`. Delete `built.xlsx`, `carried.xlsx`, `final.xlsx`.
+8. Report as Step 6, plus: shapes carried, notes placed and any not placed (their day left the Top-20 table or the
+   event is gone: quote them so the user can re-add them), what refresh could not carry, the reference warnings, and
+   that each carried shape sits in the same cells as before, so over a much longer axis it drifts left of its date
+   (two weeks ~0.4%, a year ~9% of the chart width). Then: rerun /model-dcf (refreshes the reverse-DCF snapshot) and
+   /model-multiples (rebuilds the history on the new weeks), then /model-valuation.
 
 ## Step 6: Report
 

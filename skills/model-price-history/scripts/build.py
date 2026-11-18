@@ -1,9 +1,10 @@
 """Write the Px Data, Px Events and Idio Chart tabs into a copy of the user's model (raw XML; nothing else changes).
 
-usage: python3 build.py --model M.xlsx --work W --out OUT.xlsx [--replace]
+usage: python3 build.py --model M.xlsx --work W --out OUT.xlsx [--replace | --refresh]
 Reads W/price_history.json (the user's choices), W/events.json (reviewed event list) and W/prices.json (from prices.py).
 Exit 2: the model already has one of the three tabs (rerun with --replace after the user says yes).
 Exit 3: another tab has formulas pointing into the tabs --replace would delete (named in the output).
+--refresh: replace without that stop; refresh.py restore checks each reference reads the same thing (SKILL Step 5R).
 Every number lives in an Excel formula (so the user can click into it) except typed inputs: prices, dates, labels.
 Layout (lean; the user 2026-11-08 dropped the orphaned columns): see `px_data_layout`."""
 import argparse
@@ -113,7 +114,7 @@ def px_events_layout(okeys):
 
 
 # ------------------------------------------------------------------ the three tabs
-def build(model, work, out, replace=False):
+def build(model, work, out, replace=False, refresh=False):
     S = prepare(model, work)
     C, E, mod, cfg, run, tick = S["C"], S["E"], S["mod"], S["cfg"], S["run"], S["tick"]
     T = C["ticker"].upper()
@@ -129,6 +130,7 @@ def build(model, work, out, replace=False):
 
     pkg = Package(model)
     present = [n for n, *_ in pkg.sheets() if n in TABS]
+    replace = replace or refresh
     if present and not replace:
         print(json.dumps({"status": "exists", "tabs": present}))
         raise SystemExit(2)
@@ -141,7 +143,7 @@ def build(model, work, out, replace=False):
             for t in TABS:
                 for m in re.finditer(rf"<c r=\"([A-Z]+\d+)\"[^>]*>(?:<f[^>]*>([^<]*'?{re.escape(t)}'?![^<]*)</f>)", x):
                     refs.append(f"{name}!{m.group(1)} -> {t}")
-        if refs:
+        if refs and not refresh:
             print(json.dumps({"status": "referenced", "cells": refs[:50]}))
             raise SystemExit(3)
         for t in present:
@@ -441,6 +443,10 @@ def build(model, work, out, replace=False):
                       "annotate them and the line's big steps.", sty["note"])
     G = f"'Px Data'!${D_['idio']}${RS}:${D_['idio']}${RN}"
     pxr = lambda key: f"'Px Data'!${D_[key]}${RS}:${D_[key]}${RN}"
+    idio_v = [(v, i) for i, v in enumerate(run["idio"]) if engine.isnum(v)]
+    idio_rows = [[7 + blk * 25 + k, dates[i].date().isoformat()]
+                 for blk, lst in enumerate((sorted(idio_v, reverse=True)[:20], sorted(idio_v)[:20]))
+                 for k, (_, i) in enumerate(lst)]
     for blk, (title, fn, s) in enumerate((("Top 20 UP days", "LARGE", "up"), ("Top 20 DOWN days", "SMALL", "down"))):
         r0 = 5 + blk * 25
         ic.set(f"V{r0}", "s", title, sty["bold"])
@@ -528,7 +534,10 @@ def build(model, work, out, replace=False):
 
     layout = {"daily": DL, "events": EL, "rows": {"R0": R0, "RB": RB, "RS": RS, "RN": RN, "Q0": Q0, "QN": QN,
                                                    "EV0": EV0, "EVN": EVN, "MN": MN, "AN": AN, "WN": WN},
-              "axis": {"price": [lo_p, hi_p], "alpha": [lo_a, hi_a]}}
+              "axis": {"price": [lo_p, hi_p], "alpha": [lo_a, hi_a]},
+              # the note tables' rows and keys (refresh.py puts carried notes back by these)
+              "idio_rows": idio_rows, "event_rows": [[EV0 + k, e["date"].date().isoformat(), e["name"]]
+                                                     for k, e in enumerate(EVS)]}
     json.dump(layout, open(os.path.join(work, "layout.json"), "w"), indent=1)
     return S, layout
 
@@ -590,8 +599,9 @@ if __name__ == "__main__":
     ap.add_argument("--work", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--replace", action="store_true")
+    ap.add_argument("--refresh", action="store_true", help="replace the tabs, keeping the user's additions (refresh.py)")
     a = ap.parse_args()
-    S, layout = build(a.model, a.work, a.out, a.replace)
+    S, layout = build(a.model, a.work, a.out, a.replace, a.refresh)
     run = S["run"]
     print(json.dumps({"status": "built", "out": a.out, "daily_rows": len(run["dates"]),
                       "first": run["dates"][0].date().isoformat(), "base": run["dates"][run["base"]].date().isoformat(),

@@ -1,7 +1,9 @@
 """Check a built workbook: recalculate it in LibreOffice and compare every formula result with the pandas prototype,
 look for Excel errors, prove nothing else in the workbook changed, and render the Idio Chart tab to PNG.
 
-usage: python3 verify.py --before M.xlsx --built OUT.xlsx --work W
+usage: python3 verify.py --before M.xlsx --built OUT.xlsx --work W [--refresh]
+--refresh: BEFORE is the user's model with the old tabs; the tabs keep their places, and every shape carried by
+refresh.py (W/carry.json) must be on the new Idio Chart unchanged.
 Writes W/verify_report.md and W/idio_chart.png. Exit 1 on any failed check.
 LibreOffice draws #N/A as 0 in its render while Excel leaves a gap; that is expected, not a bug."""
 import argparse
@@ -36,6 +38,7 @@ def main():
     ap.add_argument("--before", required=True, help="the model before this skill ran (or with the old tabs removed)")
     ap.add_argument("--built", required=True)
     ap.add_argument("--work", required=True)
+    ap.add_argument("--refresh", action="store_true")
     a = ap.parse_args()
     S = build.prepare(a.built, a.work)
     run, cfg = S["run"], S["cfg"]
@@ -120,7 +123,8 @@ def main():
               if isinstance(v, str) and (v in XL_ERRORS or v.startswith("Err:"))]
 
     before, after = Package(a.before), Package(a.built)
-    keep = {p for p in before.parts}
+    import refresh
+    keep = {p for p in before.parts} - (refresh.tab_parts(before) if a.refresh else set())
     new_tab_parts = set()
     for name, _, _, part in after.sheets():
         if name in build.TABS:
@@ -129,19 +133,28 @@ def main():
     missing = [p for p in keep if p not in ALLOWED and p not in after.parts]
     sheets_before = [s[0] for s in before.sheets()]
     sheets_after = [s[0] for s in after.sheets()]
-    order_ok = sheets_after[:len(sheets_before)] == [s for s in sheets_before if s not in build.TABS]
+    order_ok = (sheets_after == sheets_before if a.refresh else
+                sheets_after[:len(sheets_before)] == [s for s in sheets_before if s not in build.TABS])
+    lost = []
+    if a.refresh:                                   # the user's shapes, each back unchanged (only its id may differ)
+        d = refresh.drawing_of(after, refresh.sheet_parts(after)["Idio Chart"])
+        now = {refresh.strip_id(m.group(0)) for m in refresh.ANCHOR.finditer(after.text(d))}
+        carry = json.load(open(os.path.join(a.work, "carry.json")))
+        lost = [f"shape not carried back: {s['name']}" for s in carry["shapes"] if refresh.strip_id(s["xml"]) not in now]
 
     pdf = lo.render_pdf(calc, os.path.join(a.work, "_render"))
     png = lo.page_png(pdf, sheets_after.index("Idio Chart"), os.path.join(a.work, "idio_chart.png"))
 
-    ok = not fails and not errors and not changed and not missing and order_ok
+    ok = not fails and not errors and not changed and not missing and order_ok and not lost
     rep = [f"# verify: {'PASS' if ok else 'FAIL'}", "",
            f"- {checks:,} values compared with the prototype: {len(fails)} failed",
            f"- Excel errors (other than #N/A) on the three tabs: {len(errors)}",
            f"- other workbook parts changed: {len(changed)}; missing: {len(missing)}",
            f"- tab order: {sheets_after} ({'ok' if order_ok else 'CHANGED'})",
+           *([f"- your shapes carried back unchanged: {len(carry['shapes']) - len(lost)} of {len(carry['shapes'])}"]
+             if a.refresh else []),
            f"- render: {png}", ""]
-    rep += ["## Failures", ""] + [f"- {x}" for x in (fails[:40] + errors[:40] + changed + missing)] if not ok else []
+    rep += ["## Failures", ""] + [f"- {x}" for x in (fails[:40] + errors[:40] + changed + missing + lost)] if not ok else []
     open(os.path.join(a.work, "verify_report.md"), "w").write("\n".join(rep) + "\n")
     print("\n".join(rep))
     raise SystemExit(0 if ok else 1)

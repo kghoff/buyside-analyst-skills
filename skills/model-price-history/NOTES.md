@@ -15,6 +15,7 @@ golden reference model, a copy of which lives at `tests/fixtures/dxcm/reference_
 | `build.py` | writes the three tabs (formulas), fills chart templates from `assets/` |
 | `lo.py` | LibreOffice headless recalc (private profile, always-recalc) and render |
 | `verify.py` | recalc + compare with engine, error scan, byte-identity of every other part, PNG render |
+| `refresh.py` | refresh: carry the user's shapes and notes and the tabs' places across a rebuild; check references |
 
 Raw XML only, never openpyxl load/save on the user's file: openpyxl drops text boxes, shapes, images and OMML and
 re-serializes charts. The DXCM example model has all of these on other tabs.
@@ -39,6 +40,28 @@ re-serializes charts. The DXCM example model has all of these on other tabs.
   everything right of the daily block moved left; other skills read Px Data's A-C by letter and the rest by header.
 - The monthly block starts at the first month-end with a P/E (a leading #N/A draws as 0 in LibreOffice renders).
 - Near break-even, TTM P/E runs into the hundreds (DXCM 2019: 373x on $0.09 TTM EPS). That is the measure, not a bug.
+
+## Refresh (the user, 2026-11-17)
+
+- Why: a rebuild deleted the user's 13 text boxes + 13 arrows on Idio Chart and every typed note, and stopped
+  outright once the DCF and Multiples tabs read Px Data. So refreshing the price after a print cost the annotations.
+- How: rebuild as usual (`build.py --refresh`), then `refresh.py restore` puts back, by what they belong to:
+  - shapes: every Idio Chart drawing that is not the build's 'Chart 1'..'Chart 4' (and not /research-filings'
+    'P1 ...' notes when its handoff file exists), byte for byte, in the same cells; only the drawing id changes;
+  - notes: by date (Idio Chart Top-20) or by event date + name (Px Events), not by row; a note whose day left the
+    table is reported, never dropped quietly;
+  - the three tabs' places in the tab order (a build appends them at the end).
+  Then research-filings' `handoff.py --idio-only` redraws its notes by date on the new axis and rewrites the
+  yearly-returns block, leaving Filings Charts alone.
+- References from other tabs (Multiples / Consensus link single Px Data and Px Events cells by row; DCF, MOD,
+  Research read whole columns or ranges): a single cell must still have the same column header and the same row key
+  (Px Data: the date; Px Events: period, event date, event); a range or column the same header. Anything else stops
+  the refresh (exit 3). A range ending above the new last row is a warning: it misses the new days.
+- Not done: re-placing the user's own shapes by date. In the same cells they drift left of their date as the axis
+  lengthens (two weeks ~0.4% of the width, a year ~9%). handoff.py has the geometry if that is ever wanted.
+- Test: `tests/test_refresh.py` on the reference model (26 user shapes, 3 notes) plus a typed Px Events note, a
+  single-cell link and five extra trading days; the untouched reference (Research reads old column O) must stop.
+  `handoff.py --idio-only` is proven on a copy of the user's DXCM model, not in the suite (no research fixture).
 
 ## Deliberate differences from the reference
 

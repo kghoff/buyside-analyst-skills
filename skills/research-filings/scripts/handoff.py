@@ -1,7 +1,9 @@
 """Filings research -> the user's model: the charts and tables they keep using, written into their workbook.
 
 usage: python3 handoff.py --src <ticker folder> --model <TICKER_model.xlsx> --context      (for the agent, first)
-       python3 handoff.py --src <ticker folder> --model <TICKER_model.xlsx> --out <OUT.xlsx>
+       python3 handoff.py --src <ticker folder> --model <TICKER_model.xlsx> --out <OUT.xlsx> [--idio-only]
+--idio-only: only the Idio Chart and Px Events parts below (for /model-price-history's refresh); Filings Charts is
+left as it is.
 Reads _work/drivers_math.json (config), _work/model_series.csv (the MOD cell of each metric; rerun modeldata.py
 first if MOD rows moved), the readers' guidance.csv files and _work/model_handoff.json (the handoff agent's
 takeaways, eras, annotations, tables; references/handoff_prompt.md). Writes OUT:
@@ -798,6 +800,16 @@ def _overlap(a, b, pad=30000):
 def alpha_series(model, chart_xml):
     """Week-end dates and alpha values the chart plots (its first series), from the workbook's cached values,
     and Excel's automatic value-axis range for them."""
+    ser = re.search(r"<c:ser>.*?</c:ser>", chart_xml, re.S)
+    if ser:                     # the chart's own cache: exactly what it plots (a fresh /model-price-history build has
+        def cache(tag):         # no cached cell values yet, but it writes these)
+            blk = re.search(rf"<c:{tag}>.*?</c:{tag}>", ser.group(0), re.S)
+            return {int(i): float(v) for i, v in re.findall(r'<c:pt idx="(\d+)"><c:v>([^<]*)</c:v>', blk.group(0))} if blk else {}
+        cd, cv = cache("cat"), cache("val")
+        pts = [(dt.date(1899, 12, 30) + dt.timedelta(days=int(cd[i])), cv[i]) for i in sorted(cd) if i in cv]
+        if pts:
+            lo, hi = min(v for _, v in pts), max(v for _, v in pts)
+            return ([p[0] for p in pts], [p[1] for p in pts]), _auto_axis(lo, hi)
     refs = re.findall(r"<c:f>([^<]*)</c:f>", chart_xml)
     cat = next(r for r in refs if ":" in r)
     val = [r for r in refs if ":" in r][1]
@@ -1048,6 +1060,7 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--out")
     ap.add_argument("--context", action="store_true", help="write _work/handoff_context.json for the agent and stop")
+    ap.add_argument("--idio-only", action="store_true", help="leave Filings Charts as it is (price-history refresh)")
     a = ap.parse_args()
     work = _work(a.src)
     if a.context:
@@ -1069,14 +1082,14 @@ def main():
            "black = formulas, blue = typed from company documents (source in the cell note). Takeaways come from the "
            "filings research report.")
     tk = H.get("takeaways", {})
-    built = [name for name, ok in (
+    built = [] if a.idio_only else [name for name, ok in (
         ("fixed vs variable", block_fixed_variable(T, M, cfg, tk.get("fixed_variable"))),
         ("profit bridge", block_profit_bridge(T, M, cfg, tk.get("profit_bridge"))),
         ("price vs volume", block_price_volume(T, M, cfg, tk.get("price_volume")))) if ok]
-    for g in H.get("guidance", []):
+    for g in ([] if a.idio_only else H.get("guidance", [])):
         if block_guidance(T, M, work, g, cfg, tk.get("guidance_" + g["key"]), comments):
             built.append("guidance " + g["key"])
-    for b in H.get("company_blocks", []):
+    for b in ([] if a.idio_only else H.get("company_blocks", [])):
         block_custom(T, M, b)
         built.append(b["title"])
     out = {"tab": TAB, "blocks": built}
@@ -1098,7 +1111,8 @@ def main():
                     "stock_rows_from": start})
     else:
         out["idio"] = "no Idio Chart tab: run /model-price-history first"
-    write_tab(pkg, T, comments)
+    if not a.idio_only:
+        write_tab(pkg, T, comments)
     pkg.put("xl/styles.xml", st.render())
     pkg.finish()
     pkg.save(a.out)

@@ -1,5 +1,6 @@
 import csv, os
 
+import handoff
 from handoff import _auto_axis, guide_paths, _table_rows
 
 
@@ -37,3 +38,15 @@ def test_an_annotation_table_ends_at_its_first_undated_row():
     # the Idio Chart has an up-days table and, below it, a down-days table: each header owns only its own rows
     cells = {"W7": 43000.0, "W8": 43001.0, "V30": "Top 20 DOWN days", "W32": 43100.0}
     assert list(_table_rows(cells, "W", 6)) == [7, 8]
+
+
+def test_alpha_points_come_from_the_charts_own_cache():
+    """A fresh /model-price-history build (its refresh) has formulas with no cached results yet; the chart's own cache
+    holds exactly what it plots, so the research notes can be placed without Excel opening the file first."""
+    xml = ('<c:chart><c:ser><c:cat><c:numRef><c:f>\'Px Data\'!$A$5:$A$6</c:f><c:numCache>'
+           '<c:pt idx="0"><c:v>45658</c:v></c:pt><c:pt idx="1"><c:v>45665</c:v></c:pt></c:numCache></c:numRef></c:cat>'
+           '<c:val><c:numRef><c:f>\'Px Data\'!$B$5:$B$6</c:f><c:numCache>'
+           '<c:pt idx="0"><c:v>0.1</c:v></c:pt><c:pt idx="1"><c:v>0.4</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:chart>')
+    (dates, vals), axis = handoff.alpha_series("no-such-workbook.xlsx", xml)
+    assert [d.isoformat() for d in dates] == ["2025-01-01", "2025-01-08"] and vals == [0.1, 0.4]
+    assert axis == handoff._auto_axis(0.1, 0.4)
