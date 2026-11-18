@@ -26,7 +26,7 @@
   "crowded_line": {"value": 0.10, "anchor": "house", "reason": "House default."},
   "print_miss": {"value": -0.05, "anchor": "house", "reason": "House default."},
   "print_pe_slip": {"value": 1.0, "anchor": "house", "reason": "House default."},
-  "reward_eps": {"value": 3.2, "anchor": "judgment", "reason": "Cut next year's EPS about ten percent for the price cuts the 10-Q describes flowing through."},
+  "reward_eps": {"value": 2.0, "anchor": "judgment", "reason": "Cut next year's EPS by about a third as the 3% price cuts the 10-Q describes flow through."},
   "reward_pe": {"value": 22.0, "anchor": "Multiples!$H$7", "anchor_value": 22.0, "reason": "The five-year median P/E: where the stock trades once the premium fades."},
   "dream_eps": {"value": 4.0, "anchor": "judgment", "reason": "A dream case where price cuts stop and margins expand two more points over a year."},
   "dream_pe": {"value": 40.0, "anchor": "Multiples!$I$7", "anchor_value": 40.0, "reason": "The five-year peak P/E, what a semi-rational bull would pay."},
