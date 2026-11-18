@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Full daily history per ticker from Yahoo into OUT/<ticker>_us_d.csv (stooq's name; columns + Adj Close).
-// One try plus at most one retry after 15s (no loops). A failed ticker writes no file; exit 1 if any failed, so the
-// skill falls back to the stooq pause for the whole run (one source per run).
+// One try plus at most one retry after 15s (no loops). A failed ticker writes no file; exit 1 if any failed; the
+// calling skill decides the fallback.
 // usage: node fetch_prices.mjs OUT TICKER [TICKER ...]
 import fs from 'node:fs';
 import path from 'node:path';

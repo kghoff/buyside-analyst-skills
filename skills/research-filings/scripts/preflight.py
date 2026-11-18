@@ -87,8 +87,8 @@ def check(ticker, src=None, model=None, price=None, home=HOME):
             break
     if not px:
         folder = os.path.join(src or "<source folder>", "Price Data")
-        missing.append({"what": "price history", "fix": f"download daily price CSVs for {t} and SPY from stooq.com "
-                                                        f"({t.lower()}_us_d.csv and spy_us_d.csv) into {folder}"})
+        missing.append({"what": "price history", "fix": f"run /model-price-history (it saves the daily price CSVs "
+                                                        f"{t.lower()}_us_d.csv and spy_us_d.csv, or add a Px Data tab to the model); or put them in {folder}"})
     as_of = None
     if src:
         docs, _, _ = build(src)

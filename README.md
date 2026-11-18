@@ -84,8 +84,8 @@ Commands are `/buyside:<skill> TICKER`, e.g. `/buyside:collect-documents DXCM`.
 ### One-time setup
 
 1. Python packages: `pip install -r requirements.txt`
-2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus` and
-   `skills/model-short` in the installed plugin folder (`/plugin` shows where it is).
+2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus`,
+   `skills/model-short`, `skills/model-price-history` and `skills/model-multiples` in the installed plugin folder (`/plugin` shows where it is).
 3. LibreOffice (recalculates and renders the workbooks): `brew install --cask libreoffice`
 4. PDF, OCR and report tools: `brew install poppler tesseract pango` (pango is needed by WeasyPrint)
 5. Google Chrome, used to save web pages as PDFs.

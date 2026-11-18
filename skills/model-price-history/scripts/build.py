@@ -315,7 +315,8 @@ def build(model, work, out, replace=False, refresh=False):
     pdx.comments[f"{DL['close']}4"] = sfile("stock") + ("" if src_of("stock") == "yahoo" else
         " stooq has no unadjusted price: P/E history runs low if the company paid dividends.")
     pdx.comments[f"{DL['tr']}4"] = sfile("stock") + " " + price_notes(T, src_of("stock"))["tr"]
-    pdx.comments[f"{DL['spy']}4"] = sfile("spy") + " Dividend-adjusted, so returns are total returns."
+    pdx.comments[f"{DL['spy']}4"] = sfile("spy") + (" C = Adj Close (dividends in), so returns are total returns." if src_of("spy") == "yahoo"
+                                          else " Dividend-adjusted, so returns are total returns.")
     pdx.comments[f"{DL['beta']}4"] = (f"SLOPE of {T} daily returns on SPY daily returns over the previous 252 trading "
                                       "days (~1 year), ending the day before, so today's move never feeds today's β.")
     pdx.comments[f"{DL['ov_' + okeys[0]]}4"] = ("Steps on the trading day after each full-results release, so the line "

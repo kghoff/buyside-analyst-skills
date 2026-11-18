@@ -107,8 +107,11 @@ def price_from_tab(path):
 
 
 def _stooq(path):
+    """Total-return prices: Adj Close when the file has it (Yahoo, dividends in), else Close (stooq, already adjusted)."""
     with open(path, newline="") as f:
-        return {r["Date"]: float(r["Close"]) for r in csv.DictReader(f) if r.get("Close")}
+        rows = list(csv.DictReader(f))
+    col = "Adj Close" if rows and "Adj Close" in rows[0] else "Close"
+    return {r["Date"]: float(r[col]) for r in rows if r.get(col)}
 
 
 def price_from_csv(folder, ticker):

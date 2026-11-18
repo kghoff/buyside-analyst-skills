@@ -102,7 +102,7 @@ Then: `python3 "$SK/prices.py" --model "$M" --src "$SRC" --stock <t> --etf <etf>
 It moves the files into `<model folder>/Price Data/` and deletes any other copies of them in Downloads, the model folder or the gather folder, so they exist only there afterwards (say which in the report). Exit 1 means a file is missing or broken: tell the user exactly
 which and ask again. A `problems` line about a different source or Adj Close means refetch. Read every `notes` line:
 - a big move is a split only if no news explains it (look in Px Events / the releases); if it is a real split
-  stooq missed, ask the user for a fresh download
+  the data missed, ask the user for a fresh download
 - a factor that starts late pushes the 3-factor start back; say so
 - a filled date list goes in the report
 

@@ -40,6 +40,14 @@ test('a missing open / high / low is filled with the close, never a blank field'
   assert.equal(toCsv(q).trim().split('\n')[1], '2025-01-02,5,5,5,5,5,1');
 });
 
+test('a missing Adj Close is written empty, never filled with Close, so the price check can flag it', () => {
+  const q = [{ date: '2025-01-02T14:30:00.000Z', open: 5, high: 5, low: 5, close: 5, adjclose: null, volume: 1 },
+    { date: '2025-01-03T14:30:00.000Z', open: 6, high: 6, low: 6, close: 6, volume: 1 }];
+  const r = toCsv(q).trim().split('\n');
+  assert.equal(r[1], '2025-01-02,5,5,5,5,,1');
+  assert.equal(r[2], '2025-01-03,6,6,6,6,,1');
+});
+
 test('two bars on the same New York date keep the last one', () => {
   const mk = (t, c) => ({ date: t, open: c, high: c, low: c, close: c, adjclose: c, volume: 1 });
   const rows = toCsv([mk('2025-01-02T14:30:00.000Z', 1), mk('2025-01-02T20:00:00.000Z', 2)]).trim().split('\n');

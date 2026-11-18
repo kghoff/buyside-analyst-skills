@@ -6,7 +6,7 @@ wins) and MOVES each into "<model folder>/Price Data/", deleting other same-name
 price files exist only in Price Data (house default). Checks:
 - columns Date..Close, coverage: the stock and SPY must reach back to the warm-up start, all files to the same end
 - factor dates missing from the stock/SPY trading days (filled with the prior close in the model, and listed)
-- stale days (open = high = low = close) and |daily return| > 40% (possible split stooq missed)
+- stale days (open = high = low = close) and |daily return| > 40% (possible split the data missed)
 Exit code 1 when a file is missing or unusable; the JSON says why."""
 import argparse
 import datetime as dt
@@ -122,7 +122,7 @@ def main():
             out["notes"].append(f"{tick[k].upper()} history starts {res['first']}, after the index base: the 3-factor "
                                 "chart starts once a full 252-day window exists (about a year later).")
         for d, x in res["big_moves"]:
-            out["notes"].append(f"{tick[k]} moved {x:+.0%} on {d}: check for a split stooq missed (news can explain it).")
+            out["notes"].append(f"{tick[k]} moved {x:+.0%} on {d}: check for a split the data missed (news can explain it).")
     for k, f in out["files"].items():
         out["problems"] += f.get("adj_problems", [])
     bad = mixed(out["files"]) if all("source" in f for f in out["files"].values()) else []
