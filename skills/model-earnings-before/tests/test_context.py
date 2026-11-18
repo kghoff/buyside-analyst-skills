@@ -38,6 +38,25 @@ def test_quarter_date_and_code_answers(work):
     assert c["mod"]["periods"] == {"q": "Q4 26E", "q_ly": "Q4 25", "fy": "2026E", "fy_ly": "2025", "fy1": "2027E"}
     assert c["mod"]["vals"]["3"]["q"] == pytest.approx(mf.series()["Q4 26E"]["rev"])
     assert c["mod"]["drivers"] == [{"name": "Units", "row": 13}]
+    assert not any("already reported" in x for x in c["warnings"])
+
+
+def test_warns_when_the_first_forecast_quarter_was_already_reported(tmp_path):
+    """Px Events lists Q4 26's full-results release but MOD still forecasts Q4 26E: the preview would be of a print
+    that already happened, so the user must enter the actuals first."""
+    p = mf.build(str(tmp_path / "x.xlsx"))
+    wb = openpyxl.load_workbook(p)
+    ws = wb["Px Events"]
+    r = ws.max_row + 1
+    ws.cell(r, 1, "Q4 26")
+    ws.cell(r, 2, mf.dt.date(2026, 11, 16))
+    wb.save(p)
+    w = tmp_path / "w"
+    w.mkdir()
+    (w / "earnings.json").write_text(json.dumps(mf.EARN))
+    c = context.run(p, str(w), "TEST", values=p, research=RESEARCH, forecast_plan=FPLAN, today=TODAY)
+    assert ("MOD's first forecast quarter, Q4 26E, was already reported on 2026-11-16: enter its actuals "
+            "(model-update) before previewing the next print") in c["warnings"]
 
 
 def test_frozen_forecast_and_files(work):

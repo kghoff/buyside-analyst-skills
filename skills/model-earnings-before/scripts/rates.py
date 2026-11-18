@@ -113,16 +113,25 @@ def rel_since(P, last):
             "from": last["date"], "to": b["date"].isoformat()}
 
 
-def next_date(g, quarter):
-    """Last year's full-results release date for the same quarter plus 364 days (52 weeks: the same weekday)."""
+def release(g, period):
+    """(date, cell) of Px Events' full-results release for a period label ('Q3 26'; a trailing E is ignored), or
+    None."""
     hr, h = _header(g, "Full-results release date")
     if hr is None or "Period" not in h:
         return None
-    n, yy = quarter.rstrip("E").split()
-    want = f"{n} {int(yy) - 1:02d}"
+    want = period.rstrip("E")
     cp, cd = h["Period"], h["Full-results release date"]
     for r in range(hr + 1, max(rr for rr, _ in g) + 1):
         if str(g.get((r, cp)) or "").strip().rstrip("E") == want and (d := _day(g.get((r, cd)))):
-            return {"value": (d + dt.timedelta(days=364)).isoformat(), "base": d.isoformat(),
-                    "from": f"'Px Events'!${L(cd)}${r}"}
+            return d, f"'Px Events'!${L(cd)}${r}"
     return None
+
+
+def next_date(g, quarter):
+    """Last year's full-results release date for the same quarter plus 364 days (52 weeks: the same weekday)."""
+    n, yy = quarter.rstrip("E").split()
+    got = release(g, f"{n} {int(yy) - 1:02d}")
+    if not got:
+        return None
+    d, ref = got
+    return {"value": (d + dt.timedelta(days=364)).isoformat(), "base": d.isoformat(), "from": ref}
