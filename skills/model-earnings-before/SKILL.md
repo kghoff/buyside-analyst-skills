@@ -99,8 +99,8 @@ and stops if any part of the workbook other than the Earnings tab (and the Conse
 workbook, styles and content-type parts it must update) changed. It prints JSON; keep for the report: `stance_rule`
 and `stance_used`, `users_kept`, `variance` (where the grid went, and any `skipped` or `dropped` rows), `frozen`
 (`kept` true when the earlier freeze stood) and `warnings`. verify.py recalculates the copy once and compares every
-checked cell with `earnmath.py`; any problem: stop, tell the user the first problems in plain English, and do not
-copy. Never hand-edit the output. On a stop, delete every copy of the model the run made:
+checked cell with `earnmath.py`; any problem: stop, tell the user the first problems in plain English, show them
+build.py's `warnings` too (they often explain the problem, e.g. a threshold cell holding text), and do not copy. Never hand-edit the output. On a stop, delete every copy of the model the run made:
 `rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"`.
 
 ## Step 9: Replace the model

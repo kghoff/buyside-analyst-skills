@@ -27,6 +27,14 @@ def test_skill_asks_before_overwriting_the_users_variance_table():
     assert '"data"' in step and "Ask the user" in step and "skeleton" in step and "ours" in step
 
 
+def test_verify_stop_also_shows_builds_warnings():
+    """build.py's warnings often explain a verify problem (a threshold cell holding text shows errors), so a stop
+    must show them too, or the user sees a symptom without its cause."""
+    step = _read(SK, "SKILL.md").split("## Step 8:")[1].split("## Step")[0]
+    stop = step.split("any problem: stop")[1]
+    assert "warnings" in stop
+
+
 def test_brief_and_assignment_carry_every_id():
     b = _read(SK, "references", "earnings_brief.md") + _read(SK, "references", "assignment.md")
     ids = [rid for rid, *_ in em.SETUP] + [rid for rid, _ in em.RISKS] + list(em.STANCES) + list(em.CALL_Q) + \
