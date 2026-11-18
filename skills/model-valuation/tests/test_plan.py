@@ -222,3 +222,17 @@ def test_cli(tmp_path):
     bp.write_text(json.dumps(bad))
     r = run(bp)
     assert r.returncode == 1 and "sum" in r.stdout
+
+
+# The overall verdict (the user's 2026-11-18 ask): the agent's own Buy / Hold / Sell at the top of the tab. Nothing in
+# code decides it, so the plan check is the only guard: one of three words, and a reason the user can argue with.
+def test_verdict_is_required():
+    assert any("verdict" in x for x in problems(lambda p: p.pop("verdict")))
+
+
+def test_verdict_must_be_buy_hold_or_sell():
+    assert any("verdict" in x for x in problems(lambda p: p["verdict"].update(value="Strong buy")))
+
+
+def test_verdict_needs_a_real_reason():
+    assert any("verdict" in x for x in problems(lambda p: p["verdict"].update(reason="Looks cheap.")))

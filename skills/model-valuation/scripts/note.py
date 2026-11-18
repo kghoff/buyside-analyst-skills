@@ -151,9 +151,11 @@ def write_md(work, ticker, values, date):
 
     # cover
     target, rr, verdict = t.f(ref["blended_reward"]), t.g("Blended reward / risk"), t.g("Blended verdict")
+    vcall = t.g(build.LABEL["verdict"]) if "verdict" in lay["inputs"] else None
     L += [f'<div class="cover"><div class="band"><h1>{ticker} valuation note</h1><div class="sub">What it is worth and '
-          f'whether the setup is worth owning, as of {date}</div></div><div class="meta">Blended target {target} '
-          f'against today\'s {t.f(ref["price"])}: reward / risk {rr}, {verdict}. Numbers come from the recalculated '
+          f'whether the setup is worth owning, as of {date}</div></div><div class="meta">'
+          + (f'<b>Overall verdict: {vcall}.</b> {plan["verdict"]["reason"]} ' if vcall else "")
+          + f'Blended target {target} against today\'s {t.f(ref["price"])}: reward / risk {rr}, {verdict}. Numbers come from the recalculated '
           f'Valuation tab of {ticker}_model.xlsx; the judgment calls are the valuation agent\'s, and every one is a '
           f'yellow cell you own. Prepared {date}.</div></div>', ""]
 

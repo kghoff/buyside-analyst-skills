@@ -100,6 +100,7 @@ untouched.
    `$W/dcf_stale/` if present. Keep the plan, tries, results, context, brief, `layout.json` and `valuation.png`.
 
 ## Step 9: Report (plain English)
+- The overall verdict (Buy / Hold / Sell, row 3 at the top of the tab: the agent's call, a yellow cell the user owns) and its reason.
 - The recommended multiples and why (and why P/E is not primary, if it isn't).
 - Reward, risk, R/R and the verdict, per multiple and blended.
 - Reward-to-vol and the 1-standard-deviation check.

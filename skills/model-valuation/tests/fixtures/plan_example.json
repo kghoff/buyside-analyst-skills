@@ -1,49 +1,253 @@
 {
  "ticker": "TEST",
+ "verdict": {
+  "value": "Hold",
+  "reason": "Blended reward / risk is near 1x and the 3-year IRR sits close to the hurdle, so the setup is fair but not compelling."
+ },
  "multiples": [
-  {"kind": "pe", "role": "primary", "reason": "Earnings are positive and growing, and the Street and the company both talk in EPS, so P/E is how this stock is priced."},
-  {"kind": "ev_ebitda", "role": "secondary", "reason": "EV/EBITDA checks P/E against the net cash on the balance sheet and the rising D&A from the capex build."}
+  {
+   "kind": "pe",
+   "role": "primary",
+   "reason": "Earnings are positive and growing, and the Street and the company both talk in EPS, so P/E is how this stock is priced."
+  },
+  {
+   "kind": "ev_ebitda",
+   "role": "secondary",
+   "reason": "EV/EBITDA checks P/E against the net cash on the balance sheet and the rising D&A from the capex build."
+  }
  ],
  "inputs": {
-  "weight.pe": {"value": 0.6, "anchor": "judgment", "reason": "P/E carries more weight because investors and the company both frame this stock on earnings per share, not on EBITDA."},
-  "weight.ev_ebitda": {"value": 0.4, "anchor": "judgment", "reason": "EV/EBITDA is a cross-check that captures the net cash and the D&A ramp, so it gets the smaller share of the blend."},
-  "reward_multiple.pe": {"value": 30.0, "anchor": "Multiples!B7", "anchor_value": 34.1, "reason": "The 1-year median P/E, trimmed because growth is slowing from the levels that earned that multiple."},
-  "risk_multiple.pe": {"value": 24.0, "anchor": "Multiples!C6", "anchor_value": 26.2, "reason": "Below the 5-year trough P/E: a miss would reset the growth story, not just the quarter."},
-  "risk_metric.pe": {"value": 2.75, "anchor": "ntm:eps", "anchor_value": 2.885609821524244, "reason": "NTM diluted EPS, cut about 5% for a downside where pricing pressure hits the gross margin."},
-  "multiple_3y.pe": {"value": 28.0, "anchor": "Multiples!B7", "anchor_value": 34.1, "reason": "Three years out the multiple should drift below today's median as growth matures."},
-  "reward_multiple.ev_ebitda": {"value": 20.0, "anchor": "Multiples!B9", "anchor_value": 22.4, "reason": "The 1-year median EV/EBITDA, trimmed for the same slower growth as the P/E."},
-  "risk_multiple.ev_ebitda": {"value": 16.0, "anchor": "Multiples!B9", "anchor_value": 22.4, "reason": "The stub has no EV/EBITDA trough, so the risk case takes the 1-year median down by about 30%, in line with the P/E's trough-to-median gap."},
-  "risk_metric.ev_ebitda": {"value": 1430.0, "anchor": "MOD!$BV$539", "anchor_value": 1502.4, "reason": "2026E EBITDA, cut about 5% to match the EPS haircut in the risk case."},
-  "multiple_3y.ev_ebitda": {"value": 18.0, "anchor": "Multiples!B9", "anchor_value": 22.4, "reason": "Three years out EV/EBITDA should settle below today's median as growth matures."},
-  "hurdle": {"value": 0.20, "anchor": "house", "reason": "Chapter 11's default annual return hurdle."},
-  "buy_rr": {"value": 2.0, "anchor": "house", "reason": "Chapter 11's default: buy at 2-to-1 reward to risk."},
-  "pound_rr": {"value": 3.0, "anchor": "house", "reason": "Chapter 11's default: press the position at 3-to-1."},
-  "discount": {"value": 0.15, "anchor": "house", "reason": "Chapter 11's default discount rate for normalized targets."},
-  "horizon_months": {"value": 12, "anchor": "house", "reason": "Chapter 11's default 12-month horizon."},
-  "position": {"value": "long", "anchor": "judgment", "reason": "The blended reward is well above today's price and the risk case is close to the 3-year low, so the setup is a long."},
-  "mkt_rev": {"value": 0.05, "anchor": "house", "reason": "Chapter 11's default market revenue growth."},
-  "mkt_oi": {"value": 0.08, "anchor": "house", "reason": "Chapter 11's default market operating income growth."},
-  "mkt_eps": {"value": 0.12, "anchor": "house", "reason": "Chapter 11's default market EPS growth."}
+  "weight.pe": {
+   "value": 0.6,
+   "anchor": "judgment",
+   "reason": "P/E carries more weight because investors and the company both frame this stock on earnings per share, not on EBITDA."
+  },
+  "weight.ev_ebitda": {
+   "value": 0.4,
+   "anchor": "judgment",
+   "reason": "EV/EBITDA is a cross-check that captures the net cash and the D&A ramp, so it gets the smaller share of the blend."
+  },
+  "reward_multiple.pe": {
+   "value": 30.0,
+   "anchor": "Multiples!B7",
+   "anchor_value": 34.1,
+   "reason": "The 1-year median P/E, trimmed because growth is slowing from the levels that earned that multiple."
+  },
+  "risk_multiple.pe": {
+   "value": 24.0,
+   "anchor": "Multiples!C6",
+   "anchor_value": 26.2,
+   "reason": "Below the 5-year trough P/E: a miss would reset the growth story, not just the quarter."
+  },
+  "risk_metric.pe": {
+   "value": 2.75,
+   "anchor": "ntm:eps",
+   "anchor_value": 2.885609821524244,
+   "reason": "NTM diluted EPS, cut about 5% for a downside where pricing pressure hits the gross margin."
+  },
+  "multiple_3y.pe": {
+   "value": 28.0,
+   "anchor": "Multiples!B7",
+   "anchor_value": 34.1,
+   "reason": "Three years out the multiple should drift below today's median as growth matures."
+  },
+  "reward_multiple.ev_ebitda": {
+   "value": 20.0,
+   "anchor": "Multiples!B9",
+   "anchor_value": 22.4,
+   "reason": "The 1-year median EV/EBITDA, trimmed for the same slower growth as the P/E."
+  },
+  "risk_multiple.ev_ebitda": {
+   "value": 16.0,
+   "anchor": "Multiples!B9",
+   "anchor_value": 22.4,
+   "reason": "The stub has no EV/EBITDA trough, so the risk case takes the 1-year median down by about 30%, in line with the P/E's trough-to-median gap."
+  },
+  "risk_metric.ev_ebitda": {
+   "value": 1430.0,
+   "anchor": "MOD!$BV$539",
+   "anchor_value": 1502.4,
+   "reason": "2026E EBITDA, cut about 5% to match the EPS haircut in the risk case."
+  },
+  "multiple_3y.ev_ebitda": {
+   "value": 18.0,
+   "anchor": "Multiples!B9",
+   "anchor_value": 22.4,
+   "reason": "Three years out EV/EBITDA should settle below today's median as growth matures."
+  },
+  "hurdle": {
+   "value": 0.2,
+   "anchor": "house",
+   "reason": "Chapter 11's default annual return hurdle."
+  },
+  "buy_rr": {
+   "value": 2.0,
+   "anchor": "house",
+   "reason": "Chapter 11's default: buy at 2-to-1 reward to risk."
+  },
+  "pound_rr": {
+   "value": 3.0,
+   "anchor": "house",
+   "reason": "Chapter 11's default: press the position at 3-to-1."
+  },
+  "discount": {
+   "value": 0.15,
+   "anchor": "house",
+   "reason": "Chapter 11's default discount rate for normalized targets."
+  },
+  "horizon_months": {
+   "value": 12,
+   "anchor": "house",
+   "reason": "Chapter 11's default 12-month horizon."
+  },
+  "position": {
+   "value": "long",
+   "anchor": "judgment",
+   "reason": "The blended reward is well above today's price and the risk case is close to the 3-year low, so the setup is a long."
+  },
+  "mkt_rev": {
+   "value": 0.05,
+   "anchor": "house",
+   "reason": "Chapter 11's default market revenue growth."
+  },
+  "mkt_oi": {
+   "value": 0.08,
+   "anchor": "house",
+   "reason": "Chapter 11's default market operating income growth."
+  },
+  "mkt_eps": {
+   "value": 0.12,
+   "anchor": "house",
+   "reason": "Chapter 11's default market EPS growth."
+  }
  },
  "street": null,
  "normalization": null,
  "scenarios": {
   "rounds": [
-   {"round": 1, "why": "Started from the user's DCF inputs, which give $67.92, well below the $88.48 price, because revenue growth fades to zero.", "rejected": "Revenue fading to zero growth by 2040 is harsher than the filings research's mid-single-digit long-run view."},
-   {"round": 2, "why": "Base fades revenue growth from 9% to 3% over ten years; bull adds faster growth, 20 bps a year of gross margin and a 12x exit; bear slows growth, gives back margin and uses a 9% WACC.", "rejected": "Kept as final."}
+   {
+    "round": 1,
+    "why": "Started from the user's DCF inputs, which give $67.92, well below the $88.48 price, because revenue growth fades to zero.",
+    "rejected": "Revenue fading to zero growth by 2040 is harsher than the filings research's mid-single-digit long-run view."
+   },
+   {
+    "round": 2,
+    "why": "Base fades revenue growth from 9% to 3% over ten years; bull adds faster growth, 20 bps a year of gross margin and a 12x exit; bear slows growth, gives back margin and uses a 9% WACC.",
+    "rejected": "Kept as final."
+   }
   ],
   "final": {
-   "base": {"value_per_share": 83.793200208955, "story": "Growth slows from 9% to a 3% long-run rate; margins hold.", "inputs": {"Revenue": {"from": 0.09, "to": 0.03, "over": 10}}},
-   "bull": {"value_per_share": 106.8029285211359, "story": "New products keep growth at 12% early, gross margin expands with scale and the exit multiple is 12x.", "inputs": {"Revenue": {"from": 0.12, "to": 0.04, "over": 10}, "dgm": {"from": 20, "to": 0, "over": 10}, "tv_mult": 12.0}},
-   "bear": {"value_per_share": 59.26707557247161, "story": "Competition slows growth to 6% fading to 2%, pricing costs gross margin and the risk premium rises.", "inputs": {"Revenue": {"from": 0.06, "to": 0.02, "over": 8}, "dgm": {"from": -20, "to": 0, "over": 10}, "wacc": 0.09}}
+   "base": {
+    "value_per_share": 83.793200208955,
+    "story": "Growth slows from 9% to a 3% long-run rate; margins hold.",
+    "inputs": {
+     "Revenue": {
+      "from": 0.09,
+      "to": 0.03,
+      "over": 10
+     }
+    }
+   },
+   "bull": {
+    "value_per_share": 106.8029285211359,
+    "story": "New products keep growth at 12% early, gross margin expands with scale and the exit multiple is 12x.",
+    "inputs": {
+     "Revenue": {
+      "from": 0.12,
+      "to": 0.04,
+      "over": 10
+     },
+     "dgm": {
+      "from": 20,
+      "to": 0,
+      "over": 10
+     },
+     "tv_mult": 12.0
+    }
+   },
+   "bear": {
+    "value_per_share": 59.26707557247161,
+    "story": "Competition slows growth to 6% fading to 2%, pricing costs gross margin and the risk premium rises.",
+    "inputs": {
+     "Revenue": {
+      "from": 0.06,
+      "to": 0.02,
+      "over": 8
+     },
+     "dgm": {
+      "from": -20,
+      "to": 0,
+      "over": 10
+     },
+     "wacc": 0.09
+    }
+   }
   }
  },
  "tree": [
-  {"name": "Bull", "target": {"link": "dcf_bull"}, "prob": {"value": 0.15, "anchor": "judgment", "reason": "Needs new products and margin expansion to land together, which the filings show has happened only once in ten years."}, "story": "Growth stays double digit and margins expand."},
-  {"name": "Reward", "target": {"link": "blended_reward"}, "prob": {"value": 0.35, "anchor": "judgment", "reason": "The most likely path: the forecast is delivered and the stock keeps trading near its 1-year median multiples."}, "story": "Forecast delivered at near-median multiples."},
-  {"name": "Base DCF", "target": {"link": "dcf_base"}, "prob": {"value": 0.25, "anchor": "judgment", "reason": "Growth fades on schedule and the market pays only for the cash flows the base DCF can see."}, "story": "Growth fades on schedule."},
-  {"name": "Risk", "target": {"link": "blended_risk"}, "prob": {"value": 0.15, "anchor": "judgment", "reason": "A miss that resets the multiple to below its trough on lower earnings, as happened at the 3-year low."}, "story": "A miss resets the multiple."},
-  {"name": "Bust", "target": {"value": 50.0, "anchor": "DCF!$C$40", "anchor_value": 54.84, "reason": "Below the 3-year low close: a second leg down if competition takes share for more than one year."}, "prob": {"value": 0.10, "anchor": "judgment", "reason": "A lasting share loss is possible but nothing in the filings or the Street research points to it yet."}, "story": "Competition takes share for more than a year."}
+  {
+   "name": "Bull",
+   "target": {
+    "link": "dcf_bull"
+   },
+   "prob": {
+    "value": 0.15,
+    "anchor": "judgment",
+    "reason": "Needs new products and margin expansion to land together, which the filings show has happened only once in ten years."
+   },
+   "story": "Growth stays double digit and margins expand."
+  },
+  {
+   "name": "Reward",
+   "target": {
+    "link": "blended_reward"
+   },
+   "prob": {
+    "value": 0.35,
+    "anchor": "judgment",
+    "reason": "The most likely path: the forecast is delivered and the stock keeps trading near its 1-year median multiples."
+   },
+   "story": "Forecast delivered at near-median multiples."
+  },
+  {
+   "name": "Base DCF",
+   "target": {
+    "link": "dcf_base"
+   },
+   "prob": {
+    "value": 0.25,
+    "anchor": "judgment",
+    "reason": "Growth fades on schedule and the market pays only for the cash flows the base DCF can see."
+   },
+   "story": "Growth fades on schedule."
+  },
+  {
+   "name": "Risk",
+   "target": {
+    "link": "blended_risk"
+   },
+   "prob": {
+    "value": 0.15,
+    "anchor": "judgment",
+    "reason": "A miss that resets the multiple to below its trough on lower earnings, as happened at the 3-year low."
+   },
+   "story": "A miss resets the multiple."
+  },
+  {
+   "name": "Bust",
+   "target": {
+    "value": 50.0,
+    "anchor": "DCF!$C$40",
+    "anchor_value": 54.84,
+    "reason": "Below the 3-year low close: a second leg down if competition takes share for more than one year."
+   },
+   "prob": {
+    "value": 0.1,
+    "anchor": "judgment",
+    "reason": "A lasting share loss is possible but nothing in the filings or the Street research points to it yet."
+   },
+   "story": "Competition takes share for more than a year."
+  }
  ],
  "notes": [
   "P/E is the primary multiple and EV/EBITDA the secondary, weighted 60/40, because the stock is priced on earnings and EBITDA checks the net cash.",

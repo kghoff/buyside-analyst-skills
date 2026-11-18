@@ -62,6 +62,26 @@ def test_user_change_survives_rerun(model, work, tmp_path):
     assert c.value == 0.15 and "You typed" in c.comment.text and "Agent: 0.2" in c.comment.text
 
 
+def test_overall_verdict_sits_at_the_top_and_stays_the_users(model, work, tmp_path):
+    """The user asked for the agent's Buy / Hold / Sell at the top (row 3, above section 0, so no row below moves).
+    It is a yellow cell like every other judgment, so the user's own verdict survives a rerun."""
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    ws = _ws(out)
+    plan = json.load(open(os.path.join(work, "valuation_plan.json")))
+    assert ws["A3"].value == build.LABEL["verdict"]
+    assert ws["B3"].value == plan["verdict"]["value"] and ws["B3"].fill.fgColor.rgb == YELLOW
+    assert ws["H3"].value == plan["verdict"]["reason"]
+    _promote(work)
+    _user_types(out, work, "verdict", "Buy")
+    shutil.rmtree(os.path.join(work, "values"))
+    lo.recalc(out, os.path.join(work, "values"))
+    out2 = str(tmp_path / "out2.xlsx")
+    build.build(out, work, "TEST", out2)
+    c = _ws(out2)["B3"]
+    assert c.value == "Buy" and "You typed Buy" in c.comment.text
+
+
 def _promote(work):
     """SKILL step 7: the record becomes inputs_written.json once OUT is copied over the model."""
     os.replace(os.path.join(work, "inputs_written.next.json"), os.path.join(work, "inputs_written.json"))

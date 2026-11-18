@@ -57,7 +57,8 @@ def _kind_labels():
 # Input key -> its exact column-A text. Inputs are found on an existing tab by this label, so a layout change between
 # versions keeps the user's values. Each label is unique on the tab.
 LABEL = {**HOUSE_LABEL, **_kind_labels(), "normalization.margin": "Normal net margin",
-         "normalization.multiple": "Normal multiple (P/E)", "normalization.years": "Years to normal"}
+         "normalization.multiple": "Normal multiple (P/E)", "normalization.years": "Years to normal",
+         "verdict": "Overall verdict (the agent's call: Buy / Hold / Sell)"}
 assert len(set(LABEL.values())) == len(LABEL)
 
 
@@ -143,6 +144,8 @@ def plan_inputs(plan):
     """{key: {value, anchor, [anchor_value], reason}}: the plan's inputs plus normalization's and the probability
     tree's yellow cells (tree.<name>.prob, and tree.<name>.target when the target is anchored, not linked)."""
     out = dict(plan["inputs"])
+    if plan.get("verdict"):                   # the agent's overall call: a judgment, no number to anchor
+        out["verdict"] = {**plan["verdict"], "anchor": "judgment"}
     n = plan.get("normalization")
     if n:
         out.update({f"normalization.{k}": n[k] for k in ("margin", "multiple", "years")})
@@ -272,6 +275,10 @@ def sec_title(b, r):
     b.w.text("A1", f"{b.ticker} valuation: what it's worth and whether the setup is worth owning", b=True, sz=14)
     b.w.text("A2", "Yellow = the agent's suggestion, yours to change (note: its value, anchor and reason). Blue = typed "
                    "from a source. Black = formulas. Green = links to other tabs.", i=True)
+    if "verdict" in b.pin:                    # row 3, above section 0, so nothing below moves
+        b.w.text("A3", label_of("verdict"), b=True)
+        b.w.input_("B3", "verdict", b.used["verdict"], "General", input_note(b.pin["verdict"], b.changed.get("verdict")))
+        b.w.text("H3", b.pin["verdict"]["reason"], wrap=True)
     return 4
 
 

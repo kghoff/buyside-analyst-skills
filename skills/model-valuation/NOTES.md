@@ -114,3 +114,11 @@ the DCF tab was rebuilt with /model-dcf because the forecast plan had gained a r
 - **Checks:** plan and anchor checks clean; verify ok, 118 cells checked, 0 failed, DCF re-type within $0.02. The
   note is 4,036 words (MD + PDF).
 - **Known cosmetic issue:** two long labels in section 6 are cut off at column A's width.
+
+## Overall verdict (2026-11-18, the user's ask)
+- The agent writes `verdict: {value: Buy | Hold | Sell, reason}`. It goes in row 3 (A3 label, B3 yellow, H3 reason),
+  above section 0, so no row below moves and model-short's label lookups are unaffected.
+- **Agent only, no code rule** (the user's choice). The per-multiple and blended R/R verdicts (`valmath.verdict`)
+  stay as they were. plan.py is the only guard: one of the three words, and a reason of at least 12 words.
+- It is a `judgment` input like any other (`plan_inputs` adds it), so the user's own verdict survives a rerun.
+- It leads the note's cover.

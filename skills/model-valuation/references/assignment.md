@@ -107,6 +107,13 @@ reason of at least 12 words. Set `position` to "short" (anchor `judgment`) only 
 
 `street` links the Consensus tab's NTM / NTM+1 estimate cells per kind, or `null` when there is no Consensus tab.
 
+## 7a. Overall verdict
+Last, once everything above is settled: is this a **Buy**, a **Hold** or a **Sell**? It goes at the top of the tab
+as a yellow cell the user owns, and it leads the note. Code does not decide it; it is your call. Give a reason of at
+least 12 words naming the numbers it rests on: the blended reward / risk against `buy_rr`, the 3-year IRR against
+the hurdle, and where the price sits in the DCF bear / base / bull range. When the numbers point different ways,
+say which one you weighted and why.
+
 ## 8. On a rerun
 When context.json has `last_plan`, start from it. Change only what new facts justify, and say what changed in
 `notes`.
@@ -116,6 +123,7 @@ When context.json has `last_plan`, start from it. Change only what new facts jus
 ```json
 {
  "ticker": "TEST",
+ "verdict": {"value": "Hold", "reason": "..."},
  "multiples": [
    {"kind": "pe", "role": "primary", "reason": "..."},
    {"kind": "ev_ebitda", "role": "secondary", "reason": "..."}],

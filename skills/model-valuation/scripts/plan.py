@@ -205,6 +205,24 @@ def _nm(plan, context, kinds):
     return out
 
 
+VERDICTS = ("Buy", "Hold", "Sell")
+
+
+def _verdict(plan):
+    """The agent's overall call at the top of the tab. Code does not decide it (the user's choice, 2026-11-18), so it
+    must be one of three words and carry a reason long enough to say which numbers it rests on."""
+    v = plan.get("verdict")
+    if not isinstance(v, dict):
+        return ["verdict: missing; give {value: Buy | Hold | Sell, reason}"]
+    out = []
+    if v.get("value") not in VERDICTS:
+        out.append(f"verdict: {v.get('value')!r} is not one of {', '.join(VERDICTS)}")
+    reason = v.get("reason")
+    if not (isinstance(reason, str) and len(reason.split()) >= 12):
+        out.append("verdict: needs a reason of at least 12 words (which numbers it rests on: R/R, IRR, DCF)")
+    return out
+
+
 def check(plan, context):
     """Plain-English problems with the plan; [] means OK. context: context.json (only its metrics are read)."""
     out, kinds = _multiples(plan)
@@ -214,6 +232,7 @@ def check(plan, context):
     out += _street(plan)
     out += _normalization(plan)
     out += _nm(plan, context, kinds)
+    out += _verdict(plan)
     return out
 
 
