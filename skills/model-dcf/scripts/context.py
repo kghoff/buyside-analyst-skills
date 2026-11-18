@@ -267,5 +267,5 @@ if __name__ == "__main__":
     json.dump(ctx, open(sys.argv[2], "w"), indent=1)
     print(f"wrote {sys.argv[2]}")
     for b in ctx["blank_as_0"]:
-        print(f"warning: MOD {b} is blank and counts as 0 (a revenue term that starts in the forecast). If it should "
+        print(f"warning: {b} is blank and counts as 0 (a revenue term that starts in the forecast). If it should "
               "have a value, fill it in MOD and rerun.")
