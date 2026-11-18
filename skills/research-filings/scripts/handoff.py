@@ -36,6 +36,7 @@ MNY, PCT, PTS, DLR = '#,##0.0_);\\(#,##0.0\\);"–"', "0.0%", '0.0_);\\(0.0\\)',
 EMU_IN, ROW_EMU = 914400, 203200            # 16 pt default rows
 COLORS = ["3F78D1", "E07040", "1BAF7A", "6250D6", "EDA100", "7F7F7F"]
 UP, DOWN, TOTAL = "1BAF7A", "D9534F", "1F3864"
+SECTOR_HDR = r"(\w+) close \((?:stooq adj\.|dividends in)\)$"   # Px Data factor header, old and Yahoo-era wording
 
 
 # ---------------------------------------------------------------- inputs
@@ -1010,12 +1011,13 @@ def stock_blocks(pkg, st, part, H, ticker, sector):
 
 
 def _sector(pkg, ss):
-    """The sector ETF Px Data holds next to the momentum factor ('XHE close (stooq adj.)'), and its column."""
+    """The sector ETF Px Data holds next to the momentum factor ('XHE close (dividends in)', or 'XHE close (stooq adj.)'
+    in models built before the Yahoo switch), and its column."""
     cells = _cells(pkg.text(_sheet_part(pkg, "Px Data")), ss)
     for ref, v in sorted(cells.items(), key=lambda kv: colnum(re.match(r"[A-Z]+", kv[0]).group(0))):
         m = re.match(r"([A-Z]+)4$", ref)
         if m and isinstance(v, str):
-            t = re.match(r"(\w+) close \(stooq adj\.\)$", v)
+            t = re.match(SECTOR_HDR, v)
             if t and t.group(1) != "MTUM":
                 return t.group(1), m.group(1)
     return None, None

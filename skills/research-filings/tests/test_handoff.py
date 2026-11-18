@@ -58,3 +58,11 @@ def test_event_moves_read_the_stocks_own_move_under_a_ticker_neutral_key():
     from handoff import _event_moves
     assert _event_moves({"stock": -0.065, "spy": -0.007, "idio": -0.058}) == {"B": -0.065, "C": -0.007, "D": -0.058}
     assert _event_moves({"date": "2025-11-19"}) == {"B": None, "C": None, "D": None}
+
+
+def test_sector_header_matches_old_and_new_wording():
+    # Old models say 'XHE close (stooq adj.)', models built after the Yahoo switch 'XHE close (dividends in)'.
+    import re
+    import handoff
+    for h in ("XHE close (stooq adj.)", "XHE close (dividends in)"):
+        assert re.match(handoff.SECTOR_HDR, h).group(1) == "XHE"
