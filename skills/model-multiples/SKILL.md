@@ -1,6 +1,6 @@
 ---
 name: model-multiples
-description: Add the Multiples tab to a company model (TICKER_model.xlsx) - where the stock trades against its own history, the S&P 500 and its peers. Weekly history of P/E, EV/EBITDA, EV/GP, EV/Revenue and FCF yield with charts; P/E minus the S&P 500 and minus the core-peer median; a ranges table (1 / 5 / 10-year min, median, max, percentile) with the reverse P/E (the earnings power today's price implies); a forward table (today's price on each forecast year, with the Street's); a ranked comp sheet with an Include? toggle per peer, a scatter of next-year P/E against revenue growth with a line through the peers (below it = structurally underpriced on the multiple), and the subject's P/E against the core-peer median over time. Free path - trailing multiples from the model, stooq files for 3-5 core peers, multpl.com for the S&P, Yahoo for comps - or paid path from FactSet / Bloomberg / CapIQ / Koyfin exports. Also writes the valuation brief that model-valuation reuses. Works for any listed company. Run after /model-forecast; rerun weekly or each print. Use when the user runs /model-multiples TICKER or asks for multiples, a comp sheet, P/E history charts or relative valuation.
+description: Add the Multiples tab to a company model (TICKER_model.xlsx) - where the stock trades against its own history, the S&P 500 and its peers. Weekly history of P/E, EV/EBITDA, EV/GP, EV/Revenue and FCF yield with charts; P/E minus the S&P 500 and minus the core-peer median; a ranges table (1 / 5 / 10-year min, median, max, percentile) with the reverse P/E (the earnings power today's price implies); a forward table (today's price on each forecast year, with the Street's); a ranked comp sheet with an Include? toggle per peer, a scatter of next-year P/E against revenue growth with a line through the peers (below it = structurally underpriced on the multiple), and the subject's P/E against the core-peer median over time. Free path - trailing multiples from the model, Yahoo daily prices for 3-5 core peers (stooq only as a fallback), multpl.com for the S&P, Yahoo for comps - or paid path from FactSet / Bloomberg / CapIQ / Koyfin exports. Also writes the valuation brief that model-valuation reuses. Works for any listed company. Run after /model-forecast; rerun weekly or each print. Use when the user runs /model-multiples TICKER or asks for multiples, a comp sheet, P/E history charts or relative valuation.
 ---
 
 # /model-multiples
@@ -65,8 +65,11 @@ comparables, used for the P/E-vs-peers history). Ask with AskUserQuestion (first
    else `mkdir -p "$W/xbrl"` and `node "$XBRL" <P> --json > "$W/xbrl/<P>.json"`, where
    `XBRL=$(python3 -c "import sys; sys.path.insert(0, '$SK/../../../lib'); import settings; print(settings.xbrl_cli())")`
    (stop with model-industry's message if it is not installed).
-4. Pause for stooq: ask the user (AskUserQuestion) to download `https://stooq.com/q/d/?s=<p>.us&i=d` for each core
-   peer into `<model dir>/Price Data/`, and **wait**. Then
+4. Core peers' prices: `(cd "$SK/.." && { [ -d node_modules ] || npm install --silent; }) && node "$SK/fetch_prices.mjs" "<model dir>/Price Data" <core peers>`.
+   It writes `<p>_us_d.csv` per peer (Yahoo: Close = traded price, used for P/E). Exit 1 = Yahoo failed for a peer:
+   only then ask the user (AskUserQuestion) to download `https://stooq.com/q/d/?s=<p>.us&i=d` for the failed peers
+   into `<model dir>/Price Data/` and **wait**. Tell them stooq's prices are dividend-adjusted, so those peers'
+   historical P/E runs low if they pay dividends. Then
    `python3 "$SK/prices.py" --model "$M" --tickers <core peers> [--src DIR]`. It copies the files it finds into
    `<model dir>/Price Data/`, prints JSON, and exits 1 if any is missing or bad: ask the user for those once. If they can't supply one, drop that peer from `core`
    in `comps.json` (it stays on the comp sheet) and tell them. With one core peer left, "P/E − core-peer

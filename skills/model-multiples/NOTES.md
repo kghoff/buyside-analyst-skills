@@ -93,3 +93,12 @@ ISRG, EW; core peers ABT, MDT, PODD; ABT XBRL from model-industry's peers folder
   median, TTM free and NTM paid. There is no historical NTM consensus on the free path.
 - With 9 charts free / 10 paid, the data block starts lower (`R_DATA`). model-short finds its Multiples cells by the
   ranges table's labels, which are unchanged.
+
+## Yahoo prices (2026-11-18)
+- **Core peers' prices come from Yahoo** (`fetch_prices.mjs`), not a stooq pause. stooq has no unadjusted price: its
+  Close is dividend-adjusted, so a dividend payer's historical P/E runs low (ABT: the stooq close was 0.81x the traded price in Jan 2016).
+  Yahoo's Close is the traded price; `peers.py` keeps reading Close, so no Python change.
+- `pricecsv.mjs` and `fetch_prices.mjs` are copies of model-price-history's (house rule: shared helpers are copies).
+  `test_scaffold.py` fails if they drift; change them there and copy here.
+- Fallback: exit 1 means Yahoo failed for a peer; only then ask for stooq files for the failed peers, and tell the
+  user those peers' P/E history runs low if they pay dividends. `prices.py` reads both (it ignores Adj Close).
