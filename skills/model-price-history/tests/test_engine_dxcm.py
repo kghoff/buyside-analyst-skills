@@ -31,12 +31,56 @@ def test_daily_beta_and_idio(dxcm_run, ref_values, ours, theirs):
 
 
 @pytest.mark.parametrize("ours,theirs", [("ttm_eps", "ttm_eps"), ("rev_g", "ov1"), ("om", "ov2"), ("em", "ov3"),
-                                         ("roic", "ov4"), ("ntm_eps", "ntm_eps"), ("ntm_pe", "ntm_pe")])
+                                         ("roic", "ov4")])
 def test_point_in_time_columns(dxcm_run, ref_values, ours, theirs):
     # values switch the trading day after each full-results release
     ref = ref_values["daily"][theirs]
     bad = [ref_values["dates"][i] for i, (a, b) in enumerate(zip(ref, dxcm_run["daily"][ours])) if i > 252 and not close(a, b)]
     assert not bad, (len(bad), bad[:5])
+
+
+def test_pe_is_trailing_eps_as_known_that_day(dxcm_run):
+    # The user (2026-11-17): historical P/E is LTM, said plainly. Price / the TTM EPS shown that day, #N/A when EPS <= 0.
+    # The old NTM P/E divided by the next 4 quarters' actual EPS, which nobody knew at the time.
+    D, px, b = dxcm_run["daily"], dxcm_run["px"], dxcm_run["base"]
+    for t in range(b + 1, len(px)):
+        e = D["ttm_eps"][t]
+        want = px[t] / e if not math.isnan(e) and e > 0 else float("nan")
+        assert close(want, D["pe"][t]), dxcm_run["dates"][t]
+
+
+def test_pe_never_uses_a_later_quarter(ref_values, reference_model):
+    # Change every quarter reported after 2022-06-30: no P/E on or before that date may move. If this fails, the
+    # P/E is seeing the future again.
+    import copy, engine, modmap, os
+    from conftest import FIX
+    ev = ref_values["events"]
+    full = {p: pd.Timestamp(d) for p, d in zip(ev["periods"], ev["full_dates"])}
+    prices = {k: engine.load_close(os.path.join(FIX, f"{t}_us_d.csv"))
+              for k, t in (("stock", "dxcm"), ("spy", "spy"), ("etf", "xhe"), ("mom", "mtum"))}
+    cfg = {"oi_role": "oi_ng", "ebitda_role": None, "roic_role": "roic", "eps_role": "eps_ng", "ttm_key": "ttm_n",
+           "fcf_role": "fcf", "bb_roles": ["buyback_net"]}
+    mod = modmap.read(reference_model)
+    cut = pd.Timestamp(2022, 6, 30)
+    later = {p for p, d in full.items() if d >= cut}
+    mod2 = copy.deepcopy(mod)
+    for p in mod2["periods"]:
+        if p["label"] in later or (p["kind"] == "fy" and p["year"] >= 2022) or p["est"]:
+            if engine.isnum(mod2["values"]["eps_ng"].get(p["label"])):
+                mod2["values"]["eps_ng"][p["label"]] *= 3
+    a, b2 = engine.run(cfg, prices, mod, full, []), engine.run(cfg, prices, mod2, full, [])
+    k = int((a["dates"] <= cut).sum())
+    assert all(close(x, y) for x, y in zip(a["daily"]["pe"][:k], b2["daily"]["pe"][:k]))
+    assert not all(close(x, y) for x, y in zip(a["daily"]["pe"][k:], b2["daily"]["pe"][k:]))   # the change took
+
+
+def test_pe_runs_to_the_last_price(dxcm_run):
+    # Trailing EPS exists up to today, so the chart does not stop four quarters short (the NTM version did).
+    assert engine_isnum(dxcm_run["daily"]["pe"][-1]) and engine_isnum(dxcm_run["monthly"]["pe"][-1])
+
+
+def engine_isnum(x):
+    return x is not None and not (isinstance(x, float) and math.isnan(x))
 
 
 def test_event_labels_on_reaction_days(dxcm_run, ref_values):
@@ -55,8 +99,9 @@ def test_handoff_regression_values(dxcm_run):
     assert round(W["idx3"][-1], 2) == 137.51
     A = dxcm_run["annual"]
     i = A["fy"].index(2025)
-    assert (round(A["fcf"][i], 1), round(A["bb"][i], 1), round(A["pe"][i], 1)) == (1077.2, 471.9, 32.3)
-    assert A["n"][A["fy"].index(2018)] == 8
+    assert (round(A["fcf"][i], 1), round(A["bb"][i], 1), round(A["pe"][i], 1)) == (1077.2, 471.9, 43.9)  # TTM P/E
+    # TTM non-GAAP EPS turns positive with the Q4 2018 release (Feb 2019): no P/E before it, 11 month-ends in 2019
+    assert A["n"][A["fy"].index(2018)] == 0 and A["n"][A["fy"].index(2019)] == 11
 
 
 @pytest.mark.parametrize("ours,theirs", [("b_mkt", "b_mkt"), ("b_ind", "b_ind"), ("b_mom", "b_mom"), ("r2", "r2"),
@@ -74,17 +119,25 @@ def test_weekly_three_factor(dxcm_run, ref_values, ours, theirs):
 
 def test_monthly_block(dxcm_run, ref_values):
     M, R = dxcm_run["monthly"], ref_values["monthly"]
-    assert [d.date().isoformat() for d in M["date"]] == R["date"]
-    for k in ("close", "ntm_eps", "ntm_pe", "ttm_eps"):
-        assert all(close(a, b) for a, b in zip(R[k], M[k])), k
+    # starts at the first month-end with a P/E (Feb 2019: no TTM EPS before it), then the reference's months.
+    # A leading #N/A month would draw as 0x in LibreOffice renders.
+    j = R["date"].index("2019-02-28")
+    assert engine_isnum(M["pe"][0])
+    assert [d.date().isoformat() for d in M["date"]] == R["date"][j:]
+    for k in ("close", "ttm_eps"):
+        assert all(close(a, b) for a, b in zip(R[k][j:], M[k])), k
+    assert all(close(c / e if e > 0 else float("nan"), pe) for c, e, pe in zip(M["close"], M["ttm_eps"], M["pe"]))
 
 
 def test_annual_block(dxcm_run, ref_values):
     A, R = dxcm_run["annual"], ref_values["annual"]
     assert A["fy"] == R["fy"]
-    for k in ("fcf", "bb", "pe"):
+    for k in ("fcf", "bb"):
         assert all(close(a, b) for a, b in zip(R[k], A[k])), k
-    assert A["n"] == R["n"]
+    # P/E: the average of that year's month-end TTM P/Es (the reference averaged NTM P/Es, so its values differ)
+    for y, pe, n in zip(A["fy"], A["pe"], A["n"]):
+        xs = [v for d, v in zip(dxcm_run["monthly"]["date"], dxcm_run["monthly"]["pe"]) if d.year == y and not math.isnan(v)]
+        assert n == len(xs) and (close(pe, sum(xs) / n) if n else math.isnan(pe)), y
 
 
 def test_quarter_table(dxcm_run, ref_values):
@@ -92,7 +145,6 @@ def test_quarter_table(dxcm_run, ref_values):
     assert [q["label"] for q in Q] == R["periods"]
     assert all(close(a, q["ttm_n"]) for a, q in zip(R["ttm_eps_ng"], Q))
     assert all(close(a, q["ttm_rev"]) for a, q in zip(R["ttm_rev"], Q))
-    assert all(close(a, q["ntm"]) for a, q in zip(R["ntm"], Q))
     for j, k in enumerate(("rev_g", "om", "em", "roic")):
         assert all(close(a[j], q[k]) for a, q in zip(R["ov"], Q)), k
 
@@ -117,7 +169,7 @@ def test_fcf_chart_pe_groups_month_ends_by_fiscal_year(dxcm_run, ref_values, ref
            "fcf_role": "fcf", "bb_roles": ["buyback_net"], "fye_month": 4}
     run = engine.run(cfg, prices, modmap.read(reference_model), full, [])
     M, A = run["monthly"], run["annual"]
-    want = [v for d, v in zip(M["date"], M["ntm_pe"]) if pd.Timestamp(2024, 5, 1) <= d <= pd.Timestamp(2025, 4, 30) and engine.isnum(v)]
+    want = [v for d, v in zip(M["date"], M["pe"]) if pd.Timestamp(2024, 5, 1) <= d <= pd.Timestamp(2025, 4, 30) and engine.isnum(v)]
     i = A["fy"].index(2025)
     assert A["n"][i] == len(want) and abs(A["pe"][i] - sum(want) / len(want)) < 1e-12
     assert A["n"] != dxcm_run["annual"]["n"]              # different from the calendar-year (December) grouping

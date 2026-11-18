@@ -8,8 +8,9 @@ Rules (the user / handoff, 2026-11-08):
   Dec 31 of (first MOD fiscal year - 1); the first row is 252 rows before it (the beta warm-up).
 - beta_t = SLOPE(stock returns, SPY returns) over the 252 rows ending at t-1. Idio = r_stock - beta * r_SPY.
 - Point-in-time values: the latest full-results release dated strictly before the day (releases come after the close).
-- NTM EPS = sum of the next 4 quarters after the released one (realized / model EPS, no consensus history).
-- Monthly block starts in January of the first calendar year with a numeric NTM P/E.
+- P/E = close / TTM EPS as known that day (the user, 2026-11-17). Not NTM: the free data has no consensus history,
+  and NTM on the company's later results would use EPS nobody knew at the time.
+- Monthly block starts at the first month with a numeric P/E (no leading #N/A: LibreOffice draws it as 0).
 - Weekly 3-factor block starts at the first week-end on or after the index base whose 252-day window has every
   factor return; LINEST of daily stock returns on [SPY, ETF - SPY, MOM - SPY] over the 252 rows ending at the prior
   week-end.
@@ -100,7 +101,6 @@ def quarter_table(mod, full_dates, cfg):
         lab = p["label"]
         i = labels.index(lab)
         prev4 = labels[i - 3:i + 1] if i >= 3 else None
-        nxt4 = labels[i + 1:i + 5]
         fy = modmap.fy_of(per, p["year"]) if p["q"] == 4 else None
         g = lambda role, l: V.get(role, {}).get(l)
         row = {"label": lab, "date": full_dates.get(lab), "eps_g": g("eps_gaap", lab), "eps_n": g("eps_ng", lab),
@@ -129,8 +129,6 @@ def quarter_table(mod, full_dates, cfg):
                 v = g(role, fy["label"]) / g("revenue", fy["label"])
             row[key] = v
         row["roic"] = g(cfg["roic_role"], lab) if isnum(g(cfg["roic_role"], lab)) else NA
-        ntm = [g(cfg["eps_role"], l) for l in nxt4]
-        row["ntm"] = sum(ntm) if len(ntm) == 4 and all(isnum(x) for x in ntm) else NA
     return rows
 
 
@@ -159,15 +157,14 @@ def run(cfg, prices, mod, full_dates, events):
     rel = [q for q in qt if q["date"] is not None]
     rel_dates = [q["date"] for q in rel]
     okeys = overlay_keys(cfg)
-    daily = {k: np.full(n, NA) for k in ["ttm_eps", "ntm_eps", "ntm_pe"] + okeys}
+    daily = {k: np.full(n, NA) for k in ["ttm_eps", "pe"] + okeys}
     for t in range(b + 1, n):
         d = dates[t]
-        daily["ttm_eps"][t] = asof(rel_dates, [q[cfg["ttm_key"]] for q in rel], d)
+        e = asof(rel_dates, [q[cfg["ttm_key"]] for q in rel], d)
+        daily["ttm_eps"][t] = e
+        daily["pe"][t] = px[t] / e if isnum(e) and e > 0 else NA
         for k in okeys:
             daily[k][t] = asof(rel_dates, [q[k] for q in rel], d)
-        e = asof(rel_dates, [q["ntm"] for q in rel], d)
-        daily["ntm_eps"][t] = e
-        daily["ntm_pe"][t] = px[t] / e if isnum(e) and e > 0 else NA
 
     # event reaction days (first event wins for the daily label, as MATCH(...,0) does)
     ev = []
@@ -184,10 +181,10 @@ def run(cfg, prices, mod, full_dates, events):
             label[pos[e["reaction"]]] = e["name"]
 
     # ---- monthly ----
-    pe_years = sorted({dates[t].year for t in range(b + 1, n) if isnum(daily["ntm_pe"][t])})
+    first = next((t for t in range(b + 1, n) if isnum(daily["pe"][t])), None)
     months = []
-    if pe_years:
-        lim = pd.Timestamp(pe_years[0] - 1, 12, 31)
+    if first is not None:
+        lim = pd.Timestamp(dates[first].year, dates[first].month, 1) - pd.Timedelta(days=1)   # end of the prior month
         while True:
             lim = (lim + pd.offsets.MonthEnd(1)).normalize()
             k = int(np.searchsorted(dates.values, np.datetime64(lim), side="right")) - 1
@@ -195,7 +192,7 @@ def run(cfg, prices, mod, full_dates, events):
             if k == n - 1:
                 break
     monthly = {"row": months, "date": [dates[k] for k in months], "close": [px[k] for k in months],
-               "ntm_eps": [daily["ntm_eps"][k] for k in months], "ntm_pe": [daily["ntm_pe"][k] for k in months],
+               "pe": [daily["pe"][k] for k in months],
                "ttm_eps": [daily["ttm_eps"][k] for k in months]}
 
     # ---- factor daily block ----
@@ -249,7 +246,7 @@ def run(cfg, prices, mod, full_dates, events):
     fyem = cfg.get("fye_month", 12)              # month the fiscal year ends (MDT: April); December = calendar year
     fiscal = lambda d: d.year + (1 if d.month > fyem else 0)
     for y in annual["fy"]:
-        xs = [v for d, v in zip(monthly["date"], monthly["ntm_pe"]) if fiscal(d) == y and isnum(v)]
+        xs = [v for d, v in zip(monthly["date"], monthly["pe"]) if fiscal(d) == y and isnum(v)]
         annual["pe"].append(sum(xs) / len(xs) if xs else NA)
         annual["n"].append(len(xs))
 

@@ -23,10 +23,22 @@ re-serializes charts. The DXCM example model has all of these on other tabs.
 
 - **Lean Px Data**: the orphaned columns (old H–J indexes/relative, K daily alpha, L/N GAAP P/E, O TTM P/E, Q–R
   markers, AK–AM β-only weekly alpha, AR) are gone. Blocks, left to right: daily (A–G core, event label, overlays,
-  TTM/NTM EPS, NTM P/E) | monthly | annual | factor daily | weekly 3-factor. The weekly block now starts at the
+  TTM EPS, P/E) | monthly | annual | factor daily | weekly 3-factor. The weekly block now starts at the
   3-factor base week (DXCM: 2016-01-08), not 2014-12-31.
 - Px Events keeps the reference layout (GAAP and non-GAAP EPS columns) - it is a table the user reads, not a chart.
 - Test on a stripped copy of their model; never write their live file in tests.
+
+## P/E is trailing (the user, 2026-11-17)
+
+- P/E = close / TTM EPS as known that day, labelled TTM everywhere. It replaced "NTM P/E", which divided by the next 4
+  MOD quarters: EPS nobody knew at the time (and model EPS at the end). The right forward measure is the consensus
+  NTM EPS of the time, but there is no free history of it: Yahoo and Alpha Vantage `EARNINGS_ESTIMATES` keep 90
+  days, and Koyfin shows it but exports only an image. Alpha Vantage `EARNINGS` has each quarter's consensus at the
+  print (back to the 1990s), a possible later "consensus at print" NTM series.
+- Gone with it: the NTM EPS columns (Px Data daily and monthly, Px Events). Px Data has two fewer columns, so
+  everything right of the daily block moved left; other skills read Px Data's A-C by letter and the rest by header.
+- The monthly block starts at the first month-end with a P/E (a leading #N/A draws as 0 in LibreOffice renders).
+- Near break-even, TTM P/E runs into the hundreds (DXCM 2019: 373x on $0.09 TTM EPS). That is the measure, not a bug.
 
 ## Deliberate differences from the reference
 
@@ -41,10 +53,11 @@ re-serializes charts. The DXCM example model has all of these on other tabs.
 
 ## DXCM baseline (rerun after changing scripts)
 
-`python3 -m pytest -q` (27 engine tests vs reference cached values, 1e-9). End to end on a stripped copy of the
-reference with `tests/fixtures/dxcm/*.csv`: verify PASS, 43,676 values, 0 failed, 0 errors, other parts
+`python3 -m pytest -q` (29 engine tests vs reference cached values, 1e-9; P/E columns are checked as close / TTM EPS
+because the reference holds the old NTM P/E). End to end on a stripped copy of the
+reference with `tests/fixtures/dxcm/*.csv`: verify PASS, 40,477 values, 0 failed, 0 errors, other parts
 byte-identical. Handoff numbers: β 0.601, 3-factor β 0.831 / 0.696 / −0.205, R² 0.193, index 137.51, FY25 FCF 1,077.2,
-buybacks 471.9, P/E 32.3x, 2018 = 8 months.
+buybacks 471.9, FY25 avg TTM P/E 43.9x, P/E months from Feb 2019 (11 in 2019), last P/E 33.07x on 2026-11-04.
 
 Fixture prices were extracted from the reference model (its pasted values, with XHE/MTUM gaps already filled), so
 prices.py's fill / stale checks are not exercised by them.

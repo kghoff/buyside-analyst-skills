@@ -66,7 +66,7 @@ def main():
         chk("event label", "Px Data", DL["event"], r, run["label"][i])
         for k in run["okeys"]:
             chk(f"overlay {k}", "Px Data", DL["ov_" + k], r, run["daily"][k][i])
-        for k in ("ttm_eps", "ntm_eps", "ntm_pe"):
+        for k in ("ttm_eps", "pe"):
             chk(k, "Px Data", DL[k], r, run["daily"][k][i])
         chk("ETF excess", "Px Data", DL["f_ind_x"], r, run["ind_x"][i])
         chk("MOM excess", "Px Data", DL["f_mom_x"], r, run["mom_x"][i])
@@ -77,7 +77,7 @@ def main():
         checks += 1
         if not (hasattr(got, "date") and got.date() == M["date"][j].date()):
             fails.append(f"month-end row {r}: {got} vs {M['date'][j].date()}")
-        for k in ("close", "ntm_eps", "ntm_pe", "ttm_eps"):
+        for k in ("close", "pe", "ttm_eps"):
             chk(f"monthly {k}", "Px Data", DL[{"close": "m_close"}.get(k, "m_" + k)], r, M[k][j])
     A = run["annual"]
     for j in range(len(A["fy"])):
@@ -97,7 +97,7 @@ def main():
             chk(f"weekly {k}", "Px Data", DL["w_" + ("ov_" + k if k in run["okeys"] else k)], r, W[k][j])
     for k, q in enumerate(run["quarters"]):
         r = R["Q0"] + k
-        for key in ["ttm_g", "ttm_n", "ttm_rev", "ntm"] + run["okeys"]:
+        for key in ["ttm_g", "ttm_n", "ttm_rev"] + run["okeys"]:
             chk(f"quarter {key}", "Px Events", EL[key], r, q[key])
     for k, e in enumerate(run["events"]):
         r = R["EV0"] + k

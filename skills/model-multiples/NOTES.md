@@ -19,7 +19,7 @@ Not read at runtime. Read before changing the scripts. Spec: docs/2026-11-17-app
 
 ## Decisions (2026-11-17, with the user)
 - Two data paths. Paid = exported files, never logins.
-- Free history = TTM as known on each date (no hindsight), not model-price-history's realized NTM.
+- Free history = TTM as known on each date (no hindsight), the same basis as model-price-history's P/E.
 - A core peer's quarter is known 45 days after quarter end (Q1-Q3) or 90 days (Q4): the latest SEC deadlines, so never early.
 - Comp list wider than the industry players; 3-5 core peers get history (stooq per peer).
 - Comp sheet from Yahoo only (deviation from the spec's XBRL; one source per comp).

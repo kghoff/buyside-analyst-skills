@@ -93,8 +93,8 @@ def px_data_layout(okeys):
             L[n] = colname(c); c += 1
         c += 1                                                  # one empty column between blocks
     take(["date", "close", "spy", "ret", "spy_ret", "beta", "idio", "event"] + [f"ov_{k}" for k in okeys]
-         + ["ttm_eps", "ntm_eps", "ntm_pe"])
-    take(["m_date", "m_close", "m_ntm_eps", "m_ntm_pe", "m_ttm_eps"])
+         + ["ttm_eps", "pe"])
+    take(["m_date", "m_close", "m_pe", "m_ttm_eps"])
     take(["a_fy", "a_fcf", "a_bb", "a_pe", "a_n"])
     take(["f_etf", "f_mom", "f_spy_ret", "f_ind_x", "f_mom_x"])
     take(["w_date", "w_close", "w_spy", "w_etf", "w_mom", "w_ret", "w_spy_ret", "w_ind_x", "w_mom_x", "w_end",
@@ -107,7 +107,7 @@ def px_events_layout(okeys):
     L.update(zip(["e_date", "e_type", "e_name", "e_timing", "e_react", "e_r", "e_rs", "e_beta", "e_idio", "e_note"],
                  "JKLMNOPQRS"))
     c = colnum("U")
-    for k in ["ttm_rev"] + okeys + ["ntm"]:
+    for k in ["ttm_rev"] + okeys:
         L[k] = colname(c); c += 1
     return L
 
@@ -192,7 +192,6 @@ def build(model, work, out, replace=False):
              "e_name": "Event", "e_timing": "Timing", "e_react": "Reaction day", "e_r": f"{T} % chg",
              "e_rs": "SPY % chg", "e_beta": "β (252d)", "e_idio": "Idio % chg",
              "e_note": "What happened / why (your annotation)", "ttm_rev": "TTM revenue ($M)",
-             "ntm": f"NTM {epsb} EPS (next 4 qtrs after this release)",
              **{k: (ov_name[k].replace(" (as reported)", "") if k != "roic" else f"{ov_name[k]}") for k in okeys}}
     widths = {"A": 9, "B": 13, "C": 11, "D": 11, "E": 11, "F": 11, "G": 11, "H": 11, "J": 12, "K": 14, "L": 26, "M": 11,
               "N": 12, "O": 10, "P": 10, "Q": 9, "R": 10, "S": 60}
@@ -200,7 +199,7 @@ def build(model, work, out, replace=False):
         ev.set(f"{EL[k]}4", "s", h, sty["hdr"])
     for L_, w in widths.items():
         ev.widths[colnum(L_)] = w
-    for k in ["ttm_rev"] + okeys + ["ntm"]:
+    for k in ["ttm_rev"] + okeys:
         ev.widths[colnum(EL[k])] = 13
     ev.heights[4] = 34
     ev.comments[f"{EL['ttm_g']}4"] = ("TTM = sum of the last 4 quarterly diluted EPS. If a quarter is missing in MOD, the "
@@ -212,7 +211,6 @@ def build(model, work, out, replace=False):
         p = per[lab]
         i = qlabels.index(lab)
         prev4 = qlabels[i - 3:i + 1] if i >= 3 else None
-        nxt4 = qlabels[i + 1:i + 5]
         fy = modmap.fy_of(mod["periods"], p["year"]) if p["q"] == 4 else None
         ev.set(f"A{r}", "s", lab, sty["in_txt"])
         ev.set(f"B{r}", "d", serial(q["date"]), sty["in_date"])
@@ -248,11 +246,6 @@ def build(model, work, out, replace=False):
             ev.set(f"{EL[key]}{r}", "f", f, sty["pct1"])
         ref = mref(cfg["roic_role"], lab)
         ev.set(f"{EL['roic']}{r}", "f", f"IF(ISNUMBER({ref}),{ref},NA())", sty["g_pct1"])
-        if len(nxt4) == 4:
-            refs = [mref(cfg["eps_role"], l) for l in nxt4]
-            ev.set(f"{EL['ntm']}{r}", "f", f"IF(COUNT({','.join(refs)})=4,{'+'.join(refs)},NA())", sty["eps"])
-        else:
-            ev.set(f"{EL['ntm']}{r}", "f", "NA()", sty["eps"])
     ev.cf.append((f"{EL['ttm_rev']}{Q0}:{EL[okeys[-1]]}{QN}", f"ISNA({EL['ttm_rev']}{Q0})", dxf_grey))
     for k, e in enumerate(EVS):
         r = EV0 + k
@@ -278,10 +271,10 @@ def build(model, work, out, replace=False):
     hd = {"date": "Date", "close": f"{T} close", "spy": "SPY close", "ret": f"{T} daily return",
           "spy_ret": "SPY daily return", "beta": "β (252d, through prior day)", "idio": f"Idio return  ({T} − β×SPY)",
           "event": "Event (reaction day)", **{f"ov_{k}": ov_name[k] for k in okeys},
-          "ttm_eps": f"TTM {epsb} EPS", "ntm_eps": f"NTM {epsb} EPS", "ntm_pe": f"P/E (NTM {epsb})",
-          "m_date": "Month-end", "m_close": "Close", "m_ntm_eps": f"NTM EPS ({epsb})", "m_ntm_pe": f"NTM P/E ({epsb})",
+          "ttm_eps": f"TTM {epsb} EPS", "pe": f"P/E (TTM {epsb})",
+          "m_date": "Month-end", "m_close": "Close", "m_pe": f"P/E (TTM {epsb})",
           "m_ttm_eps": f"TTM EPS ({epsb})", "a_fy": "Fiscal year", "a_fcf": "Free cash flow ($M)",
-          "a_bb": "Net share repurchases ($M; negative = net issuance)", "a_pe": f"Avg NTM P/E ({epsb}, month-ends)",
+          "a_bb": "Net share repurchases ($M; negative = net issuance)", "a_pe": f"Avg P/E (TTM {epsb}, month-ends)",
           "a_n": "# month-ends in P/E avg", "f_etf": f"{ETF} close (stooq adj.)", "f_mom": f"{MOM} close (stooq adj.)",
           "f_spy_ret": "SPY daily return", "f_ind_x": f"{ind.capitalize()} excess daily return  ({ETF} − SPY)",
           "f_mom_x": f"Momentum excess daily return  ({MOM} − SPY)", "w_date": "Week-end", "w_close": f"{T} close",
@@ -305,9 +298,9 @@ def build(model, work, out, replace=False):
                                       "days (~1 year), ending the day before, so today's move never feeds today's β.")
     pdx.comments[f"{DL['ov_' + okeys[0]]}4"] = ("Steps on the trading day after each full-results release, so the line "
                                                 "shows what investors knew at the time.")
-    pdx.comments[f"{DL['ntm_eps']}4"] = ("Sum of the next 4 not-yet-reported quarters in MOD as of each day. That is "
-                                         "realized (or model) EPS - perfect foresight, not the consensus of the time. "
-                                         "#N/A where MOD doesn't have those 4 quarters yet; fills in as projections are added.")
+    pdx.comments[f"{DL['pe']}4"] = ("Close / TTM EPS reported as of that day: trailing, what was known at the time. "
+                                    "Not NTM: there is no free history of the consensus estimates of the time. "
+                                    "#N/A where TTM EPS is zero or negative.")
     fills = run["fills"]
     pdx.comments[f"{DL['f_etf']}4"] = sfile("etf") + (f" Missing dates take the prior close: {', '.join(d.date().isoformat() for d in fills['etf'])}." if fills["etf"] else "")
     pdx.comments[f"{DL['f_mom']}4"] = sfile("mom") + (f" Missing dates take the prior close: {', '.join(d.date().isoformat() for d in fills['mom'])}." if fills["mom"] else "") \
@@ -343,25 +336,23 @@ def build(model, work, out, replace=False):
         for k in okeys:
             pdx.set(f"{D_['ov_' + k]}{r}", "f", pit(k), sty["pct1"])
         pdx.set(f"{D_['ttm_eps']}{r}", "f", pit(cfg["ttm_key"]), sty["eps"])
-        pdx.set(f"{D_['ntm_eps']}{r}", "f", pit("ntm"), sty["eps"])
-        e = f"{D_['ntm_eps']}{r}"
-        pdx.set(f"{D_['ntm_pe']}{r}", "f", f"IF(ISNUMBER({e}),IF({e}>0,{D_['close']}{r}/{e},NA()),NA())", sty["pe"])
-    pdx.cf.append((f"{D_['ov_' + okeys[0]]}{RS}:{D_['ntm_pe']}{RN}", f"ISNA({D_['ov_' + okeys[0]]}{RS})", dxf_grey))
+        e = f"{D_['ttm_eps']}{r}"
+        pdx.set(f"{D_['pe']}{r}", "f", f"IF(ISNUMBER({e}),IF({e}>0,{D_['close']}{r}/{e},NA()),NA())", sty["pe"])
+    pdx.cf.append((f"{D_['ov_' + okeys[0]]}{RS}:{D_['pe']}{RN}", f"ISNA({D_['ov_' + okeys[0]]}{RS})", dxf_grey))
 
     # monthly
     M = run["monthly"]
     MN = 4 + len(M["date"])
-    pdx.set(f"{D_['m_date']}2", "s", f"MONTH-END NTM P/E — feeds the P/E chart on the Idio Chart tab. Last trading day of "
-                                     f"each month. NTM EPS = next 4 not-yet-reported quarters of {epsb} EPS from MOD "
-                                     "(realized, no consensus history); TTM EPS = trailing-12-month EPS reported as of "
-                                     "that day.", sty["note"])
+    pdx.set(f"{D_['m_date']}2", "s", f"MONTH-END P/E (TTM) — feeds the P/E chart on the Idio Chart tab. Last trading day of "
+                                     f"each month. P/E = close / trailing-12-month {epsb} EPS reported as of that day "
+                                     "(trailing, not forward: no free consensus history).", sty["note"])
     for j in range(len(M["date"])):
         r = 5 + j
-        prev = f"DATE({M['date'][0].year - 1},12,31)" if j == 0 else f"{D_['m_date']}{r - 1}"
+        prev = f"DATE({M['date'][0].year},{M['date'][0].month},0)" if j == 0 else f"{D_['m_date']}{r - 1}"
         pdx.set(f"{D_['m_date']}{r}", "f", f'_xlfn.MAXIFS({A_},{A_},"<="&EOMONTH({prev},1))', sty["date"])
         mt = f"MATCH({D_['m_date']}{r},{A_},0)"
         pdx.set(f"{D_['m_close']}{r}", "f", f"INDEX({rng('close')},{mt})", sty["eps"])
-        for key, src, s in (("m_ntm_eps", "ntm_eps", "eps"), ("m_ntm_pe", "ntm_pe", "pe"), ("m_ttm_eps", "ttm_eps", "eps")):
+        for key, src, s in (("m_pe", "pe", "pe"), ("m_ttm_eps", "ttm_eps", "eps")):
             pdx.set(f"{D_[key]}{r}", "f", f"IFERROR(INDEX({rng(src)},{mt}),NA())", sty[s])
 
     # annual
@@ -370,10 +361,10 @@ def build(model, work, out, replace=False):
     fcf_lab = mod["rows"]["fcf"]["label"]
     bb_lab = " + ".join(mod["rows"][x]["label"] for x in cfg["bb_roles"])
     pdx.set(f"{D_['a_fy']}2", "s", f"FCF vs BUYBACKS — annual, from MOD ('{fcf_lab}', row {mrow('fcf')}; '{bb_lab}', sign "
-                                   f"flipped so buybacks are positive). P/E = average of that fiscal year's month-end NTM {epsb} "
+                                   f"flipped so buybacks are positive). P/E = average of that fiscal year's month-end TTM {epsb} "
                                    "P/Es; the count column says how many months had one. Feeds the chart on Idio Chart.",
             sty["note"])
-    mpe, mdt = rng("m_ntm_pe", 5, MN), rng("m_date", 5, MN)
+    mpe, mdt = rng("m_pe", 5, MN), rng("m_date", 5, MN)
     fyem = cfg["fye_month"]
     fy_of = f"YEAR({mdt})" if fyem == 12 else f"(YEAR({mdt})+(MONTH({mdt})>{fyem}))"   # month-end -> fiscal year
     for j, y in enumerate(A["fy"]):
@@ -439,8 +430,8 @@ def build(model, work, out, replace=False):
     # ================= Idio Chart =================
     ic = Sheet(); ic.zoom = 115
     ic.set("A1", "s", f"{T} — idio chart", sty["title16"])
-    ic.set("A2", "s", f"Four charts: (1) share price with point-in-time TTM fundamentals (right axis); (2) month-end NTM "
-                      f"P/E with TTM {epsb} EPS; (3) free cash flow vs. net buybacks with the average NTM P/E; (4) {T}'s "
+    ic.set("A2", "s", f"Four charts: (1) share price with point-in-time TTM fundamentals (right axis); (2) month-end P/E "
+                      f"on TTM {epsb} EPS, with that EPS; (3) free cash flow vs. net buybacks with the average TTM P/E; (4) {T}'s "
                       f"idiosyncratic performance with the market, {ind} ({ETF}) and momentum ({MOM}) stripped out, weekly, "
                       "with the same fundamentals. Data: 'Px Data'. Release and event dates: 'Px Events'.", sty["note"])
     ic.set("A3", "s", f"How to read alpha: each week, idio return = {T} return − β_mkt×SPY − β_{ind}×({ETF}−SPY) − "
@@ -482,11 +473,11 @@ def build(model, work, out, replace=False):
                         okeys, (lo_p, hi_p)))
     cat_m = (f"'Px Data'!${D_['m_date']}$5:${D_['m_date']}${MN}", [serial(d) for d in M["date"]])
     ser_m = lambda key, vals: (f"'Px Data'!${D_[key]}$4", hd[key], f"'Px Data'!${D_[key]}$5:${D_[key]}${MN}", vals)
-    charts.append(chart("pe", f"{T} NTM P/E (month-end) with TTM {epsb} EPS (right axis)", cat_m,
-                        [ser_m("m_ntm_pe", M["ntm_pe"]), ser_m("m_ttm_eps", M["ttm_eps"])], okeys, None))
+    charts.append(chart("pe", f"{T} P/E on TTM {epsb} EPS (month-end), with TTM EPS (right axis)", cat_m,
+                        [ser_m("m_pe", M["pe"]), ser_m("m_ttm_eps", M["ttm_eps"])], okeys, None))
     cat_a = (f"'Px Data'!${D_['a_fy']}$5:${D_['a_fy']}${AN}", A["fy"])
     ser_a = lambda key, vals: (f"'Px Data'!${D_[key]}$4", hd[key], f"'Px Data'!${D_[key]}$5:${D_[key]}${AN}", vals)
-    charts.append(chart("fcf", "Free cash flow vs. net buybacks ($M) with average NTM P/E (right axis)", cat_a,
+    charts.append(chart("fcf", "Free cash flow vs. net buybacks ($M) with average TTM P/E (right axis)", cat_a,
                         [ser_a("a_fcf", A["fcf"]), ser_a("a_bb", A["bb"]), ser_a("a_pe", A["pe"])], okeys, None))
     cat_w = (f"'Px Data'!${D_['w_date']}$5:${D_['w_date']}${WN}", [serial(d) for d in W["date"]])
     ser_w = lambda key, vals: (f"'Px Data'!${D_[key]}$4", hd[key], f"'Px Data'!${D_[key]}$5:${D_[key]}${WN}", vals)

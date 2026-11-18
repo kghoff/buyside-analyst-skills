@@ -1,6 +1,6 @@
 ---
 name: model-price-history
-description: Add the user's price-history tabs to a company model (TICKER_model.xlsx) - Px Data (daily closes, rolling beta, idiosyncratic return, point-in-time TTM fundamentals, month-end NTM P/E, annual FCF vs buybacks, weekly 3-factor alpha), Px Events (full-results release dates, TTM EPS and fundamentals linked to MOD, every earnings / preliminary-revenue / investor-event reaction with its idio move) and Idio Chart (price with TTM overlays, NTM P/E with TTM EPS, FCF vs buybacks with P/E, 3-factor alpha with overlays, Top-20 up/down idio days). Asks GAAP vs non-GAAP for the overlays and pauses for the user to download stooq price files. Run after /model-kpis and before /research-filings. Use when the user runs /model-price-history TICKER or asks for the idio chart / price history tabs.
+description: Add the user's price-history tabs to a company model (TICKER_model.xlsx) - Px Data (daily closes, rolling beta, idiosyncratic return, point-in-time TTM fundamentals, month-end P/E on TTM EPS, annual FCF vs buybacks, weekly 3-factor alpha), Px Events (full-results release dates, TTM EPS and fundamentals linked to MOD, every earnings / preliminary-revenue / investor-event reaction with its idio move) and Idio Chart (price with TTM overlays, TTM P/E with TTM EPS, FCF vs buybacks with P/E, 3-factor alpha with overlays, Top-20 up/down idio days). Asks GAAP vs non-GAAP for the overlays and pauses for the user to download stooq price files. Run after /model-kpis and before /research-filings. Use when the user runs /model-price-history TICKER or asks for the idio chart / price history tabs.
 ---
 
 # /model-price-history
@@ -125,8 +125,8 @@ The verify report stays in `$W/verify_report.md` (working files stay in `_model_
 - the price files used, any filled dates, stale days, big moves
 - **every judgment call**: events added or removed, timings changed, missing dates found (and where), MOD labels
   matched by fallback patterns, the GAAP / non-GAAP answer
-- the verification result, and a reminder to open the file in Excel, where it recalculates (NTM P/E is #N/A for
-  recent months until MOD has projections for the next 4 quarters)
+- the verification result, and a reminder to open the file in Excel, where it recalculates
+- that the P/E is trailing (TTM), not forward; months with zero or negative TTM EPS have no P/E
 
 ## Judgment policy
 
@@ -134,7 +134,7 @@ The verify report stays in `$W/verify_report.md` (working files stay in `_model_
 - Methodology is fixed (the user and the handoff, Nov 2026). Don't change it without asking:
   - β = 252-day slope through the prior day
   - point-in-time values switch the trading day after each release
-  - NTM = the next 4 MOD quarters (realized, not consensus)
+  - P/E = close / TTM EPS as known that day (trailing; there is no free history of the consensus of the time)
   - monthly P/E, not daily; TTM EPS on the P/E chart, no average line
   - 3-factor LINEST on [SPY, ETF − SPY, MTUM − SPY], one regression per week, window ending at the prior week-end
 - Never graph two versions of the same metric (e.g. GAAP and non-GAAP P/E).
