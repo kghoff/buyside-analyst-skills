@@ -2,6 +2,6 @@
   "name": "model-price-history",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test tests/" },
+  "scripts": { "test": "node --test" },
   "dependencies": { "yahoo-finance2": "3.13.2" }
 }
