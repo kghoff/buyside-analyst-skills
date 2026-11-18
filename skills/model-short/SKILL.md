@@ -31,8 +31,9 @@ any ✓ / ✗ / ? (or formula) the user typed over a code tick.
 
 ## Step 1: Locate and check
 1. `python3 "$SKILLS/model-ratios/scripts/locate_model.py" --ticker <T>` (or the path the user names). It prints
-   JSON; `model` is the file. Set `M` to it and `W=<model dir>/_model_work/model-short` (`mkdir -p "$W"`). All
-   working files stay in `$W`.
+   JSON; `model` is the file. If it prints `{"status": "build"}` there is no model yet: stop and tell the user to run
+   /model-historicals (and the skills after it) first. Set `M` to it and
+   `W=<model dir>/_model_work/model-short` (`mkdir -p "$W"`). All working files stay in `$W`.
 2. If `~$<model file name>` exists next to `M`, ask the user to close Excel and wait.
 3. `shasum -a 256 "$M"`: keep it for Step 8. Never write to `M` before then; keep no backup copies.
 4. A Short Check tab already there is normal (rerun each print). The build replaces it; the user's changes are kept.
@@ -47,7 +48,8 @@ on; tell the user the price and short data will show n/a.
 ## Step 3: Context
 `python3 -I "$SK/context.py" --model "$M" --work "$W" --ticker <T>`. It recalculates a copy of the model in
 LibreOffice into `$W/values/` (a minute or two), then writes `$W/context.json`, `$W/context.md` and `$W/rowmap.md`.
-It stops, naming the skill to run, when MOD, Px Data or Multiples is missing. It prints the price, the stale-price
+It stops, naming the skill to run, when MOD, Px Data or Multiples is missing; then delete the recalculated copy it
+made (`rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"`). It prints the price, the stale-price
 check, the missing optional tabs and code's ticks. Tell the user: the stale-price flag (if set: the Valuation tab's
 price is more than 3% from today's; rerun /model-valuation), the missing optional tabs, and code's ticks.
 
@@ -70,7 +72,7 @@ python3 -I "$SK/anchors.py" --plan "$W/short_plan.json" --values "$W/values/<mod
 per line (or `plan OK` / `anchors OK`) and exits 1 on any. Problems → SendMessage them all to the same agent; run
 both again. After round 2:
 - plan.py problems stop the run: show the user the problems in plain English and do not build. The model stays
-  untouched.
+  untouched. Delete the copies of the model Step 3 made (keep none): `rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"`.
 - anchors.py problems: write the names still failing (the text before the first ":" of each problem, e.g.
   `reward_eps`, `ticks.pricing`, `smoke[0]`, `catalyst`) as a JSON list to `$W/unverified.json`; the build marks
   them UNVERIFIED in red and the note lists them. Otherwise make sure no old `$W/unverified.json` is left
@@ -83,14 +85,17 @@ python3 -I "$SK/verify.py" --out "$W/out.xlsx" --work "$W"
 ```
 build.py never touches `M`, and stops if any part of the workbook other than the tab (and the workbook, styles and
 content-type parts it must update) changed. It prints JSON; keep for the report: `verdict_rule` and `verdict_agent`,
-`users_kept` (labels of the cells the user had changed, kept) and `warnings` (no inputs_written.json record, so every
+`users_kept` (labels of the cells the user had changed, kept), `overrides` (each computed row whose tick is not
+code's: the row, code's tick, the tick used, and who: agent or user) and `warnings` (no inputs_written.json record, so every
 differing yellow cell was treated as the user's; or a yellow cell that holds text where a number belongs).
 verify.py recalculates the copy once in LibreOffice and compares every checked cell with `shortmath.py`; it prints
 `{"problems": [...], "recalculated": ...}` and exits 1 on any problem. Any verify problem: stop, tell the user the
-first problems in plain English, and do not copy. Never hand-edit the output.
+first problems in plain English, and do not copy. Never hand-edit the output. Delete every copy of the model the run
+made (keep none): `rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"`.
 
 ## Step 8: Replace the model
-1. `shasum -a 256 "$M"` again: if it changed, stop (the user saved meanwhile) and rerun from Step 3.
+1. `shasum -a 256 "$M"` again: if it changed, stop (the user saved meanwhile): delete the copies made from the old
+   file (`rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"`) and rerun from Step 3.
 2. Check `~$<model file name>` again (ask the user to close Excel). Then
    `cp "$W/out.xlsx" "$M" && mv "$W/inputs_written.next.json" "$W/inputs_written.json"` (the record of what this
    build wrote, so the next rerun can tell the user's changes from the agent's).
@@ -109,7 +114,8 @@ Then tell the user, in plain English:
   the largest is the risk), R/R against 1.4x, and the print move.
 - Max position (VaR budget ÷ risk) and its share of the short book; crowding (short % of float against the 10% line,
   days to cover); borrow and dividend drag (or "check with PB", with the 5% and 20% cases).
-- Every judgment call with its reason: each tick the agent overrode or made, the reward / dream / takeout inputs and
+- Every judgment call with its reason: each tick the agent overrode or made (`overrides` lists every computed row
+  whose tick is not code's, the agent's and the user's), the reward / dream / takeout inputs and
   their anchors, the catalyst, takeout candidacy, smoke flags (and what was read), any house input changed.
 - Every flag: stale price, Yahoo failure, missing optional tabs, UNVERIFIED names, the cells the user had changed
   (`users_kept`) and that they were kept, the build's `warnings`.

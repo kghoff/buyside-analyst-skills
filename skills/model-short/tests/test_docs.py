@@ -32,3 +32,14 @@ def test_agent_has_no_shell_or_web():
     a = _read(ROOT, "agents", "short-analyst.md")
     tools = [x for x in a.splitlines() if x.startswith("tools:")][0]
     assert "Bash" not in tools and "Web" not in tools
+
+
+def test_skill_stops_without_a_model_and_every_stop_deletes_the_copies():
+    """Keep no copies of the user's model: every way the run can stop after context.py (plan fails, verify fails, the
+    model changed) and the normal end delete the recalculated copies and the built copy."""
+    s = _read(SK, "SKILL.md")
+    assert '"status": "build"' in s and "/model-historicals" in s
+    rm = 'rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"'
+    step3, step6, step7, step8 = (s.split(f"## Step {n}:")[1].split("## Step")[0] for n in (3, 6, 7, 8))
+    assert rm in step3 and rm in step6 and rm in step7
+    assert step8.count(rm) >= 2                                   # the shasum stop and the normal end
