@@ -860,6 +860,11 @@ def _bottom_row(pkg, part):
     return max(rows + [1])
 
 
+def _event_moves(e):
+    """The typed moves for one event row: the stock's own (B), SPY (C), idio (D); None falls back to Px Events."""
+    return {"B": e.get("stock"), "C": e.get("spy"), "D": e.get("idio")}
+
+
 def stock_blocks(pkg, st, part, H, ticker, sector):
     xml = pkg.text(part)
     ss = _strings(pkg)
@@ -941,7 +946,7 @@ def stock_blocks(pkg, st, part, H, ticker, sector):
         for e in ev:
             C[f"A{r}"] = ("n", _serial(e["date"]), sty["date"])
             for col, src in (("B", "O"), ("C", "P"), ("D", "R")):
-                typed = e.get({"B": "dxcm", "C": "spy", "D": "idio"}[col])
+                typed = _event_moves(e)[col]
                 C[f"{col}{r}"] = (("n", typed, sty["pctb"]) if typed is not None else
                                   ("f", f"IFERROR(INDEX('Px Events'!${src}$1:${src}$2000,MATCH(A{r},'Px Events'!$J$1:$J$2000,0)),\"n.a.\")", sty["pct"]))
             C[f"E{r}"] = ("s", e["what"], sty["txt"])

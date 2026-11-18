@@ -50,3 +50,11 @@ def test_alpha_points_come_from_the_charts_own_cache():
     (dates, vals), axis = handoff.alpha_series("no-such-workbook.xlsx", xml)
     assert [d.isoformat() for d in dates] == ["2025-01-01", "2025-01-08"] and vals == [0.1, 0.4]
     assert axis == handoff._auto_axis(0.1, 0.4)
+
+
+def test_event_moves_read_the_stocks_own_move_under_a_ticker_neutral_key():
+    # the handoff JSON is written for any company; a key named after one ticker leaves every other company's
+    # typed move ignored (it fell back to a Px Events lookup that misses events not in that tab)
+    from handoff import _event_moves
+    assert _event_moves({"stock": -0.065, "spy": -0.007, "idio": -0.058}) == {"B": -0.065, "C": -0.007, "D": -0.058}
+    assert _event_moves({"date": "2025-11-19"}) == {"B": None, "C": None, "D": None}

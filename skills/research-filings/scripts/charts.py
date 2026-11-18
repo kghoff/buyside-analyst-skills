@@ -28,7 +28,7 @@ BLUE, ORANGE, AQUA, YELLOW, MAGENTA, GREEN, VIOLET, RED = ("#2a78d6", "#eb6834",
 PALETTE = [BLUE, ORANGE, AQUA, YELLOW, MAGENTA, VIOLET, GREEN, RED]
 INK, INK2, MUTED, GRID, SURF = "#0b0b0b", "#52514e", "#8a8984", "#e6e5e1", "#ffffff"
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
-THOUSANDS = FuncFormatter(lambda v, _: f"{v:,.0f}")
+THOUSANDS = FuncFormatter(lambda v, _: f"{v:,.0f}" if abs(v) >= 100 else f"{v:.2f}".rstrip("0").rstrip("."))
 plt.rcParams.update({
     "font.family": ["Inter", "Helvetica", "Arial", "DejaVu Sans"], "font.size": 9, "axes.edgecolor": GRID,
     "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2, "axes.titlesize": 11,

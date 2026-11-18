@@ -155,3 +155,15 @@ def test_pdf_footnotes_restart_each_section_and_leave_no_brackets(tmp_path):
     assert "[" not in text
     assert "1. DXCM 2025 10-K, Item 1" in pages[0] and "2. Calc, drivers_math X" in pages[0]
     assert "1. 2026 Q3 DXCM call, CFO prepared" in pages[1]
+
+
+def test_a_misplaced_kpi_footnote_moves_the_tile_row_not_the_callout_above():
+    # KPI tiles are divs, not paragraphs: marking the KEY callout's paragraph instead left an empty full-page callout
+    from render import _keep_together
+    html = to_html("## One\n\n> [!KEY]\n> Bottom line.\n\n<div class=\"kpis\"><div class=\"kpi\"><div class=\"v\">$1</div>"
+                   "<div class=\"l\">Revenue [ABC 2025 10-K, Item 7]</div></div></div>\n", ".", "F")
+    once = _keep_together(html, [0])
+    body = once.split("<body", 1)[1]
+    assert '<div class="kpis fnkeep">' in body and "fnkeep" not in body.split('<div class="kpis', 1)[0]
+    # still misplaced after one pass: the tile row (not the callout) starts a new page
+    assert '<div class="kpis fnbreak">' in _keep_together(once, [0])
