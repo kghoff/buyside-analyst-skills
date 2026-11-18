@@ -1,8 +1,10 @@
 """Step 0 - find the ticker's base model (TICKER_model.xlsx with a MOD tab) and its /collect-documents source folder.
 
 usage: python3 locate_model.py --ticker DXCM
-Search order, first hit wins: <research_dir>/<TICKER>, the rest of the Desktop, then a light search of
-Downloads, Documents and the home folder (shallow; skips Library, hidden and app folders - same as model-historicals).
+A model is <ticker>_model*.xlsx (any case) with a MOD tab. One in <research_dir>/<TICKER> always wins: every model
+lives there. Otherwise the most recently saved one found on the Desktop, or in a light search of Downloads, Documents
+and the home folder (shallow; skips Library, hidden and app folders - same as model-historicals), so an old copy
+never shadows the one the user is working on.
 Prints JSON {"status": "found", "model", "model_dir", "work", "src"} or {"status": "build"} (run /model-historicals)."""
 import argparse
 import json
@@ -48,25 +50,32 @@ def _source_dir(model_dir, ticker):
     return None
 
 
+def _is_model(f, t):
+    f = f.lower()
+    return f.startswith(f"{t.lower()}_model") and f.endswith(".xlsx") and not f.startswith("~$")
+
+
 def find_model(ticker, home=os.path.expanduser("~")):
     t = ticker.upper()
-    name = f"{t}_model.xlsx".lower()
     desktop = os.path.join(home, "Desktop")
-    roots = [(os.path.join(settings.research_dir(), t), 0), (desktop, 6), (os.path.join(home, "Downloads"), 6),
-             (os.path.join(home, "Documents"), 6), (home, 4)]
-    seen = set()
-    for root, depth in roots:
-        for d, files in _walk(root, depth):
-            hit = next((f for f in files if f.lower() == name), None)
-            if not hit or d in seen:
-                continue
-            seen.add(d)
-            path = os.path.join(d, hit)
-            if _has_mod(path):
-                return {"status": "found", "model": path, "model_dir": d, "work": os.path.join(d, "_model_work"),
-                        "src": _source_dir(d, t)}
+    research = [(os.path.join(settings.research_dir(), t), 0)]
+    elsewhere = [(desktop, 6), (os.path.join(home, "Downloads"), 6), (os.path.join(home, "Documents"), 6), (home, 4)]
+    for roots in (research, elsewhere):
+        hits, seen = [], set()
+        for root, depth in roots:
+            for d, files in _walk(root, depth):
+                for f in files:
+                    path = os.path.join(d, f)
+                    if _is_model(f, t) and path not in seen:
+                        seen.add(path)
+                        if _has_mod(path):
+                            hits.append(path)
+        if hits:
+            path = max(hits, key=os.path.getmtime)
+            d = os.path.dirname(path)
+            return {"status": "found", "model": path, "model_dir": d, "work": os.path.join(d, "_model_work"),
+                    "src": _source_dir(d, t)}
     return {"status": "build"}
-
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
