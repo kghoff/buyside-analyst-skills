@@ -127,9 +127,12 @@ which and ask again. Read every `notes` line:
    notes, and the tabs' positions.
 3. `python3 "$SK/build.py" --model "$M" --work "$W" --out "$W/built.xlsx" --refresh`.
 4. `python3 "$SK/refresh.py" restore --model "$M" --built "$W/built.xlsx" --work "$W" --out "$W/carried.xlsx"`.
-   Exit 3 = another tab reads something that moved (a column whose header changed, or a row that no longer holds the
-   same date or event): show the user the `stops` and stop; nothing is written. `reference_warnings` (a range that
-   ends above the new last row, so it misses the new days) go in the report.
+   A reference into a column that moved (its header is now in another column, once, or once within the block that
+   starts with the same header, and the referenced row starts on the same date) is rewritten to the new letter and
+   listed in `references_followed`: tell the user every one. Exit 3 = another tab reads something that changed (a
+   header that is gone or ambiguous, or a row that no longer holds the same date or event): show the user the `stops`
+   and stop; nothing is written. `reference_warnings` (a range that ends above the new last row, so it misses the new
+   days) go in the report.
 5. If `$H` exists: `python3 "$SKILLS/research-filings/scripts/handoff.py" --src "$SRC" --model "$W/carried.xlsx"
    --out "$W/final.xlsx" --idio-only` (redraws the research notes on the new axis, fills empty note cells, rewrites
    the yearly-returns block; Filings Charts is not touched). If it stops (e.g. MOD rows moved), tell the user and use

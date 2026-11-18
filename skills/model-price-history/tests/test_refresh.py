@@ -141,9 +141,10 @@ def test_range_that_ends_at_the_old_last_row_is_a_warning(refreshed):
     assert any("Research reads 'Px Data'!B5:B3234" in x and "miss the new days" in x for x in w)
 
 
-def test_a_reference_to_a_moved_column_stops_the_refresh(reference_model, tmp_path):
-    """The untouched reference model's Research tab averages old column O (TTM non-GAAP P/E); the lean layout moved
-    it. A refresh would quietly feed those averages another column, so it must stop and name the cells."""
+def test_a_reference_to_a_moved_column_follows_it(reference_model, tmp_path):
+    """The untouched reference model's Research tab averages old column O ('P/E (TTM non-GAAP)'); the lean layout
+    moved it to N (the monthly block has the same header at R, so the match is made within the daily block). The
+    refresh rewrites those formulas to N and says so, and verify accepts only that rewrite."""
     w = tmp_path / "w"
     w.mkdir()
     (tmp_path / "src").mkdir()
@@ -153,10 +154,34 @@ def test_a_reference_to_a_moved_column_stops_the_refresh(reference_model, tmp_pa
     _run("refresh.py", "extract", "--model", m, "--work", str(w))
     _run("build.py", "--model", m, "--work", str(w), "--out", str(tmp_path / "b.xlsx"), "--refresh")
     r = _run("refresh.py", "restore", "--model", m, "--built", str(tmp_path / "b.xlsx"), "--work", str(w),
-             "--out", str(tmp_path / "f.xlsx"), check=False)
+             "--out", str(tmp_path / "f.xlsx"))
+    rep = json.loads(r.stdout)
+    assert any(x.startswith("Research Z15") and "'Px Data'!O -> N ('P/E (TTM non-GAAP)')" in x
+               for x in rep["references_followed"])
+    new = Package(str(tmp_path / "f.xlsx"))
+    z15 = refresh.cells(new, refresh.sheet_parts(new)["Research"])["Z15"][1]
+    assert "'Px Data'!$N$5:$N$3234" in z15 and "$O$" not in z15
+    assert "'P/E (TTM non-GAAP)'" == "'" + refresh.cells(new, refresh.sheet_parts(new)["Px Data"])["N4"][1] + "'"
+
+
+def test_a_reference_to_a_column_that_is_gone_stops_the_refresh(old_model, refreshed, tmp_path):
+    """Old column K ('Cumulative alpha index') is not in the lean layout: there is nothing to follow, so the refresh
+    must stop, name the cell and write nothing."""
+    m = str(tmp_path / "m.xlsx")
+    shutil.copy(old_model, m)
+    _edit(m, "Research", lambda x: _formula_cell(x, "ZZ2", "AVERAGE('Px Data'!$K$5:$K$10)"))
+    r = _run("refresh.py", "restore", "--model", m, "--built", str(refreshed["w"].parent / "built.xlsx"),
+             "--work", str(refreshed["w"]), "--out", str(tmp_path / "f.xlsx"), check=False)
     assert r.returncode == 3 and not os.path.exists(tmp_path / "f.xlsx")
     stops = json.loads(r.stdout)["stops"]
-    assert any("'Px Data'!O5:O3234: column O was 'P/E (TTM non-GAAP)'" in s and "Z15" in s for s in stops)
+    assert any("'Px Data'!K5:K10: column K was 'Cumulative alpha index'" in s and "ZZ2" in s for s in stops)
+
+
+def test_remap_rewrites_only_references_into_moved_columns():
+    xml = ("<c r=\"A1\"><f>SUM(&apos;Px Data&apos;!$O$5:$O$9)+'Px Data'!O7+Research!O7+'Px Events'!O7</f></c>")
+    out, n = refresh.remap_formulas(xml, {"Px Data": {"O": "N"}})
+    assert n == 1
+    assert out == ("<c r=\"A1\"><f>SUM(&apos;Px Data&apos;!$N$5:$N$9)+'Px Data'!N7+Research!O7+'Px Events'!O7</f></c>")
 
 
 def test_single_cell_link_must_still_read_the_same_day():

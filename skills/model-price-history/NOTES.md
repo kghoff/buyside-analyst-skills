@@ -55,12 +55,18 @@ re-serializes charts. The DXCM example model has all of these on other tabs.
   yearly-returns block, leaving Filings Charts alone.
 - References from other tabs (Multiples / Consensus link single Px Data and Px Events cells by row; DCF, MOD,
   Research read whole columns or ranges): a single cell must still have the same column header and the same row key
-  (Px Data: the date; Px Events: period, event date, event); a range or column the same header. Anything else stops
-  the refresh (exit 3). A range ending above the new last row is a warning: it misses the new days.
+  (Px Data: the date; Px Events: period, event date, event); a range or column the same header. A column whose header
+  moved is followed (the user, 2026-11-18): restore rewrites the reference to the new letter and lists it. The
+  header must be found once, or once within the block that starts with the same header (the lean layout has
+  'P/E (TTM non-GAAP)' in the daily and the monthly block), and the referenced row must start on the same date.
+  verify accepts exactly that rewrite on other tabs. Anything else stops the refresh (exit 3). A range ending
+  above the new last row is a warning: it misses the new days. Formulas keep their old cached value until Excel
+  recalculates on open (the build sets fullCalcOnLoad).
 - Not done: re-placing the user's own shapes by date. In the same cells they drift left of their date as the axis
   lengthens (two weeks ~0.4% of the width, a year ~9%). handoff.py has the geometry if that is ever wanted.
 - Test: `tests/test_refresh.py` on the reference model (26 user shapes, 3 notes) plus a typed Px Events note, a
-  single-cell link and five extra trading days; the untouched reference (Research reads old column O) must stop.
+  single-cell link and five extra trading days; the untouched reference (Research reads old column O) must follow
+  it to N, and a reference to a column the lean layout dropped (K) must stop.
   `handoff.py --idio-only` is proven on a copy of the user's DXCM model, not in the suite (no research fixture).
 
 ## Deliberate differences from the reference

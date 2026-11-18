@@ -13,7 +13,9 @@ back in their places. It first checks what other tabs read from the three tabs (
   - a single cell: its column header and its row (the date in Px Data; the period and event in Px Events) must be
     the same as before, so the reference still reads the same thing;
   - a range or whole column: its column header must be the same; a range that ends above the new last row is a
-    warning (it misses the new days), not a stop.
+    warning (it misses the new days), not a stop;
+  - a column whose header moved (found once in the new header row) is followed: restore rewrites the reference to the
+    new letter and lists it under references_followed. A header that is gone, or found twice, stops.
 Prints a JSON summary: shapes carried, notes placed and not placed (their row left the table), reference warnings."""
 import argparse
 import datetime as dt
@@ -195,8 +197,72 @@ def _row_key(cs, tab, row):
     return None
 
 
-def check_refs(old, new, last_rows):
-    """(stops, warnings) for the references other tabs hold into the three tabs."""
+def _headers(cs, hr):
+    return {re.match(r"[A-Z]+", r).group(0): _text(c) for r, c in cs.items()
+            if re.fullmatch(rf"[A-Z]+{hr}", r) and _text(c) not in (None, "")}
+
+
+def _block(hdr, col):
+    """The first column of `col`'s block: the run of headed columns it sits in (blocks are split by an empty one)."""
+    k = colnum(col)
+    while k > 1 and _letter(k - 1) in hdr:
+        k -= 1
+    return _letter(k)
+
+
+def _letter(n):
+    s = ""
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def column_moves(old, new):
+    """{tab: {old col: new col}} for each column whose header changed but whose old header is in the new header row
+    once, or once within a block that starts with the same header (Date, Month-end, ...): the column moved, and a
+    reference to it can follow it there."""
+    po, pn = sheet_parts(old), sheet_parts(new)
+    moves = {}
+    for t, hr in HEADER_ROW.items():
+        ho, hn = _headers(cells(old, po[t]), hr), _headers(cells(new, pn[t]), hr)
+        for col, h in ho.items():
+            if hn.get(col) == h:
+                continue
+            at = [c for c, x in hn.items() if x == h]
+            if len(at) > 1:
+                at = [c for c in at if hn[_block(hn, c)] == ho[_block(ho, col)]]
+            if len(at) == 1:
+                moves.setdefault(t, {})[col] = at[0]
+    return moves
+
+
+RAW_REF = re.compile(r"((?:'|&apos;)?(Idio Chart|Px Events|Px Data)(?:'|&apos;)?!)(\$?)([A-Z]+)(\$?\d+)?"
+                     r"(?::(\$?)([A-Z]+)(\$?\d+)?)?")
+
+
+def remap_formulas(xml, moves):
+    """Rewrite every formula in a sheet's XML so references into moved columns follow them. (xml, cells changed)."""
+    def ref(m):
+        t, mv = m.group(2), moves.get(m.group(2), {})
+        out = f"{m.group(1)}{m.group(3)}{mv.get(m.group(4), m.group(4))}{m.group(5) or ''}"
+        if m.group(7):
+            out += f":{m.group(6)}{mv.get(m.group(7), m.group(7))}{m.group(8) or ''}"
+        return out
+    n = 0
+
+    def f(m):
+        nonlocal n
+        body = RAW_REF.sub(ref, m.group(2))
+        n += body != m.group(2)
+        return m.group(1) + body + m.group(3)
+    return re.sub(r"(<f\b[^>]*>)(.*?)(</f>)", f, xml, flags=re.S), n
+
+
+def check_refs(old, new, last_rows, moves=None):
+    """(stops, warnings) for the references other tabs hold into the three tabs. A reference into a column in `moves`
+    is checked against the column it moved to (restore rewrites it to follow)."""
+    moves = moves or {}
     po, pn = sheet_parts(old), sheet_parts(new)
     co = {t: cells(old, po[t]) for t in TABS}
     cn = {t: cells(new, pn[t]) for t in TABS}
@@ -205,15 +271,23 @@ def check_refs(old, new, last_rows):
     for tab, ref, t, c1, r1, c2, r2 in references(old):
         where = f"{tab} reads '{t}'!{c1}{r1 or ''}{':' + c2 + (r2 or '') if c2 else ''}"
         hr = HEADER_ROW.get(t)
+        mv = lambda c: moves.get(t, {}).get(c, c)
         single = c2 is None and r1
         if single and (hr is None or int(r1) <= hr):
-            if _text(co[t].get(c1 + r1)) != _text(cn[t].get(c1 + r1)):
+            if _text(co[t].get(c1 + r1)) != _text(cn[t].get(mv(c1) + r1)):
                 stops.setdefault(f"{where}: the cell now holds something else", []).append(ref)
             continue
         for col in {c1, c2 or c1}:
-            if hr and _text(co[t].get(f"{col}{hr}")) != _text(cn[t].get(f"{col}{hr}")):
+            if hr and _text(co[t].get(f"{col}{hr}")) != _text(cn[t].get(f"{mv(col)}{hr}")):
                 stops.setdefault(f"{where}: column {col} was {show(_text(co[t].get(f'{col}{hr}')))}, now "
                                  f"{show(_text(cn[t].get(f'{col}{hr}')))}", []).append(ref)
+        if hr and c1 in moves.get(t, {}) and r1 and int(r1) > hr:
+            bo, bn = _block(_headers(co[t], hr), c1), _block(_headers(cn[t], hr), mv(c1))
+            if _text(co[t].get(f"{bo}{r1}")) != _text(cn[t].get(f"{bn}{r1}")):
+                stops.setdefault(f"{where}: column {c1} moved to {mv(c1)}, but row {r1} no longer starts on the same "
+                                 f"{_text(co[t].get(f'{bo}{hr}'))}", []).append(ref)
+        if c2 and hr and colnum(mv(c2)) - colnum(mv(c1)) != colnum(c2) - colnum(c1):
+            stops.setdefault(f"{where}: its columns did not move together", []).append(ref)
         if single:
             if _row_key(co[t], t, int(r1)) != _row_key(cn[t], t, int(r1)):
                 stops.setdefault(f"{where}: row {r1} was {_row_key(co[t], t, int(r1))}, now "
@@ -227,6 +301,18 @@ def check_refs(old, new, last_rows):
         v = list(dict.fromkeys(v))
         out.append(f"{k} ({len(v)} cell{'s' if len(v) > 1 else ''}: {', '.join(v[:5])}{', ...' if len(v) > 5 else ''})")
     return out, warns
+
+
+def followed(old, moves):
+    """['Research Z15, AA15: 'Px Data'!O -> N ('P/E (TTM non-GAAP)')', ...]: the references a refresh rewrites."""
+    po = sheet_parts(old)
+    by = {}
+    for tab, ref, t, c1, r1, c2, r2 in references(old):
+        for c in dict.fromkeys([c1] + ([c2] if c2 else [])):
+            if c in moves.get(t, {}):
+                h = _text(cells(old, po[t]).get(f"{c}{HEADER_ROW[t]}"))
+                by.setdefault(f"'{t}'!{c} -> {moves[t][c]} ('{h}')", {}).setdefault(tab, []).append(ref)
+    return [f"{tab} {', '.join(dict.fromkeys(refs))}: {k}" for k, tabs in by.items() for tab, refs in tabs.items()]
 
 
 # ------------------------------------------------------------------ restore
@@ -285,13 +371,20 @@ def restore(model, built, work, out):
     L = json.load(open(os.path.join(work, "layout.json")))
     old, pkg = Package(model), Package(built)
     last = {"Px Data": L["rows"]["RN"], "Px Events": max(L["rows"]["QN"], L["rows"]["EVN"])}
-    stops, warns = check_refs(old, pkg, last)
+    moves = column_moves(old, pkg)
+    stops, warns = check_refs(old, pkg, last, moves)
     if stops:
         print(json.dumps({"status": "references", "stops": stops[:50], "warnings": warns}, indent=1))
         raise SystemExit(3)
     parts = sheet_parts(pkg)
     rep = {"status": "restored", "shapes": 0, "not_carried": C["not_carried"], "notes_placed": 0, "notes_not_placed": [],
-           "reference_warnings": warns}
+           "reference_warnings": warns, "references_followed": followed(old, moves)}
+    # references into a moved column follow it (same header, new letter); Excel recalculates them on open
+    for name, part in parts.items():
+        if name not in TABS and moves:
+            x, n = remap_formulas(pkg.text(part), moves)
+            if n:
+                pkg.put(part, x)
     # shapes: appended to the new Idio Chart drawing as they were (same cells, so the same spot); ids renumbered
     d = drawing_of(pkg, parts["Idio Chart"])
     if C["shapes"]:
