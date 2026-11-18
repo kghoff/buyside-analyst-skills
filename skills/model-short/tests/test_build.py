@@ -141,3 +141,26 @@ def test_tick_formulas_take_their_lines_from_shortmath(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(build)
+
+
+def test_build_lists_every_tick_that_is_not_codes(model, work, tmp_path):
+    """A call the user never hears about is the worst outcome: each computed row whose tick is not code's formula
+    (the agent's override, or one the user typed) is listed with code's tick, the tick used and who made it."""
+    p = os.path.join(work, "short_plan.json")
+    plan = json.load(open(p))
+    plan["ticks"]["capex"]["tick"] = "no"                         # code says ✓
+    json.dump(plan, open(p, "w"))
+    lab = dict((rid, lab) for rid, _, lab, _ in build.sm.ROWS)
+    out = str(tmp_path / "o.xlsx")
+    res = build.build(model, work, "TEST", out)
+    agent = {"row": lab["capex"], "code": "✓", "used": "✗", "who": "agent"}
+    assert res["overrides"] == [agent]
+    assert json.load(open(os.path.join(work, "layout.json")))["overrides"] == [agent]
+    os.replace(os.path.join(work, "inputs_written.next.json"), os.path.join(work, "inputs_written.json"))
+    ref = json.load(open(os.path.join(work, "layout.json")))["refs"]["tick_decel"].replace("$", "")
+    wb = openpyxl.load_workbook(out)                              # a test copy, never a user's model
+    wb["Short Check"][ref] = "?"
+    wb.save(out)
+    shutil.copy(out, model)
+    res = build.build(model, work, "TEST", str(tmp_path / "o2.xlsx"))
+    assert res["overrides"] == [{"row": lab["decel"], "code": "✓", "used": "?", "who": "user"}, agent]

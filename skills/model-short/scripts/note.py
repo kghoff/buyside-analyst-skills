@@ -94,6 +94,9 @@ def write_md(work, ticker, out_dir, date):
         mine = " **You changed this.**" if LABEL[k] in lay["users"] else ""
         L.append(f"- {LABEL[k]}: {fmt(U[LABEL[k]], F.get(R[k].replace('$', ''), ''))} (anchor {x['anchor']}). "
                  f"{x['reason']}{mine}")
+    for o in lay.get("overrides") or []:
+        who = "the agent" if o["who"] == "agent" else "you"
+        L.append(f"- Tick overridden by {who}: {o['row']}: code says {o['code']}, the tab uses {o['used']}.")
     for k in ("verdict", "type", "bucket", "catalyst_soon", "takeout_prone"):
         if LABEL[k] in lay["users"]:
             L.append(f"- {LABEL[k]}: {U[LABEL[k]]}. **You changed this.**")

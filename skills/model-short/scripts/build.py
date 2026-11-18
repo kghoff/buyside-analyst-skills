@@ -540,6 +540,9 @@ def build(model, work, ticker, out, borrow=None):
     users |= tick_users
     ticks = {rid: code[rid] if tick_used[lab] == FORMULA else sm.SYM.get(_calc(tick_used[lab], lab, existing_v), "unknown")
              for rid, lab in ROWLABEL.items()}
+    overrides = [{"row": lab, "code": sm.TICK[code[rid]], "used": sm.TICK[ticks[rid]],
+                  "who": "user" if lab in tick_users else "agent"}
+                 for rid, _, lab, computed in sm.ROWS if computed and tick_used[lab] != FORMULA]
     s = sm.summary(ctx, inp, ticks, soon, inp["borrow"] if sm._n(inp["borrow"]) else None)
 
     pkg = Package(model)
@@ -590,12 +593,12 @@ def build(model, work, ticker, out, borrow=None):
         raise SystemExit("model-short: the build changed parts it must not touch: " + ", ".join(bad))
     serial = {k: v for k, v in s.items() if k not in ("path",)}
     json.dump({"expected": w.expected, "kinds": w.kinds, "fmt": w.fmt, "refs": R, "inputs": w.inputs,
-               "used": allv, "users": sorted(users), "summary": serial},
+               "used": allv, "users": sorted(users), "overrides": overrides, "summary": serial},
               open(os.path.join(work, "layout.json"), "w"), indent=0, default=str)
     json.dump({lab: {"value": v, "user": lab in users} for lab, v in allv.items()},
               open(os.path.join(work, "inputs_written.next.json"), "w"), indent=1, default=str)
     return {"tab": TAB, "users_kept": sorted(users), "changed_parts": bad, "verdict_rule": s["verdict"],
-            "verdict_agent": used[LABEL["verdict"]], "warnings": warnings}
+            "verdict_agent": used[LABEL["verdict"]], "overrides": overrides, "warnings": warnings}
 
 
 def main():
