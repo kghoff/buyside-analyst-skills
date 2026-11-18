@@ -22,7 +22,7 @@ from xlsx import CT, Package, Sheet, Styles, comments_parts, esc, relpath_of, re
 
 TAB, AFTER = "Short Check", "Valuation"
 PRICE = "$B$4"                            # the typed price; tick formulas and the header refer to it
-BLUE, BLACK, GREEN, RED, YELLOW = "FF0000FF", "FF000000", "FF008000", "FFC00000", "FFFFFF00"
+BLUE, BLACK, GREEN, RED, YELLOW = "FF0000FF", "FF000000", "FF008000", "FFC00000", "FFFFFF99"
 PCT, MULT, MONEY, NUM, MILL, GEN = "0.0%", '0.0"x"', "$#,##0.00", "0.00", "#,##0", "General"
 FORMULA = "FORMULA"                       # a code tick left to its formula
 INPUTS = [  # key, label (unique in column A), format
@@ -225,7 +225,7 @@ def lay_out(w, ctx, plan, used, tick_used, s, ticker, unverified, R_pre):
             w.text(f"G{r}", why, wrap=True)
         R[key] = f"$B${r}"
 
-    w.text("A1", f"{ticker} short check: is there a short here, and what kind (Chapter 12, FEV)", b=True, sz=14)
+    w.text("A1", f"{ticker} short check: is there a short here, and what kind", b=True, sz=14)
     w.text("A2", "Yellow = the agent's suggestion, yours to change (note: its value, anchor and reason). Blue = typed "
                  "from a source. Black = formulas. Green = links to other tabs. Ticks: type ✓, ✗ or ?.", i=True)
     w.text("A4", "Price")

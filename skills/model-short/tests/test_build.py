@@ -29,6 +29,13 @@ def test_only_the_new_tab_and_workbook_parts_change(built):
             assert a.read(n) == b.read(n) or n == build.tab_part(out)
 
 
+def test_title_names_no_chapter(built):
+    # the user asked that the tab's title not cite the course chapter; it should say what the tab answers
+    _, _, out, _ = built
+    a1 = openpyxl.load_workbook(out)["Short Check"]["A1"].value
+    assert "Chapter" not in a1 and "FEV" not in a1 and a1.startswith("TEST short check")
+
+
 def test_colours_follow_the_house_rules(built):
     _, work, out, _ = built
     lay = json.load(open(os.path.join(work, "layout.json")))
@@ -38,7 +45,8 @@ def test_colours_follow_the_house_rules(built):
         if kind in want:
             assert ws[ref].font.color.rgb == want[kind], (ref, kind)
         if kind == "input":
-            assert ws[ref].fill.fgColor.rgb == "FFFFFF00" and ws[ref].comment is not None, ref
+            # the same soft yellow as the Valuation tab, so the user's input cells look alike across tabs
+            assert ws[ref].fill.fgColor.rgb == "FFFFFF99" and ws[ref].comment is not None, ref
         if kind == "typed":
             assert ws[ref].comment is not None, ref           # every typed number names its source
 

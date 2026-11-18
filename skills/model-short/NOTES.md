@@ -89,3 +89,7 @@ Why things are the way they are. Read before changing scripts.
   (test_recalc) recalculates in LibreOffice. The user asked for this after model-valuation's suite took a day. The
   fast suite (`python3 -m pytest -q -m "not slow"`) must stay under 30 s.
 - lo.py has its own profile folder (model-short-lo-profile) so it never collides with another skill's run.
+
+## The user's review changes (2026-11-18)
+- The tab title no longer cites the chapter ("(Chapter 12, FEV)" dropped from A1). The note's cover still does.
+- Yellow input cells are FFFFFF99, the same as the Valuation tab (was FFFFFF00).
