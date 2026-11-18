@@ -216,3 +216,16 @@ def test_no_reported_quarters_means_no_empty_sums():
     out, _, _ = context.mod_metrics(MM(), {}, rows)
     assert "fcf_conv" not in out and "acq_cfo" not in out
     assert not any("SUM()" in x["formula"] for x in out.values())
+
+
+def test_revisions_use_next_year_even_when_brokers_add_later_years():
+    """model-consensus labels years "FY 26" and adds broker years past +1y (FY 28, FY 29 on a handful of estimates).
+    The live period is next year (+1y): this year's label + 1, not the largest label."""
+    import context
+    def snap(d):
+        return [(d, "Q4 26", 0.72), (d, "Q1 27", 0.64), (d, "FY 26", 2.70), (d, "FY 27", 3.13), (d, "FY 28", 3.59),
+                (d, "FY 29", 3.79)]
+    rows = snap("2026-08-12") + snap("2026-11-12")
+    rows[-3] = ("2026-11-12", "FY 27", 3.05)
+    L = context.consensus_links(_consensus(rows))
+    assert L["rev_first"]["period"] == "FY 27" and (L["rev_first"]["value"], L["rev_last"]["value"]) == (3.13, 3.05)

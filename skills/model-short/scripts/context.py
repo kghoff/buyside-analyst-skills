@@ -203,13 +203,15 @@ def consensus_links(g):
         r += 1
     if not rows:
         return {}
-    # The period the Street is estimating now: among the latest snapshot's periods, the largest fiscal year (next
-    # year), else the next one down (this year); labels that are not "FY 2027"-style: the latest snapshot's last one.
-    # A reported year is never revised again, so the period with the most snapshots can be a dead one.
+    # The period the Street is estimating now: in the latest snapshot, this year is its smallest fiscal year ("FY 26"
+    # or "FY 2026"); use next year (+1y; brokers may add later years on a few estimates), else this year. Labels that
+    # are not FY-style: the latest snapshot's last one. A reported year is never revised again, so the period with
+    # the most snapshots can be a dead one.
     latest = max(snap(r) for r, _, _ in rows)
     now = [p for r, p, _ in rows if snap(r) == latest]
-    fy = {p: int(m[1]) for p in now if (m := re.fullmatch(r"(?i)FY\s*(\d{4})", p))}
-    for period in (sorted(fy, key=fy.get, reverse=True) if fy else now[-1:]):
+    by_year = {int(m[1]) % 100: p for p in now if (m := re.fullmatch(r"(?i)FY\s*(\d{4}|\d{2})", p))}
+    this = min(by_year) if by_year else None
+    for period in ([by_year[y] for y in (this + 1, this) if y in by_year] if by_year else now[-1:]):
         mine = sorted((snap(r), r, v) for r, p, v in rows if p == period and _num(v))
         if len(mine) >= 2:
             break

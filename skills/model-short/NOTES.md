@@ -22,9 +22,10 @@ Why things are the way they are. Read before changing scripts.
   exactly code's formula for that row; any other formula is the user's, is kept as written, and counts at its
   recalculated value (from the values copy). The same holds for a formula in a yellow input cell.
 - The revisions row needs two Consensus snapshots of one period (the "5. CONSENSUS SNAPSHOTS" block). The period is
-  the one the Street is estimating now: among the latest snapshot's periods, the largest fiscal year ("FY 2027"
-  style; next year), else the next one down (this year) when next year has only one snapshot; labels that are not
-  FY-style: the latest snapshot's last period. That period's oldest snapshot vs its latest. It used to be the period
+  the one the Street is estimating now: in the latest snapshot, this year is its smallest fiscal year ("FY 26" as
+  model-consensus writes it, or "FY 2026"); next year (+1y) is used, else this year when next year has only one
+  snapshot. Not the largest label: model-consensus adds broker years past +1y (FY 28, FY 29 on a few estimates).
+  Labels that are not FY-style: the latest snapshot's last period. That period's oldest snapshot vs its latest. It used to be the period
   with the most snapshots, which locks onto a reported year that is never revised again. With one snapshot it stays
   `?` until /model-consensus is rerun after the next print adds a second.
 - No tick from a ratio over a loss or a fall: FCF conversion when 5-year net income sums to 0 or less, the
