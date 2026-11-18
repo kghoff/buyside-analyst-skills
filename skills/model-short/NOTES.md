@@ -21,9 +21,33 @@ Why things are the way they are. Read before changing scripts.
 - A user formula in a tick cell is kept too. build.read_tab reads a tick cell as "code's own formula" only when it is
   exactly code's formula for that row; any other formula is the user's, is kept as written, and counts at its
   recalculated value (from the values copy). The same holds for a formula in a yellow input cell.
-- The revisions row needs two Consensus snapshots of one period (the "5. CONSENSUS SNAPSHOTS" block; the period with
-  the most snapshots, first vs last). With one snapshot it stays `?` until /model-consensus is rerun after the next
-  print adds a second.
+- The revisions row needs two Consensus snapshots of one period (the "5. CONSENSUS SNAPSHOTS" block). The period is
+  the one the Street is estimating now: among the latest snapshot's periods, the largest fiscal year ("FY 2027"
+  style; next year), else the next one down (this year) when next year has only one snapshot; labels that are not
+  FY-style: the latest snapshot's last period. That period's oldest snapshot vs its latest. It used to be the period
+  with the most snapshots, which locks onto a reported year that is never revised again. With one snapshot it stays
+  `?` until /model-consensus is rerun after the next print adds a second.
+- No tick from a ratio over a loss or a fall: FCF conversion when 5-year net income sums to 0 or less, the
+  incremental margin when TTM revenue did not grow, the peak-margin ratio when the best FY operating margin is 0 or
+  less. Each is None in Python and `IF(base>0,...,NA())` in the formula, so the row shows `?` and verify still
+  matches. (A guarded peak ratio only drops the "at its peak" half of the incremental-margin row.)
+- A blank FY operating-income cell counts as 0 in the peak-margin ratio, as Excel's arithmetic does; a blank
+  revenue cell is #DIV/0! there, so the ratio is #N/A (None).
+- plan.py judges code's ticks at the plan's own inputs (shortmath.summary with the plan's hurdle), as build.py
+  does, so a changed hurdle that flips the IRR-wedge row needs no override reason, and the old tick does. A judgment
+  ✓ on a cell needs anchor_value, and catalyst soon = true needs a file.md:line anchor with its quote, so anchors.py
+  checks both (soon = true moves the verdict toward an alpha short).
+- The tick formulas (build.TICKF) take their lines from shortmath.THRESH; at today's values the formula text is the
+  same as before, so tabs built earlier still read back as code's own formulas on a rerun. RULE (column F's text)
+  is still written by hand: change it with THRESH.
+- Rerun limits (the tab is replaced whole each build):
+  - only column B's inputs and ticks are read back; anything else typed on the tab (notes in other columns, extra
+    rows, formatting) is dropped;
+  - the tab is put back after Valuation (last when there is none), wherever the user had moved it;
+  - a borrow rate given with --borrow last time reverts to "check with PB" unless --borrow is given again (the
+    agent's value for that cell is the --borrow of this run);
+  - a yellow cell the user cleared reads as blank, which build treats as "no value", so it is refilled with the
+    agent's value (type a value there to keep it different).
 - earn_move (median absolute idio move on earnings days) uses every earnings day in Px Events (every row whose Type
   contains "earn"), not just the last few. It frames the print move; it is not a tick.
 - EPS basis is GAAP diluted (MOD's "EPS, diluted"), as model-valuation uses. FCF conversion uses MOD's non-GAAP net
