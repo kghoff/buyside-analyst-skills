@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>buyside skills: order of operations</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8A94A6"/>
+    </marker>
+    <style>
+      .panel { fill: #F4F6FA; stroke: #D5DAE3; }
+      .num { fill: #1F4E9A; }
+      .numt { fill: #FFFFFF; font-size: 15px; font-weight: 700; text-anchor: middle; }
+      .head { fill: #111827; font-size: 17px; font-weight: 700; }
+      .pill { fill: #FFFFFF; stroke: #1F4E9A; stroke-width: 1.4; }
+      .opt { fill: #FFFFFF; stroke: #8A94A6; stroke-width: 1.4; stroke-dasharray: 5 4; }
+      .skill { fill: #1F2937; font-size: 14px; font-family: ui-monospace, Menlo, Consolas, monospace; text-anchor: middle; }
+      .out { fill: #4B5563; font-size: 13px; }
+      .flow { stroke: #8A94A6; stroke-width: 1.6; fill: none; }
+    </style>
+  </defs>
+  <rect width="1200" height="520" rx="12" fill="#FFFFFF"/>
+
+  <!-- 1 Collect -->
+  <rect class="panel" x="20" y="20" width="260" height="380" rx="10"/>
+  <circle class="num" cx="48" cy="52" r="14"/><text class="numt" x="48" y="57">1</text>
+  <text class="head" x="72" y="58">Collect</text>
+  <rect class="pill" x="40" y="96" width="220" height="40" rx="20"/><text class="skill" x="150" y="121">collect-documents</text>
+  <text class="out" x="40" y="340">Filings, releases, calls, decks,</text>
+  <text class="out" x="40" y="358">proxies and your sell-side PDFs,</text>
+  <text class="out" x="40" y="376">as PDF + Markdown</text>
+
+  <!-- 2 Build the model -->
+  <rect class="panel" x="320" y="20" width="260" height="380" rx="10"/>
+  <circle class="num" cx="348" cy="52" r="14"/><text class="numt" x="348" y="57">2</text>
+  <text class="head" x="372" y="58">Build the model</text>
+  <rect class="pill" x="340" y="96" width="220" height="40" rx="20"/><text class="skill" x="450" y="121">model-historicals</text>
+  <rect class="pill" x="340" y="156" width="220" height="40" rx="20"/><text class="skill" x="450" y="181">model-ratios</text>
+  <rect class="pill" x="340" y="216" width="220" height="40" rx="20"/><text class="skill" x="450" y="241">model-kpis</text>
+  <rect class="pill" x="340" y="276" width="220" height="40" rx="20"/><text class="skill" x="450" y="301">model-price-history</text>
+  <path class="flow" d="M450 136 V154" marker-end="url(#a)"/>
+  <path class="flow" d="M450 196 V214" marker-end="url(#a)"/>
+  <path class="flow" d="M450 256 V274" marker-end="url(#a)"/>
+  <text class="out" x="340" y="358">10-year statements, ratios, KPIs;</text>
+  <text class="out" x="340" y="376">Px Data and Idio Chart tabs</text>
+
+  <!-- 3 Research -->
+  <rect class="panel" x="620" y="20" width="260" height="380" rx="10"/>
+  <circle class="num" cx="648" cy="52" r="14"/><text class="numt" x="648" y="57">3</text>
+  <text class="head" x="672" y="58">Research</text>
+  <rect class="pill" x="640" y="96" width="220" height="40" rx="20"/><text class="skill" x="750" y="121">research-filings</text>
+  <rect class="pill" x="640" y="156" width="220" height="40" rx="20"/><text class="skill" x="750" y="181">research-street</text>
+  <path class="flow" d="M750 136 V154" marker-end="url(#a)"/>
+  <text class="out" x="640" y="340">Filings report: key drivers and</text>
+  <text class="out" x="640" y="358">forecast structure. Street report:</text>
+  <text class="out" x="640" y="376">where outside views differ</text>
+
+  <!-- 4 Forecast and value -->
+  <rect class="panel" x="920" y="20" width="260" height="380" rx="10"/>
+  <circle class="num" cx="948" cy="52" r="14"/><text class="numt" x="948" y="57">4</text>
+  <text class="head" x="972" y="58">Forecast and value</text>
+  <rect class="pill" x="940" y="96" width="220" height="40" rx="20"/><text class="skill" x="1050" y="121">model-forecast</text>
+  <rect class="pill" x="940" y="156" width="220" height="40" rx="20"/><text class="skill" x="1050" y="181">model-dcf</text>
+  <rect class="pill" x="940" y="216" width="220" height="40" rx="20"/><text class="skill" x="1050" y="241">model-multiples</text>
+  <rect class="pill" x="940" y="276" width="220" height="40" rx="20"/><text class="skill" x="1050" y="301">model-valuation</text>
+  <path class="flow" d="M1050 136 V154" marker-end="url(#a)"/>
+  <path class="flow" d="M1050 196 V214" marker-end="url(#a)"/>
+  <path class="flow" d="M1050 256 V274" marker-end="url(#a)"/>
+  <text class="out" x="940" y="358">Driver forecast, DCF, multiples;</text>
+  <text class="out" x="940" y="376">valuation tab and note</text>
+
+  <!-- between stages -->
+  <path class="flow" d="M282 210 H316" marker-end="url(#a)"/>
+  <path class="flow" d="M582 210 H616" marker-end="url(#a)"/>
+  <path class="flow" d="M882 210 H916" marker-end="url(#a)"/>
+
+  <!-- optional -->
+  <rect class="panel" x="20" y="420" width="1160" height="80" rx="10"/>
+  <text class="head" x="40" y="452">Optional</text>
+  <text class="out" x="40" y="474">once the model exists</text>
+  <rect class="opt" x="240" y="440" width="200" height="40" rx="20"/><text class="skill" x="340" y="465">model-industry</text>
+  <text class="out" x="456" y="465">industry P&amp;L and peer comparison</text>
+  <rect class="opt" x="720" y="440" width="200" height="40" rx="20"/><text class="skill" x="820" y="465">model-consensus</text>
+  <text class="out" x="936" y="465">Street estimates; rerun each print</text>
+</svg>

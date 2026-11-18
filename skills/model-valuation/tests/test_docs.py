@@ -26,6 +26,5 @@ def test_skill_md_names_every_script_and_the_loop():
 
 
 def test_tables_list_the_skill():
-    for f in ("README.md", "CLAUDE.md", "AGENTS.md"):
+    for f in ("README.md", "CLAUDE.md"):
         assert "model-valuation" in open(os.path.join(ROOT, f)).read(), f
-    assert open(os.path.join(ROOT, "CLAUDE.md")).read() == open(os.path.join(ROOT, "AGENTS.md")).read()

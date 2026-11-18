@@ -1,15 +1,15 @@
 # buyside-analyst-skills
 
-Claude Code skills for the fundamental buyside analyst. Speed up the thesis development workflow - modeling, research, valuation, pitch deck assembly, etc
+Claude Code skills for fundamental equity research. They collect a company's documents, build its Excel model, write
+research reports from its filings and from the Street, forecast the business and value the stock.
 
 ## Why
 
-Most of the hours in a new idea go to grunt work: pulling ten years of filings, typing the historical model, reading
-every call and deck, and checking that the numbers tie. I built these skills so Claude does that work and I keep
-every judgment: which drivers matter, what the forecast assumes, what the stock is worth. Every number the AI types
-into a model is checked by code against the line in the source document it came from. If the check fails, the
-number doesn't go in. The output is the same Excel model and research reports I would build by hand, in a fraction
-of the time, with a source note on every cell.
+Most of the time on a new idea goes to mechanical work: pulling ten years of filings, typing the historical model,
+reading every call and deck, and checking that the numbers tie. These skills do that work. The analyst keeps the
+judgment calls: which drivers matter, what the forecast assumes, what the stock is worth. Every number Claude types
+into the model is checked by code against the line in the source document it came from, and a number that fails the
+check is not written. Each typed cell carries a source note.
 
 ## What you get
 
@@ -20,7 +20,7 @@ report.
 *The MOD tab: 10 years of quarterly and annual statements, with growth, margins and returns under each line.*
 
 ![Filings research report](examples/DXCM/img/report.png)
-*The filings research report: about 100 cited pages from the company's own documents.*
+*The filings research report (summary and a revenue page): about 100 cited pages from the company's own documents.*
 
 ![Idio Chart tab](examples/DXCM/img/idio_chart.png)
 *The Idio Chart tab: price, valuation and stock-specific (idiosyncratic) moves against fundamentals.*
@@ -30,13 +30,7 @@ report.
 
 ## Workflow
 
-```
-collect-documents → model-historicals → model-ratios → model-kpis → model-price-history
-  → research-filings → research-street → model-forecast → model-dcf → model-multiples
-  → model-valuation
-
-Optional once the model exists:  model-industry,  model-consensus (rerun after each earnings print)
-```
+![Order of operations](assets/workflow.svg)
 
 | # | Skill | What it does | Needs first | Adds |
 |---|---|---|---|---|
