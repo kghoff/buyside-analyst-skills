@@ -104,6 +104,18 @@ def px_data_layout(okeys):
     return L
 
 
+def price_notes(T, src):
+    """Px Data's A2 clause and the total-return column's note, by price source: only Yahoo has a traded price (Close)
+    beside a dividends-in series (Adj Close); stooq's one Close is already dividend-adjusted."""
+    feeds = " Feeds the daily and weekly returns, beta, idio and alpha."
+    if src == "yahoo":
+        return {"a2": f"{T} close = traded price for P/E; total-return columns include dividends",
+                "tr": "Adj Close: dividends reinvested." + feeds}
+    return {"a2": f"stooq closes are dividend-adjusted, so P/E history runs low for a dividend payer; total-return "
+                  "columns include dividends",
+            "tr": "stooq Close, already dividend-adjusted." + feeds}
+
+
 def px_events_layout(okeys):
     L = {k: v for k, v in zip(["period", "date", "eps_g", "eps_n", "fy_g", "fy_n", "ttm_g", "ttm_n"], "ABCDEFGH")}
     L.update(zip(["e_date", "e_type", "e_name", "e_timing", "e_react", "e_r", "e_rs", "e_beta", "e_idio", "e_note"],
@@ -269,8 +281,7 @@ def build(model, work, out, replace=False, refresh=False):
     pdx.set("A1", "s", f"{T} and SPY daily closes, returns, rolling β, idiosyncratic (alpha) return and P/E", sty["title"])
     src_of = lambda k: S["P"]["files"][k].get("source", "stooq")
     pdx.set("A2", "s", f"Closes: {'Yahoo' if src_of('stock') == 'yahoo' else 'stooq'} daily files {first_file} / "
-                       f"{os.path.basename(S['files']['spy'])} ({T} close = traded price for P/E; total-return columns "
-                       f"include dividends). The first 252 rows are a warm-up for the first "
+                       f"{os.path.basename(S['files']['spy'])} ({price_notes(T, src_of('stock'))['a2']}). The first 252 rows are a warm-up for the first "
                        f"252-day β. Index base = {dates[b].date()}. Point-in-time columns use the latest full-results "
                        "release dated before each day.", sty["note"])
     hd = {"date": "Date", "close": f"{T} close", "spy": "SPY close", "tr": f"{T} total return (dividends in)",
@@ -303,8 +314,7 @@ def build(model, work, out, replace=False, refresh=False):
                        + f", file dated {S['P']['files'][k].get('downloaded', '?')}.")
     pdx.comments[f"{DL['close']}4"] = sfile("stock") + ("" if src_of("stock") == "yahoo" else
         " stooq has no unadjusted price: P/E history runs low if the company paid dividends.")
-    pdx.comments[f"{DL['tr']}4"] = (sfile("stock") + " Adj Close: dividends reinvested. Feeds the daily and weekly "
-                                    "returns, beta, idio and alpha.")
+    pdx.comments[f"{DL['tr']}4"] = sfile("stock") + " " + price_notes(T, src_of("stock"))["tr"]
     pdx.comments[f"{DL['spy']}4"] = sfile("spy") + " Dividend-adjusted, so returns are total returns."
     pdx.comments[f"{DL['beta']}4"] = (f"SLOPE of {T} daily returns on SPY daily returns over the previous 252 trading "
                                       "days (~1 year), ending the day before, so today's move never feeds today's β.")

@@ -230,3 +230,35 @@ def test_refreshed_px_data_headers(refreshed):
     assert h[1].endswith(" close") and h[2] == "SPY close"
     assert h[3].endswith("total return (dividends in)")
     assert any(isinstance(x, str) and x.endswith("close (dividends in)") for x in h)
+
+
+def test_returns_read_the_total_return_column_not_the_traded_close(refreshed):
+    """B is the traded price (P/E, price chart); every return must read D, the total return, or a dividend payer's
+    beta, idio and alpha lose the dividend. The fixture prices pay no dividend, so B and D hold the same numbers and
+    only the formulas can show which column a return reads."""
+    import openpyxl
+    ws = openpyxl.load_workbook(refreshed["final"], read_only=True)["Px Data"]
+    rows = list(ws.iter_rows(min_row=4, max_row=6, values_only=True))
+    h = rows[0]
+    assert h[3].endswith("total return (dividends in)") and h[4].endswith("daily return")
+    assert rows[2][4].replace("$", "") == "=D6/D5-1"
+    w_close = [i for i, x in enumerate(h) if isinstance(x, str) and x.endswith("total return (dividends in)")][1]
+    first = rows[1][w_close].replace("$", "")
+    assert first.startswith("=INDEX(D5:D"), first
+
+
+def test_price_notes_name_the_source_they_came_from():
+    """stooq has no traded price: its Close is already dividend-adjusted. Telling a stooq user that B is the traded
+    price for P/E, or that D came from Yahoo's Adj Close, would hide why a dividend payer's P/E history runs low."""
+    import build
+    y, s = build.price_notes("ABT", "yahoo"), build.price_notes("ABT", "stooq")
+    assert "traded price for P/E" in y["a2"] and "Adj Close" in y["tr"]
+    assert "traded price" not in s["a2"] and "P/E history runs low" in s["a2"]
+    assert "Adj Close" not in s["tr"] and "stooq Close, already dividend-adjusted" in s["tr"]
+
+
+def test_refreshed_stooq_build_says_its_closes_are_dividend_adjusted(refreshed):
+    # the refresh fixture's price files are stooq's (no Adj Close), so A2 must carry the stooq wording
+    import openpyxl
+    a2 = openpyxl.load_workbook(refreshed["final"], read_only=True)["Px Data"]["A2"].value
+    assert "stooq" in a2 and "P/E history runs low" in a2 and "traded price" not in a2
