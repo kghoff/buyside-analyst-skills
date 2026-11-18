@@ -202,7 +202,8 @@ Ask:
   guidance pulled, a feared externality, or the stock went "off the menu". Anticipate that event.
 - Timing is existential on the short side: "being right but early can look exactly the same as being wrong." Hence
   "shoot it in the back": wait for momentum to turn.
-- `catalyst.soon` is true only if a dated or clearly expected event falls within **the next two prints**.
+- `catalyst.soon` is true only if a dated or clearly expected event falls within **the next two prints**, cited to the
+  line (file.md:N) and quote that dates it.
 
 ## 10. Smoke (§12.2)
 "Where there's smoke, there's fire." Signs of obfuscation or aggressive accounting that can point to deeper issues:

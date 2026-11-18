@@ -22,7 +22,7 @@ def words(s):
     return len(str(s or "").split())
 
 
-def _ticks(plan, ctx, out):
+def _ticks(plan, code_ticks, out):
     ticks = plan.get("ticks") or {}
     for rid, _, label, computed in sm.ROWS:
         t = ticks.get(rid)
@@ -34,7 +34,7 @@ def _ticks(plan, ctx, out):
         if words(t.get("reason")) < REASON:
             out.append(f"ticks.{rid}: the reason needs at least {REASON} words")
         if computed:
-            code = ctx["code_ticks"].get(rid)
+            code = code_ticks.get(rid)
             if t.get("tick") != code and words(t.get("reason")) < OVERRIDE:
                 out.append(f"ticks.{rid}: code says {code}, plan says {t.get('tick')}; an override needs a reason of "
                            f"at least {OVERRIDE} words")
@@ -44,6 +44,8 @@ def _ticks(plan, ctx, out):
                 out.append(f"ticks.{rid}: a ✓ needs an anchor (file.md:line or Sheet!$A$1)")
             elif LINE.match(a) and not t.get("quote") and "anchor_value" not in t:
                 out.append(f"ticks.{rid}: a line anchor needs the quote (or anchor_value) it rests on")
+            elif CELL.match(a) and "anchor_value" not in t:      # else anchors.py has nothing to check
+                out.append(f"ticks.{rid}: a cell anchor needs the anchor_value the cell shows")
     return {rid: (ticks.get(rid) or {}).get("tick") for rid, *_ in sm.ROWS}
 
 
@@ -74,18 +76,24 @@ def _inputs(plan, out):
 
 
 def check(plan, ctx):
-    out = []
-    ticks = _ticks(plan, ctx, out)
-    vals = _inputs(plan, out)
+    out, inp_out = [], []
+    vals = _inputs(plan, inp_out)
+    c = plan.get("catalyst") or {}
+    code = ctx["code_ticks"]                 # the house hurdle; with valid inputs, the plan's own (as build.py does)
+    if not inp_out:
+        code = sm.summary(ctx, vals, {}, c.get("soon") is True)["code"]
+    ticks = _ticks(plan, code, out)
+    out += inp_out
     for f, allowed in (("type", sm.TYPES), ("bucket", sm.BUCKETS)):
         x = plan.get(f) or {}
         if x.get("value") not in (*allowed, "none"):
             out.append(f"{f}: {x.get('value')!r} is not one of chapter 12's: {', '.join(allowed)} (or none)")
         if words(x.get("reason")) < REASON:
             out.append(f"{f}: the reason needs at least {REASON} words")
-    c = plan.get("catalyst") or {}
     if not isinstance(c.get("soon"), bool) or not str(c.get("text") or "").strip() or not c.get("anchor"):
         out.append("catalyst: needs soon (true / false), text and anchor")
+    elif c["soon"] and not (LINE.match(str(c["anchor"])) and str(c.get("quote") or "").strip()):
+        out.append("catalyst: soon = true needs a file.md:line anchor and the quote that dates the event")
     if not isinstance((plan.get("takeout_prone") or {}).get("value"), bool):
         out.append("takeout_prone: value must be true or false")
     for i, s in enumerate(plan.get("smoke") or []):
