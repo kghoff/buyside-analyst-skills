@@ -22,7 +22,7 @@ EARN = {"ticker": "TEST", "asof": "2026-11-18", "source": "Yahoo Finance (fixtur
                       {"quarter": "2026-09-30", "estimate": 0.61, "actual": 0.65, "surprise": 0.0656}]}
 MOD_ROWS = [(3, "INCOME STATEMENT", "Revenue", "rev"), (4, None, "Gross Profit", "gp"),
             (5, None, "Operating Income", "oi"), (6, None, "Net Income", "ni"), (7, None, "EPS, diluted", "eps"),
-            (9, "BALANCE SHEET", "Cash and cash equivalents", "cash"),
+            (9, "BALANCE SHEET", "Cash & Equivalents", "cash"),
             (11, "FREE CASH FLOW", "(+/-) Free Cash Flow", "fcf"),
             (13, "KEY OPERATING METRICS", "Units", "units")]
 DRIVER_KEY = "KEY OPERATING METRICS | Units"

@@ -18,7 +18,7 @@ ROLES = [  # (name, section regex, label regex, required, take the last match)
     ("oi", r"^income statement:?$", r"^operating income", True, False),
     ("ni", r"^income statement:?$", r"^net income", True, False),
     ("eps", r"^income statement:?$", r"^eps, diluted", True, False),
-    ("cash", r"balance sheet|assets", r"^cash and cash equivalents", False, False),
+    ("cash", r"balance sheet|assets", r"^cash (and|&) (cash )?equivalents", False, False),
     ("fcf", r".", r"free cash flow$", False, True),
 ]
 AVG_YEARS = 5
