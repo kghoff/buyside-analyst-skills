@@ -76,3 +76,45 @@ def test_currency_mismatch_sets_flag_only_then():
 def test_nonpositive_rev0_gives_no_growth():
     assert comps.row(snap("Z", rev0=0), "g")["growth1"] is None
     assert comps.row(snap("N", rev0=-5e9), "g")["growth1"] is None
+
+
+# --- The user's 2026-11-18 asks: a line through the peers (chapter 11 "Applying P/E multiples": a name below the line
+# is structurally underpriced on the multiple) and an Include toggle so one outlier (TNDM on DXCM) can be left out.
+def _pt(t, g, pe):
+    return {"ticker": t, "growth1": g, "pe1": pe, **{k: None for k in ("pe0", "ev_rev0", "ev_rev1", "ev_ebitda")}}
+
+
+PEERS = [_pt("A", 0.04, 14.0), _pt("B", 0.07, 22.0), _pt("C", 0.08, 24.0), _pt("D", 0.12, 26.0), _pt("S", 0.10, 18.0)]
+
+
+def test_line_fit_reads_the_subject_against_its_peers():
+    # The slide's case: peers line up from 14x at 4% to 26x at 12%; the subject at 18x on 10% growth sits under the
+    # line, so the market pays it less than its growth earns peers: structurally underpriced.
+    f = comps.line_fit(PEERS, {}, "S")
+    assert f["n"] == 4                                               # the subject is never one of its own peers
+    assert f["slope"] == pytest.approx(0.475 / 0.003275) and f["intercept"] == pytest.approx(21.5 - 0.475 / 0.003275 * 0.0775)
+    assert f["fair_pe"] == pytest.approx(f["intercept"] + f["slope"] * 0.10)
+    assert f["gap"] < 0 and f["reading"].startswith("Below the line")
+    assert f["implied_growth"] == pytest.approx((18.0 - f["intercept"]) / f["slope"])
+
+
+def test_excluding_an_outlier_moves_the_line_and_the_averages():
+    # A 180x peer drags the line and the averages; toggling it off must give back the line without it.
+    rows = PEERS + [_pt("T", 0.09, 180.0)]
+    with_t, without_t = comps.line_fit(rows, {}, "S"), comps.line_fit(rows, {"T": 0}, "S")
+    assert without_t == comps.line_fit(PEERS, {}, "S") and with_t["n"] == 5 and with_t != without_t
+    assert comps.stats(rows, {"T": 0})["average"]["pe1"] == pytest.approx(comps.stats(PEERS)["average"]["pe1"])
+
+
+def test_too_few_peers_or_a_flat_line_says_nothing():
+    # Two points always fit a line exactly; a downward line inverts the logic. Neither may be read as cheap or dear.
+    few = comps.line_fit(PEERS[:2] + [PEERS[-1]], {}, "S")
+    assert few["n"] == 2 and few["fair_pe"] is None and few["reading"].startswith("The line says nothing")
+    down = comps.line_fit([_pt("A", 0.04, 26.0), _pt("B", 0.08, 22.0), _pt("C", 0.12, 14.0), PEERS[-1]], {}, "S")
+    assert down["slope"] < 0 and down["fair_pe"] is None and down["reading"].startswith("The line says nothing")
+
+
+def test_outliers_are_flagged_never_excluded():
+    # Code only warns (over 2x the peers' median next-year P/E); the user decides by flipping the toggle.
+    assert comps.outliers(PEERS + [_pt("T", 0.09, 180.0)], "S") == ["T"]
+    assert comps.outliers(PEERS, "S") == []

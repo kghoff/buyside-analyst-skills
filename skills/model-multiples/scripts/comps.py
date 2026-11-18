@@ -48,10 +48,58 @@ def rank(rows):
     return sorted(rows, key=lambda r: (r["pe1"] is None, -(r["pe1"] or 0)))
 
 
-def stats(rows):
+def included(r, inc):
+    """inc: {ticker: 0 | 1} from the tab's Include? column (the user's toggle); a ticker not in it is included."""
+    return inc.get(r["ticker"], 1) == 1
+
+
+def stats(rows, inc=None):
+    """Average and median of each comp column over the included rows (the tab's array formulas do the same)."""
     out = {"average": {}, "median": {}}
     for k in KEYS:
-        v = [r[k] for r in rows if r.get(k) is not None]
+        v = [r[k] for r in rows if r.get(k) is not None and included(r, inc or {})]
         out["average"][k] = sum(v) / len(v) if v else None
         out["median"][k] = statistics.median(v) if v else None
     return out
+
+
+SAYS_NOTHING = ("The line says nothing here: fewer than 3 included peers have both numbers, or the line does not "
+                "slope up")
+BELOW = "Below the line: structurally underpriced on the multiple (cheaper than its growth earns its peers)"
+ABOVE = "Above the line: the multiple already pays for more growth than its peers get paid for"
+
+
+def line_fit(rows, inc, subject):
+    """Least-squares line of next-year P/E on next-year revenue growth through the included peers (never the
+    subject), and where the subject sits against it (chapter 11, "Applying P/E multiples"). The tab computes the same
+    with array formulas. Fewer than 3 points, or a line that does not slope up, gives no reading: two points always
+    fit exactly, and a downward line would call the fastest grower cheap for the wrong reason."""
+    pts = [(r["growth1"], r["pe1"]) for r in rows if r["ticker"] != subject and included(r, inc)
+           and r.get("growth1") is not None and r.get("pe1") is not None]
+    n = len(pts)
+    out = {"n": n, "slope": None, "intercept": None, "fair_pe": None, "gap": None, "implied_growth": None,
+           "reading": SAYS_NOTHING}
+    sx, sy = sum(x for x, _ in pts), sum(y for _, y in pts)
+    sxx, sxy = sum(x * x for x, _ in pts), sum(x * y for x, y in pts)
+    den = n * sxx - sx * sx
+    if n < 2 or den == 0:
+        return out
+    out["slope"] = (n * sxy - sx * sy) / den
+    out["intercept"] = (sy - out["slope"] * sx) / n
+    s = next((r for r in rows if r["ticker"] == subject), {})
+    if n < 3 or not out["slope"] > 0 or s.get("growth1") is None or s.get("pe1") is None:
+        return out
+    out["fair_pe"] = out["intercept"] + out["slope"] * s["growth1"]
+    out["gap"] = s["pe1"] - out["fair_pe"]
+    out["implied_growth"] = (s["pe1"] - out["intercept"]) / out["slope"]
+    out["reading"] = BELOW if out["gap"] < 0 else ABOVE
+    return out
+
+
+def outliers(rows, subject, times=2.0):
+    """Peers whose next-year P/E is more than `times` the peers' median: flagged for the user, never left out."""
+    pe = [r["pe1"] for r in rows if r["ticker"] != subject and r.get("pe1") is not None]
+    if len(pe) < 3:
+        return []
+    med = statistics.median(pe)
+    return [r["ticker"] for r in rows if r["ticker"] != subject and r.get("pe1") is not None and r["pe1"] > times * med]

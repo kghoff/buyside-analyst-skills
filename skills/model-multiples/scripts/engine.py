@@ -74,6 +74,21 @@ def paid_weekly(rows, peer_rows):
     return out
 
 
+def exclude_peers(rows, excluded, pe_key):
+    """The user's Include? = 0 on a core peer: its P/E leaves every week's peer median, and the relative row follows.
+    pe_key is the subject column the relative row uses (pe_gaap on the free path, pe on the paid)."""
+    if not excluded:
+        return rows
+    for row in rows:
+        for t in excluded:
+            if t in row["peer_pe"]:
+                row["peer_pe"][t] = None
+        row["peer_med"] = M.median_or_none(row["peer_pe"].values())
+        pe = row.get(pe_key)
+        row["rel_peer"] = pe - row["peer_med"] if pe is not None and row["peer_med"] is not None else None
+    return rows
+
+
 def ranges(rows, windows=WINDOWS, keys=KEYS):
     """keys: KEYS, plus "fcf_yield_ntm" on the paid path (an export's NTM FCF; the free path has no forward history)."""
     return {k: {n: M.window_stats([r.get(k) for r in rows], n) for n in windows} for k in keys}

@@ -1,6 +1,6 @@
 ---
 name: model-multiples
-description: Add the Multiples tab to a company model (TICKER_model.xlsx) - where the stock trades against its own history, the S&P 500 and its peers. Weekly history of P/E, EV/EBITDA, EV/GP, EV/Revenue and FCF yield with charts; P/E minus the S&P 500 and minus the core-peer median; a ranges table (1 / 5 / 10-year min, median, max, percentile) with the reverse P/E (the earnings power today's price implies); a forward table (today's price on each forecast year, with the Street's); a ranked comp sheet and a "looks like" scatter of P/E against revenue growth. Free path - trailing multiples from the model, stooq files for 3-5 core peers, multpl.com for the S&P, Yahoo for comps - or paid path from FactSet / Bloomberg / CapIQ / Koyfin exports. Also writes the valuation brief that model-valuation reuses. Works for any listed company. Run after /model-forecast; rerun weekly or each print. Use when the user runs /model-multiples TICKER or asks for multiples, a comp sheet, P/E history charts or relative valuation.
+description: Add the Multiples tab to a company model (TICKER_model.xlsx) - where the stock trades against its own history, the S&P 500 and its peers. Weekly history of P/E, EV/EBITDA, EV/GP, EV/Revenue and FCF yield with charts; P/E minus the S&P 500 and minus the core-peer median; a ranges table (1 / 5 / 10-year min, median, max, percentile) with the reverse P/E (the earnings power today's price implies); a forward table (today's price on each forecast year, with the Street's); a ranked comp sheet with an Include? toggle per peer, a scatter of next-year P/E against revenue growth with a line through the peers (below it = structurally underpriced on the multiple), and the subject's P/E against the core-peer median over time. Free path - trailing multiples from the model, stooq files for 3-5 core peers, multpl.com for the S&P, Yahoo for comps - or paid path from FactSet / Bloomberg / CapIQ / Koyfin exports. Also writes the valuation brief that model-valuation reuses. Works for any listed company. Run after /model-forecast; rerun weekly or each print. Use when the user runs /model-multiples TICKER or asks for multiples, a comp sheet, P/E history charts or relative valuation.
 ---
 
 # /model-multiples
@@ -114,6 +114,14 @@ commas are read. Comps still come from Yahoo (free-path step 1).
   P/E; one plain sentence saying so the first time it appears).
 - The comp sheet: where the subject ranks, the cheapest and most expensive comps, anything the scatter shows as off
   the line.
+- The line through the peers (summary `line`): how many peers are on it, the P/E it gives at the subject's growth, the
+  gap in turns, the growth the subject's P/E implies, and the reading (below the line = structurally underpriced on
+  the multiple; under 3 peers or a line that doesn't slope up = no reading).
+- The Include? toggles (column T of the comp sheet, yellow, 1 by default): any peer flagged at over 2x the peers'
+  median P/E, any peer the user has left out (summary `left_out`, kept from their edit), and that flipping a cell to 0
+  takes the peer out of the averages, medians, the line, the scatter and (for a core peer) the weekly peer median when
+  Excel recalculates.
+- The new chart of the subject's P/E against the core-peer median (TTM GAAP on the free path, NTM on the paid).
 - Every judgment call:
   - free history is TTM, not NTM: for fast growers TTM P/E runs above NTM; the paid path is NTM and adds the NTM FCF
     yield;
@@ -124,7 +132,7 @@ commas are read. Comps still come from Yahoo (free-path step 1).
     deadlines, so never early;
   - net debt = debt-like liabilities less cash and short-term investments; operating leases excluded;
   - EBITDA is Adjusted EBITDA on a non-GAAP basis, else operating income + D&A (the build notes when it fell back);
-  - "looks like" uses total, not organic, revenue growth (free path);
+  - the scatter and its line use reported, not organic, revenue growth (Yahoo's next year vs this year);
   - the comp list is wider than the industry players;
   - the paid path took exported files only.
 - The build summary's warnings (dropped weeks, skipped charts, failed comps, currency mismatches, missing S&P column,

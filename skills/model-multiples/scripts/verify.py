@@ -40,6 +40,8 @@ def close(a, b):
         a = (a - dt.datetime(1899, 12, 30)).total_seconds() / 86400
     if b is None:
         return a in (None, "#N/A")
+    if isinstance(b, str):                                # a text formula (the line's reading)
+        return a == b
     if not isinstance(a, (int, float)):
         return False
     return math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-9)

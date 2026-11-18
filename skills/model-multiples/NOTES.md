@@ -68,3 +68,28 @@ ISRG, EW; core peers ABT, MDT, PODD; ABT XBRL from model-industry's peers folder
 - Comps' P/E FY1: TNDM 182.4, ISRG 34.6, EW 31.4, DXCM 26.2, SYK 19.4, PODD 18.7, ABT 17.7, MDT 16.1, BSX 13.8.
 - Warnings: "112 week(s) with neither a P/E nor an EV/Revenue were left out (no quarter known yet, or no data in the
   export)."
+
+## The user's review changes (2026-11-18)
+- **Line through the peers** (chapter 11, "Applying P/E multiples"). The scatter adds one unlabelled series of every
+  peer's point carrying Excel's own linear trendline. A block under the comps does the same least squares as legacy
+  array formulas (`SUM(IF(ISNUMBER(U),...))`). It gives the P/E the line puts on the subject's growth, the gap, the
+  growth the subject's P/E implies, and a reading.
+  - Under 3 peers or a slope ≤ 0 gives no reading: two points always fit exactly, and a downward line would call the
+    fastest grower cheap.
+  - The subject is never on its own line.
+  - `comps.line_fit` is the Python twin, and verify.py checks the block, including the reading's text.
+  - Growth is Yahoo's reported revenue growth. The user chose not to add an organic override column.
+- **Include? toggle** (column T, yellow FFFFFF99 like Valuation, 1 by default).
+  - Column U = P/E FY1 if included (#N/A otherwise and for the subject). The scatter's peer points and the trendline
+    read U, so a 0 takes the peer off the chart and out of the fit when Excel recalculates.
+  - Averages and medians are `AVERAGE(IF((T=1)*ISNUMBER(col),col))` array formulas (no longer AGGREGATE), and the rows
+    are labelled "Average (included rows)".
+  - A core peer's weekly P/E is `IF(T=1, ..., NA())`, so it leaves the peer median, rel_peer and their ranges.
+    `engine.exclude_peers` mirrors that.
+  - A rerun reads column T from the old tab (`read_includes`). Code only ever writes 1, so there is no
+    inputs_written record: whatever is there is the default or the user's.
+  - Code never leaves a peer out. It warns when a peer's P/E FY1 is over 2x the peers' median (`comps.outliers`).
+- **Peer-median chart.** The subject's P/E (the GAAP one on the free path, so like for like) against the core-peer
+  median, TTM free and NTM paid. There is no historical NTM consensus on the free path.
+- With 9 charts free / 10 paid, the data block starts lower (`R_DATA`). model-short finds its Multiples cells by the
+  ranges table's labels, which are unchanged.

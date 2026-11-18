@@ -59,3 +59,17 @@ def test_cross_between_line_between_scatter_midcat():
     pts = [{"name": "A", "x": ("r", 1.0), "y": ("r", 2.0), "subject": False}]
     sc = ET.fromstring(charts.scatter("T", pts).split("\n", 1)[1])
     assert {e.get("val") for e in sc.iter(f"{C}crossBetween")} == {"midCat"}
+
+
+def test_scatter_fit_series_carries_a_linear_trendline_and_no_markers():
+    # The line through the peers is Excel's own linear trendline on one unlabelled series of every peer's point
+    # (a left-out peer is #N/A there), so it refits whenever the user flips an Include cell.
+    pts = [{"name": "PODD", "x": ("'Multiples'!$S$41", 0.20), "y": ("'Multiples'!$U$41", 55.0), "subject": False}]
+    fit = {"x": ("'Multiples'!$S$40:$S$42", [0.14, 0.20, 0.1]), "y": ("'Multiples'!$U$40:$U$42", [None, 55.0, 30.0])}
+    root = ET.fromstring(charts.scatter("t", pts, fit=fit).split("\n", 1)[1])
+    sers = list(root.iter(f"{C}ser"))
+    assert len(sers) == 2
+    tl = sers[-1].find(f"{C}trendline")
+    assert tl is not None and tl.find(f"{C}trendlineType").get("val") == "linear"
+    assert sers[-1].find(f"{C}marker/{C}symbol").get("val") == "none"
+    assert all(s.find(f"{C}trendline") is None for s in sers[:-1])

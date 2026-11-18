@@ -11,6 +11,8 @@ import math
 import os
 import re
 
+import openpyxl
+
 import comps as C
 import engine as E
 import importer
@@ -30,6 +32,32 @@ RAWM = '#,##0,,'                                   # raw dollars shown in millio
 LABELS = {"pe": "P/E", "ev_ebitda": "EV/EBITDA", "ev_gp": "EV/GP", "ev_rev": "EV/Revenue", "fcf_yield": "FCF yield",
           "fcf_yield_ntm": "FCF yield (NTM)", "rel_sp": "P/E − S&P 500 P/E", "rel_peer": "P/E − core-peer median"}
 WLAB = {52: "1 year", 260: "5 years", 520: "10 years"}
+YELLOW = "FFFFFF99"                                # the user's input cells, the same yellow as the Valuation tab
+INC_HEAD, FIT_HEAD = "Include? (1 = yes, 0 = leave out)", "P/E FY1 on the line"
+
+
+def read_includes(model):
+    """{ticker: 0 | 1} from the existing tab's Include? column, so a rerun keeps the user's toggles. Code only ever
+    writes 1, so whatever is there is the default or the user's. Anything but 0 or 1 is read as 1, with a warning."""
+    wb = openpyxl.load_workbook(model, read_only=True)
+    if TAB not in wb.sheetnames:
+        wb.close()
+        return {}, []
+    inc, warns, on = {}, [], False
+    for row in wb[TAB].iter_rows(max_col=20, values_only=True):
+        a, t = row[0], row[19] if len(row) > 19 else None
+        if not on:
+            on = a == "Ticker" and t == INC_HEAD
+            continue
+        if a is None or str(a).startswith(("Average", "Median")):
+            break
+        if t in (0, 1) and not isinstance(t, bool):
+            inc[a] = int(t)
+        else:
+            inc[a] = 1
+            warns.append(f"{a}: its Include? cell held {t!r}, not 0 or 1, so it is included; type 0 to leave it out.")
+    wb.close()
+    return inc, warns
 
 
 def labels(mode):
@@ -57,7 +85,7 @@ class W:
     def __init__(self, st):
         self.sh, self.st = Sheet(), st
         self.s = {}
-        self.typed, self.links, self.formulas, self.expected = [], [], [], {}
+        self.typed, self.links, self.formulas, self.expected, self.inputs = [], [], [], {}, []
 
     def style(self, color=BLACK, fmt="General", b=False, i=False, fill=None, sz=11):
         k = (color, fmt, b, i, fill, sz)
@@ -191,6 +219,10 @@ def build(model, work, ticker, out):
         warnings.append(f"{len(rows) - len(kept)} week(s) with neither a P/E nor an EV/Revenue were left out "
                         "(no quarter known yet, or no data in the export).")
     rows = kept or rows
+    inc, inc_warn = read_includes(model)
+    warnings += inc_warn
+    off = {t for t, v in inc.items() if v == 0}
+    E.exclude_peers(rows, off & set(cfg["core"]), "pe_gaap" if mode == "free" else "pe")
     # Paid path: the sixth multiple, forward FCF yield, has a history (the export's NTM FCF); the free path has none.
     KEYS = E.KEYS + (("fcf_yield_ntm",) if mode == "paid" else ())
     rg = E.ranges(rows, keys=KEYS)
@@ -198,6 +230,13 @@ def build(model, work, ticker, out):
     comp_rows = C.rank([C.row(snaps[ticker], "Subject")] +
                        [C.row(snaps[c["ticker"]], c.get("group", "")) for c in cfg["comps"]])
     warnings += [f"{r['ticker']}: {r['warning']}" for r in comp_rows if r["warning"]]
+    for t in C.outliers(comp_rows, ticker):
+        pe = next(r["pe1"] for r in comp_rows if r["ticker"] == t)
+        warnings.append(f"{t}: next year's P/E ({pe:,.0f}x) is more than twice the peers' median, so it pulls the "
+                        "averages, the line through the peers" + (" and the core-peer median" if t in cfg["core"] else "")
+                        + (". It is left out (Include? = 0)." if t in off else
+                           ". Type 0 in its Include? cell (column T of the comp sheet) to leave it out."))
+    fit = C.line_fit(comp_rows, inc, ticker)
 
     try:
         d1, d2 = dt.date.fromisoformat(str(rows[-1]["date"])[:10]), dt.date.fromisoformat(str(snaps[ticker]["asof"])[:10])
@@ -212,7 +251,13 @@ def build(model, work, ticker, out):
     R_FWD = R_RANGE + len(KEYS) + 8
     R_COMP = R_FWD + 16
     # The data blocks run wider than column V, so they start below the charts (up to 8 charts free, 9 paid; two across).
-    R_DATA = max(R_COMP + len(comp_rows) + 8, ROW0 + -(-(9 if mode == "paid" else 8) // 2) * (NROWS + 1) + 3)
+    R_DATA = max(R_COMP + len(comp_rows) + 16, ROW0 + -(-(10 if mode == "paid" else 9) // 2) * (NROWS + 1) + 3)
+    C0 = R_COMP + 2
+    CN = C0 + len(comp_rows) - 1
+    inc_ref = {r["ticker"]: f"$T${C0 + i}" for i, r in enumerate(comp_rows)}
+    for t in cfg["core"]:
+        if t not in inc_ref:
+            warnings.append(f"Core peer {t} is not on the comp sheet, so it has no Include? toggle.")
     W0, WN = R_DATA + 2, R_DATA + 1 + len(rows)
 
     col = {}
@@ -317,11 +362,13 @@ def build(model, work, ticker, out):
             if mode == "free":
                 K, T = rng(f"{t}_known", W0, W0 + len(peer_q[t]) - 1), rng(f"{t}_ttm", W0, W0 + len(peer_q[t]) - 1)
                 e = f"INDEX({T},MATCH({g('date')},{K},1))"
-                w.formula(g(f"pe_{t}"), na(f"IF({e}>0,{g(f'px_{t}')}/{e},NA())"), X, r["peer_pe"].get(t))
             else:
                 e = g(f"eps_{t}")
                 w.typed_(e, r["peer_eps"].get(t), MONEY)
-                w.formula(g(f"pe_{t}"), na(f"IF({e}>0,{g(f'px_{t}')}/{e},NA())"), X, r["peer_pe"].get(t))
+            f = f"IF({e}>0,{g(f'px_{t}')}/{e},NA())"
+            if t in inc_ref:                  # the user's Include? toggle on the comp sheet
+                f = f"IF({inc_ref[t]}=1,{f},NA())"
+            w.formula(g(f"pe_{t}"), na(f), X, r["peer_pe"].get(t))
         if cfg["core"]:
             pr = f"{L['pe_' + cfg['core'][0]]}{n}:{L['pe_' + cfg['core'][-1]]}{n}"
             w.formula(g("peer_med"), na(f"_xlfn.AGGREGATE(12,6,{pr})"), X, r["peer_med"])
@@ -495,7 +542,14 @@ def build(model, work, ticker, out):
     notes[f"C{R_COMP + 1}"] = ("Typed from Yahoo Finance quoteSummary (price, financialData, earningsTrend) saved in "
                                "_model_work/model-multiples/comps/<ticker>.json. Dollar figures are shown in millions "
                                "by number format; the typed values are Yahoo's.")
-    C0 = R_COMP + 2
+    w.text(f"T{R_COMP + 1}", INC_HEAD, b=True, fill="FFDDEBF7")
+    w.text(f"U{R_COMP + 1}", FIT_HEAD, b=True, fill="FFDDEBF7")
+    notes[f"T{R_COMP + 1}"] = ("Yours to change: 1 = in the averages, the medians, the line through the peers and (for a "
+                               "core peer) the weekly core-peer median; 0 = left out. A rerun keeps what you typed. "
+                               "Excel recalculates the charts and the line when you flip it.")
+    notes[f"U{R_COMP + 1}"] = ("The peer's next-year P/E when it is included and has a revenue growth; #N/A otherwise "
+                               "(and always for the subject, which is plotted on its own). The scatter and the line "
+                               "read this column.")
     for i, r in enumerate(comp_rows):
         n = C0 + i
         A = lambda j: f"{colname(j)}{n}"
@@ -515,17 +569,61 @@ def build(model, work, ticker, out):
             f = f"IF({A(den)}>0,{A(num)}/{A(den)},NA())" if ok or key.startswith("pe") else "NA()"
             w.formula(A(j), na(f), X, r[key])
         w.formula(A(19), na(f"{A(10)}/{A(9)}-1"), PCT, r["growth1"])
-    CN = C0 + len(comp_rows) - 1
-    stt = C.stats(comp_rows)
-    for i, (lab, fn) in enumerate((("Average", 1), ("Median", 12))):
+    for i, r in enumerate(comp_rows):     # after the `continue` above, so a failed fetch still gets its toggle
+        n = C0 + i
+        w.sh.set(f"T{n}", "n", inc.get(r["ticker"], 1), w.style(BLUE, "0", fill=YELLOW))
+        w.inputs.append(f"T{n}")
+        on_line = r["ticker"] != ticker and C.included(r, inc) and r.get("pe1") is not None \
+            and r.get("growth1") is not None
+        f = "NA()" if r["ticker"] == ticker else f"IF(AND(T{n}=1,ISNUMBER(Q{n}),ISNUMBER(S{n})),Q{n},NA())"
+        w.formula(f"U{n}", na(f), X, r["pe1"] if on_line else None)
+    stt = C.stats(comp_rows, inc)
+    T_ = f"$T${C0}:$T${CN}"
+    for i, (lab, fn) in enumerate((("Average", "AVERAGE"), ("Median", "MEDIAN"))):
         n = CN + 1 + i
-        w.text(f"A{n}", lab, b=True)
+        w.text(f"A{n}", lab + " (included rows)", b=True)
         for j, key in ((14, "ev_rev0"), (15, "ev_rev1"), (16, "pe0"), (17, "pe1"), (18, "ev_ebitda"), (19, "growth1")):
-            w.formula(f"{colname(j)}{n}", na(f"_xlfn.AGGREGATE({fn},6,{colname(j)}{C0}:{colname(j)}{CN})"),
-                      PCT if key == "growth1" else X, stt["average" if fn == 1 else "median"][key], b=True)
+            R = f"${colname(j)}${C0}:${colname(j)}${CN}"
+            # a legacy array formula, as the percentile column: IF drops the left-out and #N/A rows in Excel and LO
+            w.formula(f"{colname(j)}{n}", na(f"{fn}(IF(({T_}=1)*ISNUMBER({R}),{R}))"),
+                      PCT if key == "growth1" else X, stt["average" if fn == "AVERAGE" else "median"][key], b=True,
+                      kind="fa")
+
+    # ---------------------------------------------------------------- LINE through the peers (chapter 11)
+    R0 = CN + 4
+    U_, S_ = f"$U${C0}:$U${CN}", f"$S${C0}:$S${CN}"
+    m = f"ISNUMBER({U_})"
+    srow = C0 + next(i for i, r in enumerate(comp_rows) if r["ticker"] == ticker)
+    w.text(f"A{R0}", "LINE THROUGH THE PEERS: next year's P/E on next year's revenue growth (reported, not organic). "
+                     "Below the line = structurally underpriced on the multiple.", b=True)
+    sums = {k: f"SUM(IF({m},{v},0))" for k, v in (("x", S_), ("y", U_), ("xy", f"{S_}*{U_}"), ("xx", f"{S_}^2"))}
+    nB, slB, inB, fairB, peB, gapB = (f"$B${R0 + k}" for k in range(1, 7))
+    for k, (lab, f, fmt, v, kind) in enumerate((
+            ("Peers on the line (included, with both numbers)", f"SUM(IF({m},1,0))", "0", fit["n"], "fa"),
+            ("Slope (P/E turns per 100% of growth)",
+             na(f"IF({nB}>=2,({nB}*{sums['xy']}-{sums['x']}*{sums['y']})/({nB}*{sums['xx']}-{sums['x']}^2),NA())"),
+             "0.0", fit["slope"], "fa"),
+            ("Intercept (the line's P/E at 0% growth)", na(f"({sums['y']}-{slB}*{sums['x']})/{nB}"), X,
+             fit["intercept"], "fa"),
+            (f"P/E the line gives at {ticker}'s growth",
+             na(f"IF(AND({nB}>=3,{slB}>0),{inB}+{slB}*$S${srow},NA())"), X, fit["fair_pe"], "f"),
+            (f"{ticker}'s next-year P/E", f"$Q${srow}", X, next(r["pe1"] for r in comp_rows if r["ticker"] == ticker),
+             "f"),
+            (f"{ticker} − the line (turns; below 0 = under the line)", na(f"{peB}-{fairB}"), X, fit["gap"], "f"),
+            (f"Growth the line implies at {ticker}'s P/E",
+             na(f"IF(AND({nB}>=3,{slB}>0),({peB}-{inB})/{slB},NA())"), PCT, fit["implied_growth"], "f"),
+            ("Reading", f'IF(ISNUMBER({gapB}),IF({gapB}<0,"{C.BELOW}","{C.ABOVE}"),"{C.SAYS_NOTHING}")', "General",
+             fit["reading"], "f"))):
+        w.text(f"A{R0 + 1 + k}", lab)
+        w.formula(f"B{R0 + 1 + k}", f, fmt, v, kind=kind)
+    notes[f"A{R0}"] = ("Chapter 11, applying P/E multiples: peers' multiples carry the market's expectation. Fit a "
+                       "line of P/E on growth through the included peers; a name under it is paid less for its growth "
+                       "than its peers are. Excel's trendline on the scatter is the same line. Under 3 peers or a line "
+                       "that does not slope up gives no reading. Growth is Yahoo's reported revenue growth, not organic.")
 
     # ---------------------------------------------------------------- charts
-    chart_list = chart_specs(ticker, mode, rows, comp_rows, C0, lambda k: f"'{TAB}'!{rng(k, W0, WN)}", warnings, LAB)
+    chart_list = chart_specs(ticker, mode, rows, comp_rows, C0, lambda k: f"'{TAB}'!{rng(k, W0, WN)}", warnings, LAB,
+                             inc, PG, bool(cfg["core"]))
 
     sh.comments = notes
     sh.freeze = "B5"
@@ -546,15 +644,17 @@ def build(model, work, ticker, out):
     pkg.save(out)
     import notebox
     notebox.fix(out, out, since=model)
-    json.dump({"expected": w.expected, "typed": w.typed, "links": w.links, "formulas": w.formulas, "weeks": len(rows),
+    json.dump({"expected": w.expected, "typed": w.typed, "links": w.links, "formulas": w.formulas, "inputs": w.inputs,
+               "weeks": len(rows),
                "W0": W0, "WN": WN}, open(os.path.join(work, "layout.json"), "w"), indent=0, default=str)
     return {"tab": TAB, "mode": mode, "weeks": len(rows), "first_week": rows[0]["date"].isoformat(),
             "comps": [{"ticker": r["ticker"], "pe1": r["pe1"]} for r in comp_rows], "core": cfg["core"],
             "ranges": {k: rg[k][260] for k in ("pe", "ev_ebitda", "rel_sp", "rel_peer")}, "reverse_pe_5y": rev[260],
+            "left_out": sorted(off), "line": fit,
             "warnings": warnings}
 
 
-def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings, lab):
+def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings, lab, inc=None, PG="pe", core=False):
     """Chart XML for the tab: one line chart per multiple (skipped, with a warning, when every week is NM) and the
     'looks like' scatter from the comp sheet. ref(k) = the absolute range of weekly column k."""
     cat = (ref("date"), [serial(r["date"]) for r in rows])
@@ -564,21 +664,37 @@ def chart_specs(ticker, mode, rows, comp_rows, C0, ref, warnings, lab):
     for title, k, name, fmt in ((f"{ticker} P/E ({word})", "pe", "P/E", X),
                                 (f"{ticker} {lab['rel_sp']}", "rel_sp", lab["rel_sp"], X),
                                 (f"{ticker} {lab['rel_peer']}", "rel_peer", lab["rel_peer"], X),
+                                ("PEER", None, None, None),
                                 (f"{ticker} EV/EBITDA ({word})", "ev_ebitda", "EV/EBITDA", X),
                                 (f"{ticker} EV/GP ({word})", "ev_gp", "EV/GP", X),
                                 (f"{ticker} EV/Revenue ({word})", "ev_rev", "EV/Revenue", X),
                                 (f"{ticker} {lab['fcf_yield']}", "fcf_yield", lab["fcf_yield"], PCT),
                                 *([(f"{ticker} FCF yield (NTM)", "fcf_yield_ntm", "NTM FCF yield", PCT)]
                                   if mode == "paid" else [])):
+        if title == "PEER":               # the subject's P/E beside the core-peer median: the history behind rel_peer
+            if core and any(r.get("peer_med") is not None for r in rows):
+                basis = "TTM, GAAP" if mode == "free" else "NTM"
+                chart_list.append(line(f"{ticker} P/E vs core-peer median P/E ({basis})", cat,
+                                       [ser(PG, f"{ticker} P/E", "C00000"), ser("peer_med", "Core-peer median", "1F4E79")], X))
+            continue
         if any(r.get(k) is not None for r in rows):
             chart_list.append(line(title.replace("\u2212", "-"), cat, [ser(k, name, "1F4E79")], fmt))
         else:                         # every week NM: an empty chart says nothing, so skip it and say so
             warnings.append(f"No week has a {lab[k]} value, so the '{title}' chart is skipped.")
-    pts = [{"name": r["ticker"], "x": (f"'{TAB}'!$S${C0 + i}", r["growth1"]), "y": (f"'{TAB}'!$Q${C0 + i}", r["pe1"]),
+    inc = inc or {}
+    # Peers read column U (#N/A when left out), so a toggled-off peer leaves the chart and the line; the subject reads Q.
+    on = lambda r: r["ticker"] != ticker and C.included(r, inc) and r["pe1"] is not None and r["growth1"] is not None
+    pts = [{"name": r["ticker"], "x": (f"'{TAB}'!$S${C0 + i}", r["growth1"]),
+            "y": (f"'{TAB}'!${'Q' if r['ticker'] == ticker else 'U'}${C0 + i}",
+                  r["pe1"] if r["ticker"] == ticker or on(r) else None),
             "subject": r["ticker"] == ticker} for i, r in enumerate(comp_rows) if r["pe1"] is not None
            and r["growth1"] is not None]
+    CN = C0 + len(comp_rows) - 1
+    fit = {"x": (f"'{TAB}'!$S${C0}:$S${CN}", [r["growth1"] for r in comp_rows]),
+           "y": (f"'{TAB}'!$U${C0}:$U${CN}", [r["pe1"] if on(r) else None for r in comp_rows])}
     if pts:                           # charts.scatter raises on no points (Task 10 review): skip the chart, say so
-        chart_list.append(scatter("Looks like: next year's P/E vs revenue growth", pts))
+        chart_list.append(scatter("Next-year P/E vs next-year revenue growth (reported, not organic): under the "
+                                  "line = underpriced vs peers", pts, fit=fit))
     else:
         warnings.append("No comp has both a next-year P/E and revenue growth, so the 'looks like' scatter is skipped.")
     return chart_list

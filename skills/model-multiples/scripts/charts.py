@@ -72,8 +72,10 @@ def line(title, cat, series, yfmt):
     return _wrap(title, plot, legend=len(series) > 1)
 
 
-def scatter(title, points, xfmt="0%", yfmt='0"x"'):
-    """points = [{name, x: (ref, value), y: (ref, value), subject}]: one series per company, labelled with its name."""
+def scatter(title, points, xfmt="0%", yfmt='0"x"', fit=None):
+    """points = [{name, x: (ref, value), y: (ref, value), subject}]: one series per company, labelled with its name.
+    fit = {x: (ref, values), y: (ref, values)}: one more series, no markers or labels, carrying Excel's linear
+    trendline through those points (#N/A points are left out of the fit, so a peer toggled off drops out)."""
     if not points:
         raise ValueError("scatter chart needs at least one point")
     sers = ""
@@ -88,6 +90,16 @@ def scatter(title, points, xfmt="0%", yfmt='0"x"'):
                  '<c:showSerName val="1"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls>'
                  f'<c:xVal><c:numRef><c:f>{esc(p["x"][0])}</c:f>{_cache([p["x"][1]], xfmt)}</c:numRef></c:xVal>'
                  f'<c:yVal><c:numRef><c:f>{esc(p["y"][0])}</c:f>{_cache([p["y"][1]], yfmt)}</c:numRef></c:yVal>'
+                 '<c:smooth val="0"/></c:ser>')
+    if fit:
+        i = len(points)
+        sers += (f'<c:ser><c:idx val="{i}"/><c:order val="{i}"/><c:tx><c:v>Peers: line of best fit</c:v></c:tx>'
+                 '<c:spPr><a:ln w="19050"><a:noFill/></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker>'
+                 '<c:trendline><c:spPr><a:ln w="19050"><a:solidFill><a:srgbClr val="7F7F7F"/></a:solidFill>'
+                 '<a:prstDash val="dash"/></a:ln></c:spPr><c:trendlineType val="linear"/><c:dispRSqr val="0"/>'
+                 '<c:dispEq val="0"/></c:trendline>'
+                 f'<c:xVal><c:numRef><c:f>{esc(fit["x"][0])}</c:f>{_cache(fit["x"][1], xfmt)}</c:numRef></c:xVal>'
+                 f'<c:yVal><c:numRef><c:f>{esc(fit["y"][0])}</c:f>{_cache(fit["y"][1], yfmt)}</c:numRef></c:yVal>'
                  '<c:smooth val="0"/></c:ser>')
     plot = (f'<c:scatterChart><c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>{sers}'
             '<c:axId val="701"/><c:axId val="702"/></c:scatterChart>'

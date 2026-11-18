@@ -292,3 +292,42 @@ def test_chart_titles_use_plain_hyphen(built):
     import re
     titles = [re.sub("<[^>]+>", "", t) for x in re.findall(r"<c:title>.*?</c:title>", xml) for t in [x]]
     assert any("P/E - S&P 500 P/E" in t.replace("&amp;", "&") for t in titles) and not any("\u2212" in t for t in titles)
+
+
+@pytest.mark.slow
+def test_include_toggle_is_yellow_kept_on_rerun_and_moves_the_averages(built, verified, tmp_path):
+    # The user's ask (2026-11-18): flip an outlier off and see the averages, the line and the core-peer median move.
+    # Each comp gets a yellow Include? cell (1 by default); a 0 the user typed survives the rebuild, and the averages,
+    # the line and the weekly peer median then recalculate without that peer, still matching engine.py.
+    _, out1, w, s = built
+    ws = openpyxl.load_workbook(out1)["Multiples"]
+    rows = {ws.cell(r, 1).value: r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value in ("DXCM", "PODD", "TNDM")}
+    assert ws.cell(min(rows.values()) - 1, 20).value == build.INC_HEAD            # header right above the comps
+    for t, r in rows.items():
+        c = ws.cell(r, 20)
+        assert c.value == 1 and c.fill.fgColor.rgb == build.YELLOW and c.font.color.rgb == "FF0000FF", t
+    assert s["line"]["n"] == 1 and s["line"]["reading"] == build.C.SAYS_NOTHING   # one peer with numbers: no reading
+    edited = tmp_path / "edited.xlsx"                     # the user's edit, on a test copy (never a live model)
+    wb = openpyxl.load_workbook(out1)
+    wb["Multiples"].cell(rows["PODD"], 20).value = 0
+    wb.save(edited)
+    w2 = tmp_path / "work2"
+    shutil.copytree(w, w2, ignore=shutil.ignore_patterns("values", "verify", "*.xlsx", "*.png", "layout.json"))
+    out2 = w2 / "out2.xlsx"
+    s2 = build.build(str(edited), str(w2), "DXCM", str(out2))
+    assert s2["left_out"] == ["PODD"]
+    assert openpyxl.load_workbook(out2)["Multiples"].cell(rows["PODD"], 20).value == 0
+    r = verify.run(str(edited), str(out2), str(w2))
+    assert r["failed"] == [] and r["errors"] == [], r
+    rec = openpyxl.load_workbook(r["recalculated"], data_only=True)["Multiples"]
+    avg = next(i for i in range(1, rec.max_row + 1) if str(rec.cell(i, 1).value).startswith("Average"))
+    assert rec.cell(avg, 17).value == pytest.approx(100 / 3.1)       # P/E FY1 average: DXCM alone once PODD is out
+
+
+def test_peer_median_chart_and_fitted_scatter_are_drawn(built):
+    # The two new charts: the subject's P/E beside the core-peer median, and the scatter with its fitted line.
+    _, out, _, _ = built
+    z = zipfile.ZipFile(out)
+    xml = "".join(z.read(n).decode() for n in z.namelist() if n.startswith("xl/charts/chart"))
+    assert "P/E vs core-peer median P/E (TTM, GAAP)" in xml
+    assert '<c:trendlineType val="linear"/>' in xml

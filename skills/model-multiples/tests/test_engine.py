@@ -90,3 +90,11 @@ def test_ranges_take_extra_keys_for_the_paid_paths_forward_fcf_yield():
     rg = engine.ranges(rows, windows=(3,), keys=engine.KEYS + ("fcf_yield_ntm",))
     assert rg["fcf_yield_ntm"][3]["median"] == 0.03 and rg["fcf_yield_ntm"][3]["pct"] == pytest.approx(2 / 3)
     assert "fcf_yield_ntm" not in engine.ranges(rows, windows=(3,))
+
+
+def test_excluded_core_peer_leaves_the_peer_median():
+    # The Include toggle on a core peer takes its P/E out of every week's peer median, so the relative row moves too.
+    rows = [{"pe": 30.0, "pe_gaap": 30.0, "peer_pe": {"A": 20.0, "B": 24.0, "T": 200.0}, "peer_med": 24.0,
+             "rel_peer": 6.0}]
+    engine.exclude_peers(rows, {"T"}, "pe_gaap")
+    assert rows[0]["peer_pe"]["T"] is None and rows[0]["peer_med"] == 22.0 and rows[0]["rel_peer"] == 8.0
