@@ -1,5 +1,5 @@
 # skills/model-short/tests/test_shortmath.py
-"""The chapter's own exhibits as test cases: if the math stops reproducing Brett's numbers, these fail."""
+"""The chapter's own exhibits as test cases: if the math stops reproducing the chapter's numbers, these fail."""
 import os
 import sys
 
