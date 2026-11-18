@@ -71,3 +71,11 @@ def test_derived_series_chart_draws_and_names_a_missing_input(tmp_path):
     assert os.path.getsize(out) > 5000
     with pytest.raises(ValueError, match="Rev \\| Nowhere"):
         draw(spec(metrics=[{"ratio": ["Cost", "Rev | Nowhere"]}]), s, "", "")
+
+
+def test_axis_labels_keep_decimals_when_the_values_are_small():
+    # an EPS axis ($4.40-$5.80) or a fraction axis printed as whole numbers reads "5, 5, 5, 6": each tick must be distinct
+    from charts import THOUSANDS
+    small = [THOUSANDS(v, None) for v in (4.4, 4.6, 4.8, 5.0, 5.2)]
+    assert len(set(small)) == len(small)
+    assert THOUSANDS(25009, None) == "25,009"  # large dollar axes keep thousands separators and no decimals

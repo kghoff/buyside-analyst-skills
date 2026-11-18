@@ -63,7 +63,7 @@ The JSON:
 - `idio_notes`: 6-10 moves section 07 explains (dated releases, guide cuts, launches, big no-event drawdowns) that
   the user's notes don't cover. `side` "below" for drops, "above" for rises.
 - `top_day_notes` / `event_notes`: only dates from `handoff_context.json` that the sections explain.
-- `event_moves` and the rest: the tables in section 07, rewritten as JSON. Add `"dxcm"`, `"spy"`, `"idio"`
+- `event_moves` and the rest: the tables in section 07, rewritten as JSON. Add `"stock"` (the stock's own move), `"spy"`, `"idio"`
   (fractions) only for an event with no exact date in `events` (e.g. a month-long move), copied from section 07.
 
 Reply only with the file path and the count of each list, in 60 words or less.

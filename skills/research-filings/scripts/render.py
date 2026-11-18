@@ -261,14 +261,18 @@ def _keep_together(html, indexes):
     ends = set()
     for i in indexes:
         block = max((m for m in re.finditer(r"<(p|li|tr|figcaption)\b", html[:starts[i]])), key=lambda m: m.start(), default=None)
-        if block:
+        kpis = max(re.finditer(r'<div class="kpis', html[:starts[i]]), key=lambda m: m.start(), default=None)
+        if kpis and (not block or kpis.start() > block.start()):   # a KPI tile row has no <p>: mark the row itself
+            ends.add((kpis.end(), " "))
+        elif block:
             li = re.search(r"<li\b(?=[^>]*>\s*$)", html[:block.start()])   # WeasyPrint ignores breaks on a list item's first <p>
-            ends.add(li.end() if li else block.end())
-    for end in sorted(ends, reverse=True):
-        if html.startswith(' class="fnkeep"', end):
-            html = html[:end] + ' class="fnbreak"' + html[end + len(' class="fnkeep"'):]
-        elif not html.startswith(' class="fnbreak"', end):
-            html = html[:end] + ' class="fnkeep"' + html[end:]
+            ends.add((li.end() if li else block.end(), ' class="'))
+    for end, pre in sorted(ends, reverse=True):   # the kpis div already has a class: merge into it
+        close = '"' if pre != " " else ""
+        if html.startswith(pre + "fnkeep" + close, end):
+            html = html[:end] + pre + "fnbreak" + close + html[end + len(pre + "fnkeep" + close):]
+        elif not html.startswith(pre + "fnbreak" + close, end):
+            html = html[:end] + pre + "fnkeep" + close + html[end:]
     return html
 
 
