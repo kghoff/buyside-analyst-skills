@@ -71,6 +71,7 @@ def prints(g, P, ticker):
         raise SystemExit("model-earnings-before: Px Events has no " + ", ".join(x for x in need if x not in h) +
                          " column. Rerun /model-price-history.")
     ct, cr, cm, ci_ = (h[x] for x in need)
+    ce = h.get("Event date")              # an after-close release is dated the trading day before its reaction
     idx = {x["date"]: i for i, x in enumerate(P["rows"])}
     cl = [x["close"] for x in P["rows"]]
     out = []
@@ -79,7 +80,8 @@ def prints(g, P, ticker):
         if not (isinstance(t, str) and t.lower().startswith("earn") and d in idx):
             continue
         i = idx[d]
-        out.append({"row": r, "date": d.isoformat(), "move": g.get((r, cm)), "idio": g.get((r, ci_)),
+        e = _day(g.get((r, ce))) if ce else None
+        out.append({"row": r, "date": d.isoformat(), "event_date": (e or d).isoformat(), "move": g.get((r, cm)), "idio": g.get((r, ci_)),
                     "refs": {"date": f"'Px Events'!${L(cr)}${r}", "move": f"'Px Events'!${L(cm)}${r}",
                              "idio": f"'Px Events'!${L(ci_)}${r}"},
                     "run_up": em.growth(cl[i - 1], cl[i - 1 - RUN]) if i - 1 - RUN >= 0 else None,

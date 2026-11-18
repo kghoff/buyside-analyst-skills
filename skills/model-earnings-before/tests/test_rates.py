@@ -31,6 +31,9 @@ def test_prints_newest_first_with_run_up_and_drift(tabs):
     assert [x["date"] for x in pr] == days[::-1]
     assert [x["move"] for x in pr] == mf.PRINT_MOVES[::-1]
     assert pr[0]["refs"]["move"] == "'Px Events'!$N$14"
+    # an after-close release is dated the trading day before its reaction day; the event date is carried apart
+    assert pr[0]["event_date"] == mf.event_dates()[-1].isoformat() == "2026-10-30"
+    assert pr[1]["event_date"] == pr[1]["date"]
     px, _ = mf.closes()
     i = mf.trading_days().index(mf.reaction_days()[-1])
     assert pr[0]["run_up"] == pytest.approx(px[i - 1] / px[i - 8] - 1)

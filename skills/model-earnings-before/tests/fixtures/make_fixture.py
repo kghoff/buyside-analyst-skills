@@ -89,6 +89,13 @@ def reaction_days():
     return out
 
 
+def event_dates():
+    """The release day of each print: the reaction day, except the last print, released after the close on the
+    trading day before its reaction day (so its release is dated a day before the reaction)."""
+    days, out = trading_days(), reaction_days()
+    return out[:-1] + [days[days.index(out[-1]) - 1]]
+
+
 def _mod(ws):
     s = series()
     ws["A1"] = "TEST model"
@@ -143,12 +150,13 @@ def _px_events(ws):
         ws.cell(4, c, h)
     for i, (p, d, m) in enumerate(zip(PRINT_PERIODS, reaction_days(), PRINT_MOVES)):
         r = 5 + i
+        e = event_dates()[i]
         ws.cell(r, 1, p)
-        ws.cell(r, 2, d).number_format = "yyyy-mm-dd"
-        ws.cell(r, 9, d).number_format = "yyyy-mm-dd"
+        ws.cell(r, 2, e).number_format = "yyyy-mm-dd"
+        ws.cell(r, 9, e).number_format = "yyyy-mm-dd"
         ws.cell(r, 10, "Earnings")
         ws.cell(r, 11, f"{p} results")
-        ws.cell(r, 12, "Before open")
+        ws.cell(r, 12, "Before open" if e == d else "After close")
         ws.cell(r, 13, d).number_format = "yyyy-mm-dd"
         ws.cell(r, 14, m)
         ws.cell(r, 15, 0.005)

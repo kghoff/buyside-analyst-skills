@@ -1,6 +1,8 @@
 {"items": {
   "10q:2026Q2": {"category": "10-Q", "label": "TEST 2026 Q2 10-Q", "status": "found",
                  "files": ["10-Qs/_md/TEST 2026 Q2 10-Q.md"]},
+  "release:2026Q3": {"category": "Press Releases", "label": "TEST 2026-10-30 Q3 2026 results (after the close)",
+                     "status": "found", "files": ["Press Releases/_md/TEST 2026-10-30 Q3 2026 results.md"]},
   "call:2026Q3": {"category": "Earnings Call", "label": "TEST 2026-11-02 Q3 2026 earnings call", "status": "found",
                   "files": ["Earnings Calls/_md/TEST 2026-11-02 Q3 call.md"]},
   "event:2026-11-10": {"category": "Investor Event", "label": "TEST 2026-11-10 healthcare conference", "status": "found",

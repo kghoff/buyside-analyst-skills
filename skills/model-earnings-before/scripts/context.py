@@ -148,7 +148,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
             "blowups": em.blowups(b["margin_range"]["value"], b["ttm_ni"]["value"], b["ttm_fcf"]["value"],
                                   b["cash"]["value"], pe_pct, H)}
     root = _research(ticker, research)
-    new_docs = docs.since(root, last["date"]) if last else []
+    new_docs = docs.since(root, last["event_date"]) if last else []      # from the release day, not the reaction
     if not new_docs:
         warnings.append("No documents dated on or after the last print: rerun /collect-documents, or drop the "
                         "latest broker previews into Sellside Research, then rerun this step.")
@@ -156,7 +156,8 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
            "price": price, "quarter": ck["quarter"], "fy": ck["fy"], "report_date": report, "days_to_print": days,
            "checks": ck, "mod": mod_block(mm, g["MOD"], rows, ck, drv), "rates": rt, "links": lk, "guidance": guide,
            "yahoo": {"implied_move": implied, "surprises": y.get("surprises") or [], "straddle": y.get("straddle")},
-           "code": code, "house": H, "last_print": last["date"] if last else None, "new_docs": new_docs,
+           "code": code, "house": H, "last_print": last["date"] if last else None,
+           "last_release": last["event_date"] if last else None, "new_docs": new_docs,
            "frozen": frozen(mm, g["MOD"], ck["quarter"], ck["fy"]), "missing": missing, "warnings": warnings}
     json.dump(ctx, open(os.path.join(work, "context.json"), "w"), indent=1, default=str)
     open(os.path.join(work, "context.md"), "w").write(_md(ctx))
@@ -170,7 +171,7 @@ def _md(c):
          f"Quarter being reported: {c['quarter']} (fiscal year {c['fy']})",
          f"Report date: {c['report_date']['value']} ({c['report_date']['source']}); days to print: {c['days_to_print']}",
          f"Price: {c['price']['value']} ({c['price']['source']})",
-         f"Last print (reaction day): {c['last_print']}",
+         f"Last print (reaction day): {c['last_print']}; released {c['last_release']}",
          f"Missing optional tabs: {', '.join(c['missing']) or 'none'}", "", "## Warnings"]
     L += [f"- {w}" for w in c["warnings"]] or ["- none"]
     L += ["", "## Model checks (value ; formula)"]

@@ -29,8 +29,11 @@ def test_quarter_date_and_code_answers(work):
     assert c["price"]["value"] == 51.0
     assert c["code"]["blowups"] == {"margins": False, "peak_pe": True, "cash": False}
     assert c["code"]["setup"]["value_perf"] == em.setup_code(0.85, c["rates"]["rel"]["value"])
-    assert c["last_print"] == "2026-11-02"
-    assert [d["date"] for d in c["new_docs"]] == ["2026-11-02", "2026-11-10", "2026-11-12"]
+    assert c["last_print"] == "2026-11-02"                    # the reaction day: where the price moved
+    assert c["last_release"] == "2026-10-30"                  # released after the close the trading day before
+    # the reading list starts on the release day, so the print's own release (dated the day before the reaction)
+    # is on it
+    assert [d["date"] for d in c["new_docs"]] == ["2026-10-30", "2026-11-02", "2026-11-10", "2026-11-12"]
     assert [m["name"] for m in c["checks"]["metrics"]][-1] == "Units"
     assert c["mod"]["periods"] == {"q": "Q4 26E", "q_ly": "Q4 25", "fy": "2026E", "fy_ly": "2025", "fy1": "2027E"}
     assert c["mod"]["vals"]["3"]["q"] == pytest.approx(mf.series()["Q4 26E"]["rev"])
