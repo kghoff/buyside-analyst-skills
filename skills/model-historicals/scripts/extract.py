@@ -126,6 +126,7 @@ def map_is(rows, ov, tol=TOL):
     rev_parts, cost_parts, opex, nonop, post, nonop_raw = [], [], [], [], [], []
     for lab, vals in rows:
         l = norm(lab)
+        if not l: continue                             # an unlabeled subtotal
         if not vals:                                   # a heading: 'Cost of sales:' / 'Operating expenses:'
             if re.search(COST_RE, l): sub = "COST"
             elif re.search(r"revenue|sales", l) and state == "REV": sub = "REV"
@@ -149,11 +150,11 @@ def map_is(rows, ov, tol=TOL):
             continue
         if l.startswith("gross profit") or l.startswith("gross margin"):
             chk["GP"] = x; state = "OPEX"; continue
-        if l.startswith("total operating expenses") or l.startswith("total costs and expenses") or l.startswith("total operating costs"):
+        if re.match(r"total operating (costs?|expenses)|total costs? and expenses|total expenses", l):      # ABT: 'Total Operating Cost and Expenses'
             chk["TOPEX"] = x; state = "OPEX"; continue
-        if "before income taxes" in l or "before provision for income taxes" in l or "before taxes" in l or "pretax" in l or "pre-tax" in l:
+        if "before income taxes" in l or "before provision for income taxes" in l or "before taxes" in l or "before tax" in l or "pretax" in l or "pre-tax" in l:
             chk["PRETAX"] = x; state = "TAX"; continue
-        if re.match(r"(operating (income|loss|profit))|(income \(loss\) from operations)|(loss from operations)|(income from operations)|((loss|income) from operations)", l):
+        if re.match(r"(operating (income|loss|profit|earnings))|(income \(loss\) from operations)|(loss from operations)|(income from operations)|((loss|income) from operations)", l):
             chk["OI"] = x; state = "NONOP"; continue
         if state in ("REV", "COST", "OPEX"):
             if sub == "COST" and not re.search(COST_RE, l) and not opex_role(l) or re.search(COST_RE, l):
@@ -215,7 +216,10 @@ def map_is(rows, ov, tol=TOL):
                 state = "DONE"; continue
             if state == "POST":
                 if re.search(r"continuing operations", l) and "discontinued" not in l: chk["CONT"] = x; continue
-                if "discontinued" in l: post.append(["DISCOPS", lab, x, "primary"]); continue
+                if "discontinued" in l:
+                    parts = [p[2] for p in post if p[0] == "DISCOPS"]
+                    if len(parts) >= 2 and abs(sum(parts) - x) <= tol: continue      # the parts' own subtotal (ABT 2016-19)
+                    post.append(["DISCOPS", lab, x, "primary"]); continue
                 if re.search(NONOP_RULES[3][0], l): post.append(["EQAFF_AT", lab, -x if expense_first(l) else x, "primary"]); continue
                 post.append(["DISCOPS" if "discontinued" in l else "EQAFF_AT", lab, x, "fallback"])
     # revenue / cost: prefer the reported total; if there is none, sum the parts
@@ -270,24 +274,32 @@ POST_ROLES = ["EQAFF_AT", "DISCOPS"]
 
 # ------------------------------------------------------------------ balance sheet
 def map_bs(rows, ov):
-    out, chk, sect = {}, {}, "CA"
+    out, chk, sect, sub = {}, {}, "CA", None
     add = lambda role, lab, v, tag="primary": out.setdefault(role, []).append([lab, v, tag])
-    for lab, vals in rows:
+    for n, (lab, vals) in enumerate(rows):
         l = norm(lab); x = vals[0] if vals else None
+        if not l:                                      # unlabeled: total assets when liabilities follow (ABT), else a subtotal
+            nxt = [norm(a) for a, _ in rows[n + 1:] if norm(a)][:3]       # a repeated 'December 31' header may sit between
+            if x is not None and "TA" not in chk and any(t.startswith("liabilities") for t in nxt): chk["TA"] = x; sect = "CL"
+            continue
+        if x is None: sub = l                          # a heading such as 'Inventories:' or 'Property and equipment, at cost:'
+        elif l.startswith("total") or l.startswith("net "): sub = None   # the heading's block ends at its total / net line
         if l.startswith("total current assets"): chk["TCA"] = x; sect = "NCA"; continue
         if l.startswith("total assets"): chk["TA"] = x; sect = "CL"; continue
         if l.startswith("total current liabilities"): chk["TCL"] = x; sect = "NCL"; continue
         if l.startswith("total liabilities and") or l.startswith("total liabilities, ") or l.startswith("total liabilities & "): chk["TLE"] = x; continue
         if l.startswith("total liabilities"): chk["TL"] = x; sect = "MEZZ"; continue
-        if re.match(r"total (stockholders|shareholders)'? ?(equity|deficit|investment)|total .* (stockholders|shareholders)'? ?(equity|deficit)", l):
+        if re.match(r"total (stockholders|shareholders)'? ?(equity|deficit|investment)|total .* (stockholders|shareholders)'? ?(equity|deficit|investment)", l):
             chk.setdefault("EQ", x); sect = "POSTEQ"; continue
         if l.startswith("total equity") or l.startswith("total deficit"): chk["EQ_TOTAL"] = x; continue
         if l.startswith("total") and x is not None and sect in ("CA", "NCA", "CL", "NCL"): continue   # a sub-total (e.g. "Total debt")
         if x is None:
-            if re.search(r"(stockholders|shareholders)'? ?(equity|deficit)", l) and sect in ("NCL", "MEZZ"): sect = "EQ"
+            if re.search(r"(stockholders|shareholders)'? ?(equity|deficit|investment)", l) and sect in ("NCL", "MEZZ"): sect = "EQ"
             continue
         r = apply_overrides("BS", lab, ov)
         if r: add(r, lab, x, "override"); continue
+        if sub and sub.startswith("inventor") and sect == "CA": add("INV", lab, x); continue          # finished goods, materials...
+        if sub and "property" in sub and sect == "NCA" and not l.startswith("less"): continue    # gross parts of net PP&E
         if sect == "CA":
             if l.startswith("cash and cash equivalents") or l.startswith("cash, cash equivalents") or l in ("cash", "cash and equivalents"): add("CASH", lab, x)
             elif re.match(r"short-term (marketable|investments)|marketable securities|^investments$|^short-term investments|^investments,? current", l): add("STSEC", lab, x)
@@ -358,6 +370,7 @@ def map_cf(rows, ov):
     add = lambda role, lab, v, tag="primary": out.setdefault(role, []).append([lab, v, tag])
     for lab, vals in rows:
         l = norm(lab); x = vals[0] if vals else None
+        if not l: continue                             # an unlabeled subtotal
         if l.startswith("changes in operating assets") or l.startswith("changes in assets and liabilities") or l.startswith("change in operating assets") \
                 or l.startswith("changes in operating capital") or l.startswith("changes in working capital"):
             sect = "OPWC"; continue
@@ -378,6 +391,8 @@ def map_cf(rows, ov):
             continue
         r = apply_overrides("CF", lab, ov)
         if r: add(r, lab, x, "override"); continue
+        if sect == "OPNC" and re.match(r"(trade |accounts )?receivables?$|inventor(y|ies)$|prepaid|(trade )?accounts payable", l):
+            sect = "OPWC"                              # working-capital lines with no heading of their own (ABT)
         if sect == "OPNC":
             if "NI_CF" not in out and re.fullmatch(NI_RE + r"( including noncontrolling interests?)?", l): add("NI_CF", lab, x)
             elif "debt issuance" in l or "debt discount" in l or "non-cash interest" in l or "accretion of debt" in l: add("NCI", lab, x)
@@ -397,7 +412,7 @@ def map_cf(rows, ov):
             elif l.startswith("inventor") or "merchandise inventor" in l: add("W_INV", lab, x)
             elif "right-of-use" in l or "lease liabilit" in l or "operating lease" in l: add("W_ROU", lab, x)
             elif l.startswith("prepaid"): add("W_PRE", lab, x)
-            elif l.startswith("accounts payable") or l.startswith("trade payable"): add("W_AP", lab, x)
+            elif l.startswith("accounts payable") or l.startswith("trade payable") or l.startswith("trade accounts payable"): add("W_AP", lab, x)
             elif l.startswith("accrued payroll") or "compensation" in l or "employee" in l: add("W_PAY", lab, x)
             elif re.search(r"income tax|taxes payable", l): add("W_TAX", lab, x)
             elif re.search(r"deferred revenue|contract liabilit|unearned revenue|deferred rent|^other liabilities", l): add("W_OTH", lab, x)
@@ -408,7 +423,7 @@ def map_cf(rows, ov):
         elif sect == "INV":
             if l.startswith("purchase") and ("securities" in l or "investments" in l) and "equity" not in l: add("PURSEC", lab, x)
             elif re.search(r"capitalized software|internal-use software|software development costs|capitalized internal", l): add("CAPSW", lab, x)
-            elif l.startswith("proceeds") and re.search(r"sale of (property|business|assets|equipment)|divest|disposal", l) or "divestiture" in l: add("DIVEST", lab, x)
+            elif l.startswith("proceeds") and re.search(r"sale of (property|business|assets|equipment)|divest|disposal|business disposition", l) or "divestiture" in l: add("DIVEST", lab, x)
             elif (l.startswith("proceeds") or l.startswith("sales and maturities") or l.startswith("maturities") or l.startswith("sales of")) and ("securities" in l or "investments" in l): add("SALESEC", lab, x)
             elif ("property" in l and "equipment" in l) or "capital expenditure" in l or l.startswith("purchases of property") or l.startswith("additions to property"): add("CAPEX", lab, x)
             elif l.startswith("acquisition") or "business combination" in l or "net of cash acquired" in l or "acquisitions" in l: add("ACQ", lab, x)
@@ -419,7 +434,7 @@ def map_cf(rows, ov):
             elif "net share settlement" in l or "withholding" in l and "tax" in l: add("STOCK", lab, x, "fold")
             elif "finance lease" in l: add("DEBT", lab, x, "fold")
             elif any(k in l for k in ("debt", "borrowing", "convertible", "note hedge", "warrant", "capped call", "credit facility", "senior notes", "commercial paper", "current debt obligations", "notes payable", " notes")): add("DEBT", lab, x)
-            elif re.search(r"repurchase|treasury|buyback|buy-back", l): add("BUYBACK", lab, x)
+            elif re.search(r"repurchase|treasury|buyback|buy-back|^purchases? of (common|ordinary) (shares|stock)", l): add("BUYBACK", lab, x)
             elif re.search(r"common stock|ordinary shares|issuance of (common|ordinary|shares)|stock option|employee stock|stock plans|exercise", l): add("STOCK", lab, x)
             elif "contingent consideration" in l or "noncontrolling" in l or "minority" in l: add("OTHFIN", lab, x, "fold")
             elif "other" in l: add("OTHFIN", lab, x)
@@ -504,6 +519,39 @@ FINANCIAL = [   # (kind, statement, regex) - any hit in the latest 10-K: this te
 ]
 
 
+ALLOC_RE = re.compile(r"net (earnings|income) allocated to common (shares|stock)[^$]{0,200}?\$\s?([\d.,]+) (billion|million)", re.I)
+
+
+def allocated_to_common(text):
+    """two-class EPS: the filing's own 'net earnings allocated to common shares' in $M, only when printed to the million
+    ($13.351 billion, $468 million); a figure like '$1.3 billion' is too coarse to fix EPS to the cent -> None"""
+    m = ALLOC_RE.search(re.sub(r"\s+", " ", text))
+    if not m: return None
+    num, unit = m.group(3).replace(",", ""), m.group(4).lower()
+    if unit == "million": return float(num)
+    return round(float(num) * 1000, 3) if re.fullmatch(r"\d+\.\d{3}", num) else None
+
+
+def two_class(periods):
+    """add the earnings allocated to participating securities (= allocated to common - net earnings, both printed) for
+    every year whose 10-K and 10-Qs all print the allocation to the million. A year is all or nothing because the model's
+    Q4 is FY - Q1 - Q2 - Q3. -> {yy: why skipped} for years with some but not all periods printed"""
+    skipped = {}
+    for yy in sorted({k[3:] for k in periods}):
+        keys = [k for k in periods if k[3:] == yy]
+        got = {k: periods[k]["IS_chk"].get("ALLOC_COMMON") for k in keys}
+        if None in got.values() or f"FY {yy}" not in keys:
+            skipped[yy] = "not printed to the million in " + ", ".join(sorted(k for k, v in got.items() if v is None) or ["(no 10-K yet)"])
+            continue
+        for k in keys:
+            periods[k]["IS"]["PARTSEC"] = [["Net earnings allocated to common shares (EPS note)", got[k], "two-class"],
+                                           ["Less: net earnings", -periods[k]["IS_chk"]["NI"], "two-class"]]
+    if all(v.startswith("not printed to the million in") and len(v.split(", ")) == len([k for k in periods if k[3:] == y])
+           for y, v in skipped.items()) and not any(p["IS"].get("PARTSEC") for p in periods.values()):
+        return {}                                      # the company never prints it: not a two-class reporter
+    return skipped
+
+
 def financial_kind(t):
     hits = {}
     for kind, st, pat in FINANCIAL:
@@ -531,7 +579,8 @@ def main():
             sys.exit(3)
     for k in sorted(x for x in files if x[0] in ("10-K", "10-Q")):
         path = files[k][0]
-        t = find_tables(open(path, encoding="utf-8", errors="ignore").read())
+        text = open(path, encoding="utf-8", errors="ignore").read()
+        t = find_tables(text)
         key = keyof(k)
         raw[key] = {"file": os.path.basename(path), "tables": t}
         units = t.pop("_units", {})
@@ -539,6 +588,7 @@ def main():
             fails += 1; report.append(f"| {key} | {os.path.basename(path)} | **could not find statements: missing {sorted({'IS','BS','CF'} - set(t))}** |"); continue
         unit = max(unit_of(t["IS"]), unit_of(t["BS"]), unit_of(t["CF"])); rtol = 3 * unit + TOL
         I, Ic = map_is(t["IS"], ov, rtol); B, Bc = map_bs(t["BS"], ov); C, Cc = map_cf(t["CF"], ov)
+        Ic["ALLOC_COMMON"] = allocated_to_common(text)
         Cc["_RTOL"] = rtol
         plug_rounding(I, IS_SUM, "OTHOPEX", Ic.get("OI"), unit, "operating income")
         if Ic.get("OI") is not None:
@@ -574,6 +624,7 @@ def main():
         d = round(ytd - sum(qs), 6)
         if TOL < abs(d) <= p["CF_chk"].get("_RTOL", TOL):
             p["CF"].setdefault("OTHNC", []).append(["Rounding: quarterly net income vs year-to-date cash-flow net income", d, "rounding"])
+    two_class_skipped = two_class(periods)
     # Q4 share counts from Q4 press releases (3-month column); fall back to next year's release prior-year column
     q4 = {}
     for k, paths in files.items():
@@ -620,6 +671,11 @@ def main():
         f.write("\n".join(report) + "\n\n## Units\n\n" + ("\n".join("- " + u for u in report_units) or "All statements reported in $ millions.") + "\n\n## Q4 share counts (press releases)\n\n")
         for k, v in q4out.items():
             f.write(f"- {k}: " + ("**MISSING - no Q4 release with share counts**" if v.get("missing") else f"basic {v['SB']}, diluted {v['SD']} from {v['source']}") + "\n")
+        filled = sorted({k[3:] for k, p in periods.items() if p["IS"].get("PARTSEC")})
+        if filled or two_class_skipped:
+            f.write("\n## Two-class EPS (earnings allocated to participating securities)\n\n"
+                    f"- filled: {', '.join('20' + y for y in filled) or 'none'}\n")
+            for yy, why in two_class_skipped.items(): f.write(f"- **20{yy} left at zero** (EPS = net income / shares): {why}\n")
         f.write("\n## Non-obvious mappings (each one is a judgment call to report)\n\n| Stmt | Filing line | Model role | Why | Periods |\n|---|---|---|---|---|\n")
         for (st, lab, role, tag), ks in sorted(calls.items()):
             f.write(f"| {st} | {lab} | {role} | {tag} | {', '.join(ks[:6])}{' ...' if len(ks) > 6 else ''} ({len(ks)}) |\n")

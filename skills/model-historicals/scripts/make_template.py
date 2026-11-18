@@ -3,7 +3,10 @@ companies report (Regulation S-X Art. 5 captions, the Morningstar 43-company lin
 models). build.py deletes the optional rows a company never reports, so every model shows only its own lines.
 
 usage: python3 make_template.py <old core_template.xlsx> <new core_template.xlsx>
-Rows are cloned from the old template's styles; every subtotal formula is rewritten from SUBTOTALS below."""
+       python3 make_template.py --from-superset <current core_template.xlsx> <new> NEWROLE=SIBLING ...
+Rows are cloned from the old template's styles; every subtotal formula is rewritten from SUBTOTALS below.
+--from-superset rebuilds from the current superset template when the user's original isn't at hand: each row takes the
+style of its own row there, and each newly added LAYOUT role takes the style of the named sibling role."""
 import sys
 from copy import copy
 
@@ -32,7 +35,9 @@ LAYOUT = [
     ("EQAFF_AT", "(+/-) Equity Method Income, after tax", "$ M", 24),
     ("DISCOPS", "(+/-) Discontinued Operations, net of tax", "$ M", 24),
     ("NI", "Net Income", "$ M", 26), ("NCI_IS", "(-) Net Income to Noncontrolling Interests", "$ M", 24),
-    ("PREFDIV", "(-) Preferred Dividends", "$ M", 24), ("NI_COMMON", "Net Income to Common", "$ M", 26),
+    ("PREFDIV", "(-) Preferred Dividends", "$ M", 24),
+    ("PARTSEC", "(-) Earnings Allocated to Participating Securities", "$ M", 24),   # two-class EPS (ABT, 2026-11-17)
+    ("NI_COMMON", "Net Income to Common", "$ M", 26),
     ("SB", "Shares, basic", "M", 27), ("SD", "Shares, diluted", "M", 28),
     ("EPSB", "EPS, basic", "$", 29), ("EPSD", "EPS, diluted", "$", 30), ("old", 31),
     ("old", 32), ("old", 33),
@@ -81,7 +86,7 @@ WC = ["W_AR", "W_INV", "W_PRE", "W_ROU", "W_AP", "W_PAY", "W_OTH", "W_TAX", "W_O
 SUBTOTALS = {           # role: [(sign, role)]; build.py drops the terms of rows a company doesn't report
     "GP": "REV COGS", "TOPEX": "RD SGA SM GA AMORT RESTR IMPAIR ACQEXP LITIG GAINOP OTHOPEX", "OI": "GP TOPEX ISDA",
     "EBIT": "OI OTHINC GAININV DEBTEXT EQAFF", "EBITDA": "EBIT -ISDA", "PRETAX": "EBIT INTINC INTEXP",
-    "NI": "PRETAX TAX EQAFF_AT DISCOPS", "NI_COMMON": "NI NCI_IS PREFDIV",
+    "NI": "PRETAX TAX EQAFF_AT DISCOPS", "NI_COMMON": "NI NCI_IS PREFDIV PARTSEC",
     "TCA": "CASH STSEC AR INV PRE OCA", "TNCA": "PPE ROU GWI LTINV DTA OTHA", "TA": "TNCA TCA",
     "TCL": "AP PAY ACCR TAXPAY CURDEBT OPLLC CLOTH OCL", "TLTL": "LTDEBT OPLLLT DEFREVLT DTL PENSION OTHLTL",
     "TL": "TLTL TCL", "TLE": "TL MEZZ EQ NCTL", "BALCHK": "TA -TLE", "NI_LINK": "NI", "WCNET": " ".join(WC),
@@ -92,7 +97,16 @@ SUBTOTALS = {           # role: [(sign, role)]; build.py drops the terms of rows
 RATIOS = {"TAXRATE": "=-{TAX}/{PRETAX}", "EPSB": "={NI_COMMON}/{SB}", "EPSD": "={NI_COMMON}/{SD}"}
 
 
-def main(src, out):
+def superset_sources(new):
+    """style source rows for --from-superset: a row's position in the current template = its position in LAYOUT
+    without the new roles"""
+    old = [spec for spec in LAYOUT if spec[0] not in new]
+    pos = {id(spec): i for i, spec in enumerate(old, 1)}
+    at = {spec[0]: i for i, spec in enumerate(old, 1) if spec[0] != "old"}
+    return [at[new[spec[0]]] if spec[0] in new else pos[id(spec)] for spec in LAYOUT]
+
+
+def main(src, out, sources=None):
     wb = openpyxl.load_workbook(src); ws = wb.worksheets[0]
     maxc = ws.max_column
     snap = {r: [(copy(ws.cell(r, c)._style), ws.cell(r, c).value) for c in range(1, maxc + 1)] for r in range(1, ws.max_row + 1)}
@@ -107,7 +121,7 @@ def main(src, out):
         if spec[0] == "old": continue
         rowof[spec[0]] = i
     for i, spec in enumerate(LAYOUT, 1):
-        src_row = spec[1] if spec[0] == "old" else spec[3]
+        src_row = sources[i - 1] if sources else (spec[1] if spec[0] == "old" else spec[3])
         for c in range(1, maxc + 1):
             ws.cell(i, c)._style = copy(snap[src_row][c - 1][0])
         if src_row in dims: ws.row_dimensions[i].height = dims[src_row].height
@@ -126,11 +140,14 @@ def main(src, out):
                 ws.cell(i, c).value = RATIOS[role].format(**{k: f"{col}{v}" for k, v in rowof.items()})
             elif role != "BEG":
                 ws.cell(i, c).value = 0 if c in reported else None
-    if ws.freeze_panes:                                  # keep the user's pane on the same line (CF investing) as before
+    if ws.freeze_panes and not sources:                  # keep the user's pane on the same line (CF investing) as before
         ws.freeze_panes = f"{ws.freeze_panes.rstrip('0123456789')}{rowof['PURSEC']}"
     wb.save(out)
     print(f"{out}: {len(LAYOUT)} rows, {len(rowof)} roles")
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    if sys.argv[1] == "--from-superset":
+        main(sys.argv[2], sys.argv[3], superset_sources(dict(a.split("=") for a in sys.argv[4:])))
+    else:
+        main(*sys.argv[1:3])

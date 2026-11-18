@@ -36,6 +36,14 @@ The user's original is still at `the user's Models/mod_template_core_financials.
    - "LT Senior Convertible Debt:" → "Long-Term Debt:"
    - "Stock Issuance / Repurchase" → "Stock Issuance / Employee Plans", plus "(-) Share Repurchases"
 
+7. **Two-class EPS row (2026-11-17, ABT):** "(-) Earnings Allocated to Participating Securities" between Preferred
+   Dividends and Net Income to Common (in its sum). Each cell is `=allocated to common - net earnings`, both printed in
+   the EPS note, so EPS ties to the cent. extract.py fills a year only when the 10-K and every 10-Q print the allocation
+   to the million (Q4 is FY - Q1 - Q2 - Q3); other years stay at zero and are listed in extract_report.md. The user's
+   original template wasn't on this machine, so it was added with `make_template.py --from-superset <current> <new>
+   PARTSEC=PREFDIV` (styles from the current superset; cell-for-cell identical apart from the new row and the NI to
+   Common formula).
+
 ## Baselines (rerun after changing the scripts; numbers as of 2026-11-06)
 
 | Company | extract | verify | What it exercises |
@@ -50,7 +58,13 @@ DXCM differences vs the pre-expansion model, all intended:
 - 2025 "Other current liabilities" sits in its own row
 - the all-zero IS D&A row is gone
 
-`tests/` (11 tests) pins each new mapping rule to the filing pattern it handles.
+| ABT (2026-11-17, its `_model_work/decisions.json`) | 43 filings tie, 28 mapped-line calls | 1,017 checks, 1 failed (FY 25 basic EPS: two-class allocation printed only to $0.1B) | "Earnings" wording, dollars in millions with shares in thousands, balance sheet split over two pages, unlabeled total rows, zero-width year header rows, working capital with no heading, discontinued-operations subtotal, two-class EPS |
+
+Rerun 2026-11-17 (after the ABT changes): MDT 1,095 checks, 0 failed; DXCM 1,105 checks, 25 failed. Both counts are the
+same on the code before the ABT changes, and DXCM's failures are identical (pre-split EPS 2016-2019 off by about 4x, so
+the split adjustment no longer lines up with the current DXCM folder). Not caused by the ABT work; still to fix.
+
+`tests/` pins each mapping rule to the filing pattern it handles.
 
 ## Known limitations / next steps
 

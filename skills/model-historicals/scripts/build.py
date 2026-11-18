@@ -36,6 +36,7 @@ ROLE_PATTERNS = [
     ("IS", "INTEXP", r"interest expense"), ("IS", "PRETAX", r"pre-tax"), ("IS", "TAXRATE", r"tax rate"),
     ("IS", "TAX", r"income taxes"), ("IS", "DISCOPS", r"discontinued operations"),
     ("IS", "NCI_IS", r"noncontrolling"), ("IS", "PREFDIV", r"preferred dividends"),
+    ("IS", "PARTSEC", r"participating securities"),
     ("IS", "NI_COMMON", r"^net income to common"), ("IS", "NI", r"^net income"), ("IS", "SB", r"shares, basic"),
     ("IS", "SD", r"shares, diluted"), ("IS", "EPSB", r"eps, basic"), ("IS", "EPSD", r"eps, diluted"),
     ("BS", "CASH", r"^cash"), ("BS", "STSEC", r"short-term"), ("BS", "AR", r"receivable"), ("BS", "INV", r"^inventory"),
@@ -69,7 +70,8 @@ ROLE_PATTERNS = [
     ("CF", "RC", r"^restricted cash"), ("CF", "TOTCASH", r"total cash"), ("CF", "CASHCHK", r"cash check"),
 ]
 IS_IN = ["REV", "COGS", "RD", "SGA", "SM", "GA", "AMORT", "RESTR", "IMPAIR", "ACQEXP", "LITIG", "GAINOP", "OTHOPEX",
-         "ISDA", "OTHINC", "GAININV", "DEBTEXT", "EQAFF", "INTINC", "INTEXP", "TAX", "EQAFF_AT", "DISCOPS", "NCI_IS", "PREFDIV"]
+         "ISDA", "OTHINC", "GAININV", "DEBTEXT", "EQAFF", "INTINC", "INTEXP", "TAX", "EQAFF_AT", "DISCOPS", "NCI_IS", "PREFDIV",
+         "PARTSEC"]
 BS_IN = ["CASH", "STSEC", "AR", "INV", "PRE", "OCA", "PPE", "ROU", "GWI", "LTINV", "DTA", "OTHA", "AP", "PAY", "ACCR", "TAXPAY",
          "CURDEBT", "OPLLC", "CLOTH", "OCL", "LTDEBT", "OPLLLT", "DEFREVLT", "DTL", "PENSION", "OTHLTL", "MEZZ", "EQ", "NCTL"]
 CF_IN = ["DA", "SBC", "NCI", "DT", "EQI", "IMPAIR_CF", "GAIN_CF", "OTHNC", "W_AR", "W_INV", "W_PRE", "W_ROU", "W_AP", "W_PAY",
@@ -157,7 +159,7 @@ def used_roles(per, years, splits_fx=True):
             for role, items in p[st].items():
                 if any(abs(v) > 0.0005 for _, v, _ in items): used.add(role)
         if abs(p["CF_chk"].get("FX") or 0) > 0.0005: used.add("FX")
-    if used & {"NCI_IS", "PREFDIV"}: used.add("NI_COMMON")
+    if used & {"NCI_IS", "PREFDIV", "PARTSEC"}: used.add("NI_COMMON")
     return used
 
 
