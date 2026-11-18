@@ -15,7 +15,6 @@ import os
 import re
 import statistics
 import sys
-from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with python3 -I
 import openpyxl  # noqa: E402
@@ -184,19 +183,26 @@ def consensus_links(g):
     cs, cp, ce = heads.get("Snapshot"), heads.get("Period"), heads.get("EPS mean")
     if not (cs and cp and ce):
         return {}
+    snap = lambda r: str(g.get((r, cs)))[:10]   # noqa: E731   (ISO dates sort as text)
     rows, r = [], top + 2
     while g.get((r, cs)) is not None:
-        rows.append((r, str(g.get((r, cp))), g.get((r, ce))))
+        rows.append((r, str(g.get((r, cp))).strip(), g.get((r, ce))))
         r += 1
-    cnt = Counter(p for _, p, _ in rows)
-    if not cnt:
+    if not rows:
         return {}
-    period = [p for _, p, _ in rows if cnt[p] == max(cnt.values())][-1]
-    mine = [(r, v) for r, p, v in rows if p == period and _num(v)]
-    if len(mine) < 2:
+    # The period the Street is estimating now: among the latest snapshot's periods, the largest fiscal year (next
+    # year), else the next one down (this year); labels that are not "FY 2027"-style: the latest snapshot's last one.
+    # A reported year is never revised again, so the period with the most snapshots can be a dead one.
+    latest = max(snap(r) for r, _, _ in rows)
+    now = [p for r, p, _ in rows if snap(r) == latest]
+    fy = {p: int(m[1]) for p in now if (m := re.fullmatch(r"(?i)FY\s*(\d{4})", p))}
+    for period in (sorted(fy, key=fy.get, reverse=True) if fy else now[-1:]):
+        mine = sorted((snap(r), r, v) for r, p, v in rows if p == period and _num(v))
+        if len(mine) >= 2:
+            break
+    else:
         return {}
-    (r0, v0), (r1, v1) = mine[0], mine[-1]
-    snap = lambda r: str(g.get((r, cs)))[:10]   # noqa: E731
+    (_, r0, v0), (_, r1, v1) = mine[0], mine[-1]
     return {"rev_first": {"ref": f"Consensus!${L(ce)}${r0}", "value": v0, "snapshot": snap(r0), "period": period},
             "rev_last": {"ref": f"Consensus!${L(ce)}${r1}", "value": v1, "snapshot": snap(r1), "period": period}}
 

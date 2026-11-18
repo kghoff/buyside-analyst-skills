@@ -57,7 +57,7 @@ def test_links_found_by_label(ctx):
     assert L["pe_pct"]["ref"] == "Multiples!$J$7" and L["peer_pct"]["value"] == 0.75
     assert L["dcf_base"] == {"ref": "Valuation!$C$107", "value": 42.0}
     assert L["valuation_price"]["value"] == 50.0
-    # the period with the most snapshots, ties to the last one seen: FY 2027, 2.30 -> 2.20
+    # the latest snapshot's next fiscal year (the larger FY label), oldest vs latest snapshot: FY 2027, 2.30 -> 2.20
     assert L["rev_first"]["value"] == 2.30 and L["rev_last"]["value"] == 2.20
     assert ctx["metrics"]["revision"]["value"] == A(2.20 / 2.30 - 1)
     assert ctx["metrics"]["earn_move"]["value"] == A(0.065)        # median |idio| of the 4 earnings days
@@ -112,3 +112,36 @@ def test_link_to_a_blank_cell_is_not_recorded(fixture_model, tmp_path):
     c = context.run(m, str(tmp_path), "TEST", values=m)
     assert "pe_pct" not in c["links"] and "pe_today" in c["links"]
     assert c["code_ticks"]["vs_history"] == "unknown"
+
+
+def _consensus(rows):
+    """A Consensus tab grid (row, col) -> value with the "5. CONSENSUS SNAPSHOTS" block holding rows."""
+    g = {(10, 1): "5. CONSENSUS SNAPSHOTS", (11, 1): "Snapshot", (11, 2): "Period", (11, 3): "EPS mean"}
+    for k, (snap, per, eps) in enumerate(rows, start=12):
+        g[(k, 1)], g[(k, 2)], g[(k, 3)] = snap, per, eps
+    return g
+
+
+def test_revisions_follow_the_live_period_not_the_most_snapshotted():
+    """Once FY 2026 is reported it stops being revised: its many old snapshots must not win over the period the Street
+    is estimating now. The latest snapshot's next fiscal year is used, oldest snapshot vs latest."""
+    import context
+    rows = [("2026-02-01", "FY 2026", 2.10), ("2026-05-01", "FY 2026", 2.05), ("2026-08-01", "FY 2026", 2.00),
+            ("2026-08-01", "FY 2027", 2.40), ("2027-02-01", "FY 2027", 2.25), ("2027-02-01", "FY 2028", 2.60)]
+    L = context.consensus_links(_consensus(rows))
+    assert L["rev_first"]["period"] == "FY 2027"                   # FY 2028 has one snapshot; FY 2027 is next in line
+    assert (L["rev_first"]["value"], L["rev_last"]["value"]) == (2.40, 2.25)
+    assert (L["rev_first"]["snapshot"], L["rev_last"]["snapshot"]) == ("2026-08-01", "2027-02-01")
+    rows.append(("2027-05-01", "FY 2028", 2.50))                     # now FY 2028 has two: the next year wins
+    rows.append(("2027-05-01", "FY 2027", 2.20))
+    L = context.consensus_links(_consensus(rows))
+    assert L["rev_first"]["period"] == "FY 2028" and (L["rev_first"]["value"], L["rev_last"]["value"]) == (2.60, 2.50)
+
+
+def test_revisions_with_non_fy_labels_use_the_latest_snapshots_last_period():
+    import context
+    rows = [("2026-02-01", "Old", 9.5), ("2026-05-01", "Old", 9.2), ("2026-08-01", "Old", 9.0),
+            ("2026-08-01", "NTM", 3.00), ("2026-08-01", "Next quarter", 0.70),
+            ("2026-11-01", "Next quarter", 0.65), ("2026-11-01", "NTM", 2.90)]
+    L = context.consensus_links(_consensus(rows))
+    assert L["rev_first"]["period"] == "NTM" and (L["rev_first"]["value"], L["rev_last"]["value"]) == (3.00, 2.90)
