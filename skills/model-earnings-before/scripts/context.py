@@ -112,7 +112,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
     done = rates.release(g["Px Events"], ck["quarter"])
     if done and done[0].isoformat() <= today:
         warnings.append(f"MOD's first forecast quarter, {ck['quarter']}, was already reported on "
-                        f"{done[0].isoformat()}: enter its actuals (model-update) before previewing the next print")
+                        f"{done[0].isoformat()}: enter its actuals in MOD before previewing the next print")
     P = rates.px_data(g["Px Data"], ticker)
     pr = rates.prints(g["Px Events"], P, ticker)
     last = pr[0] if pr else None

@@ -56,7 +56,7 @@ def test_warns_when_the_first_forecast_quarter_was_already_reported(tmp_path):
     (w / "earnings.json").write_text(json.dumps(mf.EARN))
     c = context.run(p, str(w), "TEST", values=p, research=RESEARCH, forecast_plan=FPLAN, today=TODAY)
     assert ("MOD's first forecast quarter, Q4 26E, was already reported on 2026-11-16: enter its actuals "
-            "(model-update) before previewing the next print") in c["warnings"]
+            "in MOD before previewing the next print") in c["warnings"]
 
 
 def test_frozen_forecast_and_files(work):
