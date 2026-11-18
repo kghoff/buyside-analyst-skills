@@ -22,6 +22,17 @@ def words(s):
     return len(str(s or "").split())
 
 
+def _obj(parent, key, out, name=None):
+    """parent[key] when it is an object ({...}); otherwise report it and carry on with {} (never crash on a bad plan)."""
+    x = parent.get(key)
+    if x is None:
+        return {}
+    if not isinstance(x, dict):
+        out.append(f"{name or key}: must be an object {{...}}, got {type(x).__name__}")
+        return {}
+    return x
+
+
 def _anchored(name, x, out):
     """A judgment that takes a side rests on a line (with its quote or number) or a cell (with the value it shows)."""
     a = x.get("anchor")
@@ -35,7 +46,7 @@ def _anchored(name, x, out):
 
 
 def _setup(plan, ctx, out):
-    sides, setup = {}, plan.get("setup") or {}
+    sides, setup = {}, _obj(plan, "setup", out)
     for rid, label, _, _, code in em.SETUP:
         x = setup.get(rid)
         if code and x is None:
@@ -59,7 +70,7 @@ def _setup(plan, ctx, out):
 
 
 def _inputs(plan, out):
-    inp = plan.get("inputs") or {}
+    inp = _obj(plan, "inputs", out)
     vals = {}
     for k in em.AGENT_INPUTS:
         x = inp.get(k)
@@ -79,6 +90,9 @@ def _inputs(plan, out):
                 out.append(f"inputs.{k}: a judgment needs a reason of at least {OVERRIDE} words")
         else:
             _anchored(f"inputs.{k}", x, out)
+            if isinstance(x.get("anchor"), str) and LINE.match(x["anchor"]) and not em._n(x.get("anchor_value")):
+                out.append(f"inputs.{k}: needs the anchor_value (the number printed on that line; 35% -> 0.35); "
+                           "a quote alone cannot be checked")
             if words(x.get("reason")) < REASON:
                 out.append(f"inputs.{k}: the reason needs at least {REASON} words")
         vals[k] = v
@@ -89,19 +103,20 @@ def check(plan, ctx):
     out = []
     if plan.get("quarter") != ctx["quarter"]:
         out.append(f"quarter: the plan is for {plan.get('quarter')!r}; the quarter being reported is {ctx['quarter']}")
-    km = plan.get("key_metric") or {}
+    km = _obj(plan, "key_metric", out)
     if not str(km.get("value") or "").strip() or words(km.get("reason")) < REASON:
         out.append(f"key_metric: needs a value and a reason of at least {REASON} words")
     _anchored("key_metric", km, out)
     sides = _setup(plan, ctx, out)
+    risks = _obj(plan, "risks", out)
     for rid, label in em.RISKS:
-        x = (plan.get("risks") or {}).get(rid) or {}
+        x = risks.get(rid) if isinstance(risks.get(rid), dict) else {}
         if x.get("score") not in (1, 2, 3, 4, 5) or isinstance(x.get("score"), bool):
             out.append(f"risks.{rid}: score must be a whole number from 1 (lowest) to 5 ({label})")
         if words(x.get("reason")) < REASON:
             out.append(f"risks.{rid}: the reason needs at least {REASON} words")
     inp = _inputs(plan, out)
-    c = plan.get("call") or {}
+    c = _obj(plan, "call", out)
     if c.get("quarter") not in em.CALL_Q:
         out.append(f"call.quarter: must be one of {', '.join(em.CALL_Q)}")
     if c.get("guide") not in em.CALL_G:
@@ -110,25 +125,28 @@ def check(plan, ctx):
         out.append("call.expected_move: a number (0.05 = a 5% move either way)")
     if words(c.get("reason")) < REASON:
         out.append(f"call: the reason needs at least {REASON} words")
-    w = plan.get("whisper") or {}
+    w = _obj(plan, "whisper", out)
     if not str(w.get("text") or "").strip() or words(w.get("reason")) < REASON:
         out.append("whisper: say what you think the buy-side really expects (your estimate) and why")
     if not str(plan.get("net") or "").strip() or words(plan.get("net")) > 40:
         out.append("net: one line of at most 40 words")
-    pts = plan.get("points") or {}
+    pts = _obj(plan, "points", out)
     for sec in ("last_quarter", "since_last_print", "checkpoint"):
         lst = pts.get(sec)
         if not isinstance(lst, list):
             out.append(f"points.{sec}: must be a list (empty if there is nothing)")
             continue
         for i, x in enumerate(lst):
+            if not isinstance(x, dict):
+                out.append(f"points.{sec}[{i}]: must be an object with text, anchor and quote")
+                continue
             if not (str(x.get("text") or "").strip() and LINE.match(str(x.get("anchor") or "")) and x.get("quote")):
                 out.append(f"points.{sec}[{i}]: needs text, a file.md:line anchor and the quote")
     if ctx.get("new_docs") and not pts.get("since_last_print"):
         out.append("points.since_last_print: there are documents since the last print; say what they add")
     if not isinstance(plan.get("judgment_calls"), list) or not plan["judgment_calls"]:
         out.append("judgment_calls: list every call you made (at least one)")
-    st = plan.get("stance") or {}
+    st = _obj(plan, "stance", out)
     if st.get("value") not in em.STANCES:
         out.append(f"stance: must be one of {', '.join(em.STANCES)}")
     elif not out:

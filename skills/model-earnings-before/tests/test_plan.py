@@ -61,3 +61,29 @@ def test_code_row_override_needs_a_longer_reason(p, ctx):
     other = "long" if code != "long" else "short"
     p["setup"]["value_perf"] = {"side": other, "reason": "I disagree with the code here."}
     assert any("setup.value_perf: overriding code" in m for m in plan.check(p, ctx))
+
+
+def test_line_anchored_input_needs_the_number(p, ctx):
+    """anchors.py checks an input's number on its line; a quote alone can never pass there, so say so here."""
+    p["inputs"]["up_pe"] = {"value": 18.0, "anchor": "filings.md:12", "quote": "a 22x multiple",
+                            "reason": "Below the 22x five-year median: a beat restores some multiple but not all."}
+    assert any("inputs.up_pe: needs the anchor_value" in m for m in plan.check(p, ctx)), plan.check(p, ctx)
+
+
+@pytest.mark.parametrize("edit,needle", [
+    (lambda p: p["points"].update(last_quarter=["a bare string"]), "points.last_quarter[0]"),
+    (lambda p: p.update(setup=["long"]), "setup: must be"),
+    (lambda p: p["setup"].update(previews="long"), "setup.previews: missing"),
+    (lambda p: p.update(risks=[1, 2]), "risks: must be"),
+    (lambda p: p["risks"].update(liquidity=3), "risks.liquidity"),
+    (lambda p: p.update(inputs=[1]), "inputs: must be"),
+    (lambda p: p.update(points=["x"]), "points: must be"),
+    (lambda p: p.update(key_metric="revenue"), "key_metric"),
+    (lambda p: p.update(call="beat"), "call"),
+    (lambda p: p.update(stance="add"), "stance"),
+])
+def test_malformed_plan_is_a_problem_not_a_crash(p, ctx, edit, needle):
+    q = copy.deepcopy(p)
+    edit(q)
+    msgs = plan.check(q, ctx)
+    assert any(needle in m for m in msgs), msgs
