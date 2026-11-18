@@ -193,7 +193,11 @@ def test_pe_uses_the_traded_price_and_returns_use_total_return(ref_values, refer
     cfg = {"oi_role": "oi_ng", "ebitda_role": "ebitda_ng", "roic_role": "roic", "eps_role": "eps_ng",
            "ttm_key": "ttm_n", "fcf_role": "fcf", "bb_roles": ["buyback_net"]}
     run = engine.run(cfg, prices, mod, full, [])
-    d, t = run["dates"], len(run["dates"]) - 1
+    d = run["dates"]
+    pe = run["daily"]["pe"]
+    ok = [i for i in range(run["base"], len(d)) if engine.isnum(pe[i])]
+    t = ok[len(ok) // 2]                  # mid-series: the fake tr factor is below 1 here, so tr and close differ
+    assert tr.reindex(d).iloc[t] != pytest.approx(stock.reindex(d).iloc[t], rel=1e-3)
     assert run["px"][t] == pytest.approx(stock.reindex(d).iloc[t])                     # plain close kept for P/E
     e = run["daily"]["ttm_eps"][t]
     assert run["daily"]["pe"][t] == pytest.approx(stock.reindex(d).iloc[t] / e)

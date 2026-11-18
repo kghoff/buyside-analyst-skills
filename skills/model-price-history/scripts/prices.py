@@ -42,6 +42,8 @@ def check(ticker, path, dates=None):
     res["adj_problems"] = []
     if res["source"] == "yahoo":
         a, c = df["Adj Close"].astype(float), df["Close"].astype(float)
+        if a.isna().any():
+            res["adj_problems"].append(f"{ticker}: Adj Close missing on {int(a.isna().sum())} day(s)")
         if (a > c + 1e-9).any():
             res["adj_problems"].append(f"{ticker}: Adj Close above Close on {int((a > c + 1e-9).sum())} day(s)")
         if abs(a.iloc[-1] - c.iloc[-1]) > 1e-6 * max(1.0, c.iloc[-1]):

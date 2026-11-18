@@ -38,3 +38,9 @@ def test_adj_not_anchored_today_is_a_problem(tmp_path):
 def test_mixed_sources_are_named():
     assert prices.mixed({"stock": {"source": "yahoo"}, "spy": {"source": "stooq"}}) == ["spy"]
     assert prices.mixed({"stock": {"source": "yahoo"}, "spy": {"source": "yahoo"}}) == []
+
+
+def test_missing_adj_close_is_a_problem(tmp_path):
+    # NaN compares False, so a gap in Adj Close would pass the "above" check silently and break the return series.
+    r = prices.check("abt", _csv(tmp_path / "a.csv", adj=[9.8, None, 12.0]))
+    assert any("missing on 1 day" in p for p in r["adj_problems"])
