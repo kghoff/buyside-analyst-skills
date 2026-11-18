@@ -74,3 +74,45 @@ def test_force_overwrites_the_users_cell(tmp_path, work):
     pkg = Package(p)
     st = Styles(pkg.text("xl/styles.xml"))
     assert va.fill(pkg, st, ctx, info, force=True)["skipped"] == []
+
+
+def _shared_fixture(path):
+    """The user filled C22:C24 down in Excel: Excel stores one shared formula (master C22, children C23 and C24).
+    openpyxl never writes shared formulas, so patch the sheet XML of a built fixture."""
+    import re
+    import openpyxl
+    p = mf.build(path)
+    wb = openpyxl.load_workbook(p)
+    for r in (22, 23, 24):
+        wb["Consensus"][f"C{r}"] = f"=D{r}*2"
+    wb.save(p)
+    pkg = Package(p)
+    part = {s[0]: s for s in pkg.sheets()}["Consensus"][3]
+    xml = pkg.text(part)
+    xml = xml.replace("<f>D22*2</f>", '<f t="shared" ref="C22:C24" si="0">D22*2</f>')
+    for r in (23, 24):
+        xml = re.sub(rf"<f>D{r}\*2</f>", '<f t="shared" si="0"/>', xml)
+    assert xml.count('t="shared"') == 3
+    pkg.put(part, xml)
+    pkg.save(p)
+    return p, part
+
+
+def test_force_fill_unshares_the_users_filled_down_formula(tmp_path, work):
+    """Overwriting a shared formula's master leaves its children pointing at nothing: Excel then asks to repair the
+    file. Every group the fill touches is written out cell by cell first; the cells it does not write keep their
+    formula."""
+    import json
+    import re
+    ctx = json.load(open(os.path.join(work, "context.json")))
+    p, part = _shared_fixture(str(tmp_path / "s.xlsx"))
+    info = va.inspect(p)
+    pkg = Package(p)
+    st = Styles(pkg.text("xl/styles.xml"))
+    va.fill(pkg, st, ctx, info, force=True)
+    xml = pkg.text(part)
+    masters = set(re.findall(r'<f t="shared"[^>]*?ref="[^"]+"[^>]*?si="(\d+)"', xml))
+    children = set(re.findall(r'<f t="shared" si="(\d+)"\s*/>', xml))
+    assert children <= masters
+    c24 = re.search(r'<c r="C24"[^>]*>.*?</c>', xml, re.S).group(0)
+    assert "<f>D24*2</f>" in c24                                  # not written by the fill: same formula, now plain

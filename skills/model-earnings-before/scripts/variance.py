@@ -18,10 +18,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with python3 -I
 import openpyxl  # noqa: E402
+from openpyxl.formula.translate import Translator  # noqa: E402
 from openpyxl.utils import get_column_letter as L  # noqa: E402
 
 import earnmath as em  # noqa: E402
-from xlsx import colnum, esc  # noqa: E402
+from xlsx import colnum, esc, unesc  # noqa: E402
 
 TAB = "Consensus"
 BAND = "2. VARIANCE"
@@ -147,10 +148,45 @@ def _cell_xml(ref, kind, val, st):
     return f'<c r="{ref}" s="{st}"><v>{val!r}</v></c>'
 
 
+C_ELEM = re.compile(r'<c r="([A-Z]+\d+)"[^>]*?(?:/>|>.*?</c>)', re.S)
+F_SHARED = re.compile(r'<f t="shared"([^>]*?)(?:/>|>(.*?)</f>)', re.S)
+
+
+def unshare(xml, refs):
+    """(Copied and adapted from research-filings xledit.unshare, Nov 2026.) Write out, cell by cell, every shared
+    formula group whose master or children are among refs: overwriting a master would orphan its children (Excel's
+    repair prompt). Cells outside refs keep the same formula, now plain."""
+    masters, members = {}, {}
+    for m in C_ELEM.finditer(xml):
+        f = F_SHARED.search(m.group(0))
+        if f:
+            si = re.search(r'si="(\d+)"', f.group(1)).group(1)
+            members.setdefault(si, set()).add(m.group(1))
+            if f.group(2) is not None:
+                masters[si] = (m.group(1), unesc(f.group(2)))
+    todo = {si for si, cs in members.items() if cs & set(refs) and si in masters}
+    if not todo:
+        return xml
+
+    def cell(m):
+        c = m.group(0)
+        f = F_SHARED.search(c)
+        if not f:
+            return c
+        si = re.search(r'si="(\d+)"', f.group(1)).group(1)
+        if si not in todo:
+            return c
+        origin, fx = masters[si]
+        text = fx if m.group(1) == origin else Translator("=" + fx, origin=origin).translate_formula(m.group(1))[1:]
+        return c[:f.start()] + f"<f>{esc(text)}</f>" + c[f.end():]
+    return C_ELEM.sub(cell, xml)
+
+
 def put_cells(xml, cells, force=False):
     """(Adapted from research-filings xledit.set_cells, Nov 2026.) cells: {'C22': (kind, value, style)}. A cell that
     already holds something is skipped and reported, unless force (the user chose to overwrite)."""
     skipped, by_row = [], {}
+    xml = unshare(xml, cells)
     for ref, v in cells.items():
         m = re.match(r"([A-Z]+)(\d+)$", ref)
         by_row.setdefault(int(m.group(2)), []).append((colnum(m.group(1)), ref, v))

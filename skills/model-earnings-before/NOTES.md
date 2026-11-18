@@ -31,6 +31,9 @@ Why things are the way they are. Read before changing scripts.
   "(key driver)" placeholder labels are renamed to the forecast plan's drivers without asking: they are its
   placeholders, not the user's words (every other cell that holds something is skipped unless the user chose to
   overwrite).
+- Before writing into the Consensus tab, variance.put_cells writes out cell by cell every shared formula group it
+  touches (a user's fill-down is stored as one master and children; overwriting the master orphans the children and
+  Excel asks to repair the file). Copied from research-filings xledit.unshare, not imported (skills stay separate).
 - The frozen forecast is re-frozen only for a new quarter (or --refreeze), so a rerun the day before the print keeps
   the pre-print view model-earnings-after compares against.
 - lay_out runs twice: the rule (band 1) and the set-up row read rows below them and the thresholds (band 8); pass 1
