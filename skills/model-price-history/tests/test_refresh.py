@@ -142,26 +142,31 @@ def test_range_that_ends_at_the_old_last_row_is_a_warning(refreshed):
 
 
 def test_a_reference_to_a_moved_column_follows_it(reference_model, tmp_path):
-    """The untouched reference model's Research tab averages old column O ('P/E (TTM non-GAAP)'); the lean layout
-    moved it to N (the monthly block has the same header at R, so the match is made within the daily block). The
-    refresh rewrites those formulas to N and says so, and verify accepts only that rewrite."""
+    """A model built before the total-return column was added reads 'DXCM daily return' at D; it now sits at E. The
+    refresh rewrites that formula to E and says so, and verify accepts only that rewrite. The reference's Research
+    tab averages column O ('P/E (TTM non-GAAP)'): the lean layout plus the new column puts P/E back at O (the
+    monthly block has the same header at S, so the match is made within the daily block), so it stays put."""
     w = tmp_path / "w"
     w.mkdir()
     (tmp_path / "src").mkdir()
     _inputs(w, tmp_path / "src")
     m = str(tmp_path / "m.xlsx")
     shutil.copy(reference_model, m)
+    _edit(m, "Research", lambda x: _formula_cell(x, "ZZ3", "AVERAGE('Px Data'!$D$5:$D$3234)"))
     _run("refresh.py", "extract", "--model", m, "--work", str(w))
     _run("build.py", "--model", m, "--work", str(w), "--out", str(tmp_path / "b.xlsx"), "--refresh")
     r = _run("refresh.py", "restore", "--model", m, "--built", str(tmp_path / "b.xlsx"), "--work", str(w),
              "--out", str(tmp_path / "f.xlsx"))
     rep = json.loads(r.stdout)
-    assert any(x.startswith("Research Z15") and "'Px Data'!O -> N ('P/E (TTM non-GAAP)')" in x
+    assert any(x.startswith("Research ZZ3") and "'Px Data'!D -> E ('DXCM daily return')" in x
                for x in rep["references_followed"])
+    assert not any(x.startswith("Research Z15") for x in rep["references_followed"])
     new = Package(str(tmp_path / "f.xlsx"))
-    z15 = refresh.cells(new, refresh.sheet_parts(new)["Research"])["Z15"][1]
-    assert "'Px Data'!$N$5:$N$3234" in z15 and "$O$" not in z15
-    assert "'P/E (TTM non-GAAP)'" == "'" + refresh.cells(new, refresh.sheet_parts(new)["Px Data"])["N4"][1] + "'"
+    cells = refresh.cells(new, refresh.sheet_parts(new)["Research"])
+    assert "'Px Data'!$E$5:$E$3234" in cells["ZZ3"][1] and "$D$" not in cells["ZZ3"][1]
+    assert "'Px Data'!$O$5:$O$3234" in cells["Z15"][1]
+    px = refresh.cells(new, refresh.sheet_parts(new)["Px Data"])
+    assert px["E4"][1] == "DXCM daily return" and px["O4"][1] == "P/E (TTM non-GAAP)"
 
 
 def test_a_reference_to_a_column_that_is_gone_stops_the_refresh(old_model, refreshed, tmp_path):
@@ -206,3 +211,22 @@ def test_verify_passes_a_refresh_and_counts_the_shapes(old_model, refreshed):
              "--refresh", check=False)
     assert r.returncode == 0, r.stdout[-3000:]
     assert "your shapes carried back unchanged: 26 of 26" in r.stdout
+
+
+def test_total_return_column_sits_after_spy_and_abc_do_not_move():
+    """Other skills hard-code Px Data A (date), B (stock close), C (SPY): research-filings handoff.py, model-dcf.
+    The new total-return column must go to D, never between them."""
+    import build
+    L = build.px_data_layout(["rev_g", "om", "roic"])
+    assert (L["date"], L["close"], L["spy"], L["tr"], L["ret"]) == ("A", "B", "C", "D", "E")
+
+
+def test_refreshed_px_data_headers(refreshed):
+    """The plain close keeps its '<T> close' header (downstream finds the first header ending ' close'); the new
+    column's header must not end in ' close'; factor headers say dividends are in."""
+    import openpyxl
+    ws = openpyxl.load_workbook(refreshed["final"], read_only=True)["Px Data"]
+    h = next(ws.iter_rows(min_row=4, max_row=4, values_only=True))
+    assert h[1].endswith(" close") and h[2] == "SPY close"
+    assert h[3].endswith("total return (dividends in)")
+    assert any(isinstance(x, str) and x.endswith("close (dividends in)") for x in h)
