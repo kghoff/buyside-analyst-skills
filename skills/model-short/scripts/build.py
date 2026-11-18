@@ -38,16 +38,18 @@ INPUTS = [  # key, label (unique in column A), format
 LABEL = {k: lab for k, lab, _ in INPUTS}
 FMT = {k: f for k, _, f in INPUTS}
 ROWLABEL = {rid: lab for rid, _, lab, _ in sm.ROWS}
-TICKF = {  # tick formulas of the computed rows; {r} = the row; mirror shortmath.code_ticks
-    "decel": 'IF(ISNUMBER(C{r}),IF(C{r}<=-0.01,"✓","✗"),"?")',
-    "incr_margin": 'IF(AND(ISNUMBER(C{r}),ISNUMBER(D{r})),IF(OR(C{r}<D{r},IF(ISNUMBER(E{r}),E{r}>=0.95,FALSE)),"✓","✗"),"?")',
-    "capex": 'IF(ISNUMBER(C{r}),IF(C{r}>=1.5,"✓","✗"),"?")',
-    "leaky": 'IF(ISNUMBER(C{r}),IF(C{r}>=0.25,"✓","✗"),"?")',
-    "fcf": 'IF(ISNUMBER(C{r}),IF(C{r}<0.7,"✓","✗"),"?")',
-    "revisions": 'IF(ISNUMBER(C{r}),IF(C{r}<=-0.01,"✓","✗"),"?")',
+T = sm.THRESH
+TICKF = {  # tick formulas of the computed rows; {r} = the row; mirror shortmath.code_ticks (same THRESH)
+    "decel": f'IF(ISNUMBER(C{{r}}),IF(C{{r}}<={T["decel"]},"✓","✗"),"?")',
+    "incr_margin": f'IF(AND(ISNUMBER(C{{r}}),ISNUMBER(D{{r}})),IF(OR(C{{r}}<D{{r}},IF(ISNUMBER(E{{r}}),'
+                   f'E{{r}}>={T["peak_ratio"]},FALSE)),"✓","✗"),"?")',
+    "capex": f'IF(ISNUMBER(C{{r}}),IF(C{{r}}>={T["capex_da"]},"✓","✗"),"?")',
+    "leaky": f'IF(ISNUMBER(C{{r}}),IF(C{{r}}>={T["acq_cfo"]},"✓","✗"),"?")',
+    "fcf": f'IF(ISNUMBER(C{{r}}),IF(C{{r}}<{T["fcf_conv"]},"✓","✗"),"?")',
+    "revisions": f'IF(ISNUMBER(C{{r}}),IF(C{{r}}<={T["revision"]},"✓","✗"),"?")',
     "vs_dcf": 'IF(ISNUMBER(C{r}),IF(N({price})>C{r},"✓","✗"),"?")',
-    "vs_peers": 'IF(ISNUMBER(D{r}),IF(D{r}>=0.7,"✓","✗"),"?")',
-    "vs_history": 'IF(ISNUMBER(D{r}),IF(D{r}>=0.7,"✓","✗"),"?")',
+    "vs_peers": f'IF(ISNUMBER(D{{r}}),IF(D{{r}}>={T["pct"]},"✓","✗"),"?")',
+    "vs_history": f'IF(ISNUMBER(D{{r}}),IF(D{{r}}>={T["pct"]},"✓","✗"),"?")',
     "vs_algo": 'IF(ISNUMBER(C{r}),IF(C{r}>0,"✓","✗"),"?")',
 }
 RULE = {"decel": "✓ at −1.0 pt or worse", "incr_margin": "✓ if incremental < TTM margin, or TTM ≥ 95% of the 10-yr FY peak (E)",

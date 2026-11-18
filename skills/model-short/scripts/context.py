@@ -97,6 +97,16 @@ def mod_metrics(mm, g, rows):
         v = g.get((row, ci(mm.col(p))))
         return v if _num(v) else None
 
+    def blank0(p, row):
+        """A cell as Excel's arithmetic reads it: blank = 0, text = an error (None)."""
+        v = g.get((row, ci(mm.col(p))))
+        return 0.0 if v is None else (v if _num(v) else None)
+
+    def over(num, den):
+        """num / den only over a positive base (a ratio over a loss or a fall reads backwards); the formula twin is
+        IF(den>0,num/den,NA())."""
+        return sm.div(num, den) if den is not None and den > 0 else None
+
     out = {}
 
     def put(name, formula, value):
@@ -106,8 +116,9 @@ def mod_metrics(mm, g, rows):
     gr = lambda a, b: sm.div(a, b) - 1 if sm.div(a, b) is not None else None   # noqa: E731
     if len(act) >= 8:
         put("ttm_growth", f"{sf(Lq, rev)}/{sf(Pq, rev)}-1", gr(sv(Lq, rev), sv(Pq, rev)))
-        put("incr", f"({sf(Lq, oi)}-{sf(Pq, oi)})/({sf(Lq, rev)}-{sf(Pq, rev)})",
-            sm.div(sv(Lq, oi) - sv(Pq, oi), sv(Lq, rev) - sv(Pq, rev)))
+        drev = f"({sf(Lq, rev)}-{sf(Pq, rev)})"
+        put("incr", f"IF({drev}>0,({sf(Lq, oi)}-{sf(Pq, oi)})/{drev},NA())",
+            over(sv(Lq, oi) - sv(Pq, oi), sv(Lq, rev) - sv(Pq, rev)))
     if len(act) >= 12:
         now, ago = gr(sv(Lq, rev), sv(Pq, rev)), gr(sv(Pq, rev), sv(PPq, rev))
         put("ttm_growth_prior", f"{sf(Pq, rev)}/{sf(PPq, rev)}-1", ago)
@@ -119,15 +130,17 @@ def mod_metrics(mm, g, rows):
         put("capex_da", f"ABS({sf(Lq, rows['capex'])})/{sf(Lq, rows['da'])}",
             sm.div(abs(sv(Lq, rows["capex"])), sv(Lq, rows["da"])))
         if fys:
-            fm = [sm.div(cv(p, oi), cv(p, rev)) for p in fys]
+            fm = [sm.div(blank0(p, oi), cv(p, rev)) for p in fys]
             peak = max(fm) if None not in fm else None
-            put("peak_ratio", f"({sf(Lq, oi)}/{sf(Lq, rev)})/MAX("
-                + ",".join(f"MOD!${mm.col(p)}${oi}/MOD!${mm.col(p)}${rev}" for p in fys) + ")", sm.div(opm, peak))
-    if "acq" in rows:
+            mx = "MAX(" + ",".join(f"MOD!${mm.col(p)}${oi}/MOD!${mm.col(p)}${rev}" for p in fys) + ")"
+            put("peak_ratio", f"IF({mx}>0,({sf(Lq, oi)}/{sf(Lq, rev)})/{mx},NA())", over(opm, peak))
+    if "acq" in rows and F20:
         put("acq_cfo", f"ABS({sf(F20, rows['acq'])})/{sf(F20, rows['cfo'])}",
             sm.div(abs(sv(F20, rows["acq"])), sv(F20, rows["cfo"])))
     ni = rows.get("ni_adj") or rows["ni"]
-    put("fcf_conv", f"{sf(F20, rows['fcf'])}/{sf(F20, ni)}", sm.div(sv(F20, rows["fcf"]), sv(F20, ni)))
+    if F20:
+        put("fcf_conv", f"IF({sf(F20, ni)}>0,{sf(F20, rows['fcf'])}/{sf(F20, ni)},NA())",
+            over(sv(F20, rows["fcf"]), sv(F20, ni)))
     if len(fq) >= 4:
         put("ntm_eps", sf(fq[:4], eps), sv(fq[:4], eps))
     if len(fq) >= 8:
@@ -268,8 +281,9 @@ def run(model, work, ticker, values=None):
         links.update(consensus_links(g["Consensus"]))
         if "rev_first" in links:
             f, l2 = links["rev_first"], links["rev_last"]
+            r_ = sm.div(l2["value"], f["value"])
             metrics["revision"] = {"formula": f"IFERROR({l2['ref']}/{f['ref']}-1,NA())",
-                                   "value": sm.div(l2["value"], f["value"]) - 1}
+                                   "value": r_ - 1 if r_ is not None else None}
     if "Px Events" in g and (em := earn_move(g["Px Events"])):
         metrics["earn_move"] = em
     short = _short(work)

@@ -98,3 +98,12 @@ def test_rows_types_buckets_match_the_chapter():
     assert [d for _, d, _, _ in sm.ROWS].count("E") == 4
     assert [d for _, d, _, _ in sm.ROWS].count("V") == 4
     assert len(sm.BUCKETS) == 9 and "Subpar algorithm" in sm.TYPES and "Fraud" in sm.TYPES
+
+
+def test_a_guarded_metric_gives_a_question_mark():
+    """context.py returns None for a ratio over a loss or a fall (fcf_conv, incr); the row is then ?, never a tick.
+    A guarded peak ratio (loss-making peak) leaves the incremental-vs-TTM test alone."""
+    t = sm.code_ticks({"incr": None, "opm": 0.10, "fcf_conv": None})
+    assert t["incr_margin"] == "unknown" and t["fcf"] == "unknown"
+    t = sm.code_ticks({"incr": 0.05, "opm": 0.10, "peak_ratio": None})
+    assert t["incr_margin"] == "yes"

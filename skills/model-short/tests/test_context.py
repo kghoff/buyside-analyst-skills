@@ -145,3 +145,74 @@ def test_revisions_with_non_fy_labels_use_the_latest_snapshots_last_period():
             ("2026-11-01", "Next quarter", 0.65), ("2026-11-01", "NTM", 2.90)]
     L = context.consensus_links(_consensus(rows))
     assert L["rev_first"]["period"] == "NTM" and (L["rev_first"]["value"], L["rev_last"]["value"]) == (3.00, 2.90)
+
+
+def _variant(fixture_model, tmp_path, edit):
+    """context.run on a copy of the fixture after edit(wb, cols) ({period label: column} of MOD row 2)."""
+    import openpyxl
+    import context
+    m = str(tmp_path / "m.xlsx")
+    wb = openpyxl.load_workbook(fixture_model)
+    cols = {str(c.value): c.column for c in wb["MOD"][2] if c.value is not None}
+    edit(wb, cols)
+    wb.save(m)
+    (tmp_path / "short.json").write_text(json.dumps(mf.SHORT))
+    return context.run(m, str(tmp_path), "TEST", values=m)
+
+
+def test_loss_makers_and_shrinkers_get_a_question_mark_not_a_tick(fixture_model, tmp_path):
+    """A ratio over a negative base reads backwards: FCF over a net loss, a margin over a loss-making peak, an
+    incremental margin over falling revenue. Each shows ? (None, #N/A on the tab), and its formula carries the same
+    guard so the recalculated tab still equals Python."""
+    def edit(wb, cols):
+        ws = wb["MOD"]
+        for c in cols.values():
+            for r in (5, 10):                                     # operating income and non-GAAP net income
+                if isinstance(ws.cell(r, c).value, float):
+                    ws.cell(r, c).value = -abs(ws.cell(r, c).value)
+        for q in ("Q1 25", "Q2 25", "Q3 25", "Q4 25"):            # TTM revenue below the year before
+            ws.cell(3, cols[q]).value *= 0.5
+    c = _variant(fixture_model, tmp_path, edit)
+    m = c["metrics"]
+    assert m["fcf_conv"]["value"] is None and m["incr"]["value"] is None and m["peak_ratio"]["value"] is None
+    assert c["code_ticks"]["fcf"] == "unknown" and c["code_ticks"]["incr_margin"] == "unknown"
+    assert re.fullmatch(r"IFERROR\(IF\(SUM\([^)]*\$10[^)]*\)>0,.*,NA\(\)\),NA\(\)\)", m["fcf_conv"]["formula"])
+    assert m["incr"]["formula"].startswith("IFERROR(IF((SUM(") and ">0," in m["incr"]["formula"]
+    assert m["peak_ratio"]["formula"].startswith("IFERROR(IF(MAX(") and ">0," in m["peak_ratio"]["formula"]
+
+
+def test_a_blank_fy_operating_income_counts_as_zero_as_excel_does(fixture_model, tmp_path):
+    """Excel reads a blank cell in OI/Revenue as 0, so the FY margin is 0 and the peak stays the 2025 20%."""
+    def edit(wb, cols):
+        wb["MOD"].cell(5, cols["2018"]).value = None
+    c = _variant(fixture_model, tmp_path, edit)
+    assert c["metrics"]["peak_ratio"]["value"] == A(1.0)
+
+
+def test_a_zero_first_consensus_estimate_is_not_a_crash(fixture_model, tmp_path):
+    def edit(wb, cols):
+        wb["Consensus"]["C293"] = 0.0                            # FY 2027's first snapshot
+    c = _variant(fixture_model, tmp_path, edit)
+    assert c["metrics"]["revision"]["value"] is None and c["code_ticks"]["revisions"] == "unknown"
+
+
+def test_no_reported_quarters_means_no_empty_sums():
+    """A MOD with only forecast quarters: the 5-year metrics are left out, never SUM() of nothing."""
+    import context
+
+    class MM:
+        order = [f"Q{n} {y}E" for y in (26, 27, 28, 29) for n in (1, 2, 3, 4)]
+
+        def is_q(self, p):
+            return p.startswith("Q")
+
+        def forecast_quarters(self):
+            return list(self.order)
+
+        def col(self, p):
+            return "D"
+
+    rows = {"rev": 3, "oi": 5, "ni": 6, "eps": 8, "da": 12, "cfo": 13, "acq": 15, "capex": 18, "fcf": 19}
+    out, _, _ = context.mod_metrics(MM(), {}, rows)
+    assert "fcf_conv" not in out and "acq_cfo" not in out
+    assert not any("SUM()" in x["formula"] for x in out.values())

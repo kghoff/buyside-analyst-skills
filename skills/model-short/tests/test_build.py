@@ -123,3 +123,21 @@ def test_build_stops_and_deletes_out_if_another_part_changed(model, work, tmp_pa
     with pytest.raises(SystemExit, match="must not touch"):
         build.build(model, work, "TEST", out)
     assert not os.path.exists(out)
+
+
+def test_tick_formulas_take_their_lines_from_shortmath(monkeypatch):
+    """The tab's ticks and shortmath.code_ticks must use one set of thresholds: change THRESH and the formulas follow."""
+    import importlib
+    new = {"decel": -0.02, "peak_ratio": 0.9, "capex_da": 2.0, "acq_cfo": 0.3, "fcf_conv": 0.6, "revision": -0.03,
+           "pct": 0.8}
+    for k, v in new.items():
+        monkeypatch.setitem(build.sm.THRESH, k, v)
+    try:
+        b = importlib.reload(build)
+        f = b.TICKF
+        assert "C{r}<=-0.02" in f["decel"] and "E{r}>=0.9," in f["incr_margin"] and "C{r}>=2.0" in f["capex"]
+        assert "C{r}>=0.3" in f["leaky"] and "C{r}<0.6" in f["fcf"] and "C{r}<=-0.03" in f["revisions"]
+        assert "D{r}>=0.8" in f["vs_peers"] and "D{r}>=0.8" in f["vs_history"]
+    finally:
+        monkeypatch.undo()
+        importlib.reload(build)
