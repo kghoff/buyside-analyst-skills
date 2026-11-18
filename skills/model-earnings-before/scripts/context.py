@@ -126,7 +126,8 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
     if y.get("error") or not em._n(y.get("price")):
         warnings.append(f"Yahoo failed ({y.get('error', 'no price')}): price from Px Data's last close, no implied "
                         "move, no surprise history.")
-        price = {"value": P["rows"][-1]["close"], "source": f"Px Data last close, {P['rows'][-1]['date']}"}
+        lc = rates.last_close(P)
+        price = {"value": lc["close"], "source": f"Px Data last close, {lc['date']}"}
         y = {"surprises": [], "implied_move": None, "earnings_date": None}
     else:
         price = {"value": y["price"], "source": f"Yahoo Finance, {y['asof']}"}

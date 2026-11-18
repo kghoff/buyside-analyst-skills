@@ -24,7 +24,8 @@ MOD_ROWS = [(3, "INCOME STATEMENT", "Revenue", "rev"), (4, None, "Gross Profit",
             (5, None, "Operating Income", "oi"), (6, None, "Net Income", "ni"), (7, None, "EPS, diluted", "eps"),
             (9, "BALANCE SHEET", "Cash & Equivalents", "cash"),
             (11, "FREE CASH FLOW", "(+/-) Free Cash Flow", "fcf"),
-            (13, "KEY OPERATING METRICS", "Units", "units")]
+            (13, "KEY OPERATING METRICS", "Units", "units"),
+            (15, "NON-GAAP METRICS", "Adjusted free cash flow", "adj_fcf")]   # a later "...free cash flow" row
 DRIVER_KEY = "KEY OPERATING METRICS | Units"
 PRINT_PERIODS = ["Q2 24", "Q3 24", "Q4 24", "Q1 25", "Q2 25", "Q3 25", "Q4 25", "Q1 26", "Q2 26", "Q3 26"]
 PRINT_MOVES = [0.04, -0.06, 0.03, -0.09, 0.05, 0.02, -0.03, 0.07, -0.05, 0.06]      # oldest first
@@ -58,7 +59,8 @@ def series():
             oi = r * (0.15 + (0.02 if q == 4 else 0))
             ni = oi * 0.8
             out[label(y, q)] = {"rev": r, "gp": r * 0.6, "oi": oi, "ni": ni, "eps": ni / SHARES, "cash": 50.0,
-                                "fcf": ni * 0.9, "units": r / 2}
+                                "fcf": ni * 0.9, "units": r / 2,
+                                "adj_fcf": ni * 0.5}
     return out
 
 

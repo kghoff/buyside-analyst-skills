@@ -90,6 +90,20 @@ def test_yahoo_failure_falls_back_to_the_last_close(fixture_model, tmp_path):
     assert c["yahoo"]["surprises"] == [] and any("Yahoo" in x for x in c["warnings"])
 
 
+def test_yahoo_failure_with_a_blank_last_close(tmp_path):
+    p = mf.build(str(tmp_path / "x.xlsx"))
+    wb = openpyxl.load_workbook(p)
+    ws = wb["Px Data"]
+    ws.cell(4 + len(mf.trading_days()), 2).value = None
+    wb.save(p)
+    w = tmp_path / "w"
+    w.mkdir()
+    (w / "earnings.json").write_text(json.dumps({"ticker": "TEST", "asof": TODAY, "error": "boom"}))
+    c = context.run(p, str(w), "TEST", values=p, research=RESEARCH, forecast_plan=FPLAN, today=TODAY)
+    assert c["price"]["value"] == pytest.approx(mf.closes()[0][-2])
+    assert mf.trading_days()[-2].isoformat() in c["price"]["source"]
+
+
 def test_missing_required_tab_names_the_skill(tmp_path):
     p = mf.build(str(tmp_path / "x.xlsx"))
     wb = openpyxl.load_workbook(p)

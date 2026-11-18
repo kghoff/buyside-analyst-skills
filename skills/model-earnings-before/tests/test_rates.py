@@ -58,3 +58,20 @@ def test_next_date_is_last_years_plus_52_weeks(tabs):
     assert n["base"] == "2026-02-02" and n["value"] == "2027-02-01"
     assert n["from"] == "'Px Events'!$B$11"
     assert rates.next_date(tabs[1], "Q4 30E") is None
+
+
+def test_blank_last_close_uses_the_last_row_with_closes(tabs):
+    """Px Data can end on a dated row with no close yet: Excel would read the blank as 0 (-100%), so the value and
+    the formula both use the last row that has a close and an SPY close."""
+    gp = dict(tabs[0])
+    P0 = rates.px_data(gp, "TEST")
+    del gp[(P0["last"], 2)]
+    P = rates.px_data(gp, "TEST")
+    last = rates.prints(tabs[1], P, "TEST")[0]
+    px, spy = mf.closes()
+    i = mf.trading_days().index(mf.reaction_days()[-1])
+    r = rates.rel_since(P, last)
+    assert r["value"] == pytest.approx((px[-2] / px[i] - 1) - (spy[-2] / spy[i] - 1))
+    assert f"$B${P['last'] - 1}/" in r["formula"] and f"$B${P['last']}/" not in r["formula"]
+    assert r["to"] == mf.trading_days()[-2].isoformat()
+    assert rates.last_close(P)["close"] == pytest.approx(px[-2])

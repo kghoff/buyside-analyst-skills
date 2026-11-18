@@ -22,7 +22,8 @@ def ck(fixture_model):
 def test_target_quarter_and_rows(ck):
     mm, rows, c = ck
     assert c["quarter"] == "Q4 26E" and c["fy"] == "2026E" and c["prev"] == "Q3 26"
-    assert rows["rev"] == 3 and rows["gp"] == 4 and rows["cash"] == 9 and rows["fcf"] == 11
+    assert rows["rev"] == 3 and rows["gp"] == 4 and rows["cash"] == 9
+    assert rows["fcf"] == 11            # FREE CASH FLOW's row, not NON-GAAP METRICS' "Adjusted free cash flow" (15)
     assert [m["name"] for m in c["metrics"]] == ["Revenue", "Gross profit", "Operating income", "EPS, diluted", "Units"]
 
 
@@ -59,6 +60,16 @@ def test_second_half_share_and_blowup_inputs(ck):
     assert b["ttm_ni"]["value"] == pytest.approx(sum(s[p]["ni"] for p in ("Q4 25", "Q1 26", "Q2 26", "Q3 26")))
     assert b["cash"]["value"] == 50.0
     assert c["ntm_eps"]["value"] == pytest.approx(sum(s[p]["eps"] for p in ("Q4 26E", "Q1 27E", "Q2 27E", "Q3 27E")))
+
+
+def test_ntm_eps_needs_four_forecast_quarters(fixture_model, monkeypatch):
+    """With three forecast quarters the SUM formula would show a partial sum as NTM EPS: both sides must be #N/A."""
+    mm = ModMap(fixture_model)
+    g = checks.grid(openpyxl.load_workbook(fixture_model, read_only=True, data_only=True)["MOD"])
+    fq = mm.forecast_quarters()[:3]
+    monkeypatch.setattr(mm, "forecast_quarters", lambda: fq)
+    n = checks.run(mm, g, checks.find_rows(mm), [])["ntm_eps"]
+    assert n["formula"] == "NA()" and n["value"] is None
 
 
 def test_missing_required_row_stops_by_name(tmp_path):

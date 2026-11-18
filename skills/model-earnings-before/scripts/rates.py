@@ -99,12 +99,17 @@ def vol(P):
             "value": statistics.stdev(x["ret"] for x in rows), "n": len(rows)}
 
 
+def last_close(P):
+    """The last Px Data row with both closes (the last dated row can be blank: Excel would read it as 0)."""
+    return next((x for x in reversed(P["rows"]) if em._n(x["close"]) and em._n(x["spy"])), P["rows"][-1])
+
+
 def rel_since(P, last):
     """The stock against SPY from the last print's reaction-day close to the latest close."""
     if not last:
         return {"formula": "NA()", "value": None}
     a = next(x for x in P["rows"] if x["date"].isoformat() == last["date"])
-    b = P["rows"][-1]
+    b = last_close(P)
     c, s = P["cols"]["close"], P["cols"]["spy"]
     stock, spy = em.growth(b["close"], a["close"]), em.growth(b["spy"], a["spy"])
     f = (f"IFERROR(('Px Data'!${c}${b['row']}/'Px Data'!${c}${a['row']}-1)-"

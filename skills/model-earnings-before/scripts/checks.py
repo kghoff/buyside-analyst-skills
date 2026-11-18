@@ -19,8 +19,9 @@ ROLES = [  # (name, section regex, label regex, required, take the last match)
     ("ni", r"^income statement:?$", r"^net income", True, False),
     ("eps", r"^income statement:?$", r"^eps, diluted", True, False),
     ("cash", r"balance sheet|assets", r"^cash (and|&) (cash )?equivalents", False, False),
-    ("fcf", r".", r"free cash flow$", False, True),
+    ("fcf", r"^free cash flow", r"free cash flow$", False, True),
 ]
+FALLBACK = {"fcf": r"."}  # no FREE CASH FLOW section: any section's last "...free cash flow" row
 AVG_YEARS = 5
 
 
@@ -43,6 +44,8 @@ def find_rows(mm):
     out, missing = {}, []
     for name, sec, lab, req, last in ROLES:
         hits = [r for r, s, lb in lines if re.search(sec, s) and re.search(lab, lb)]
+        if not hits and name in FALLBACK:
+            hits = [r for r, s, lb in lines if re.search(FALLBACK[name], s) and re.search(lab, lb)]
         if hits:
             out[name] = hits[-1] if last else hits[0]
         elif req:
@@ -198,7 +201,8 @@ def run(mm, g, rows, drivers):
         out.append({"name": name, "row": row, "cells": c})
     ntm = fq[:4]
     ev = [C.v0(p, rows["eps"]) for p in ntm]
+    ntm_eps = ({"formula": "IFERROR(SUM(" + ",".join(C.ref(p, rows["eps"]) for p in ntm) + "),NA())",
+                "value": None if None in ev else float(sum(ev))} if len(ntm) == 4 else _na())
     return {"quarter": q, "fy": mm.fy_of(q), "prev": prevq, "metrics": out, "h2": _h2(C, mm, rows["rev"], mm.fy_of(q)),
             "blowup": _blowup(C, mm, rows),
-            "ntm_eps": {"formula": "IFERROR(SUM(" + ",".join(C.ref(p, rows["eps"]) for p in ntm) + "),NA())",
-                        "value": None if None in ev or len(ntm) < 4 else float(sum(ev)), "periods": ntm}}
+            "ntm_eps": {**ntm_eps, "periods": ntm}}
