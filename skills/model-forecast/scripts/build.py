@@ -72,11 +72,14 @@ def _row_style(xml, m, row):
 def _style(st, xml, m, row, color, label="", src=None, fmts=None):
     s = _row_style(xml, m, (src or {}).get(row, row))
     fmt = (fmts or {}).get(row)                       # a format the plan states wins over the inserted row's General
+    pct = label.startswith("%") or label == "seasonality"
+    if s is not None and not fmt and row in (fmts or {}) and not re.search(r'numFmtId="[1-9]', st._nth("cellXfs", "xf", s)):
+        fmt = "0.0%" if pct else "#,##0.0"             # a plan row's General history (the fill pass greys it) is no format;
+                                                       # the user's own General lines (e.g. share counts) keep theirs
     if s is not None:
         return st.refmt(st.recolor(s, RGB[color]), fmt) if fmt else st.recolor(s, RGB[color])
     if fmt:
         return st.xf(RGB[color], fmt)
-    pct = label.startswith("%") or label == "seasonality"
     return st.xf(RGB[color], "0.0%" if pct else "#,##0.0")
 
 
@@ -98,14 +101,16 @@ def _section_end(colab, section):
 
 def _add_section(pkg, colab, title, after, like):
     """A new section: a blank spacer row and a title row (column A) at the end of section `after`, every cell styled
-    like the title row of section `like` (so it looks like the user's other section titles)."""
+    like the title row of section `like` (so it looks like the user's other section titles); a model without `like`
+    (fresh from /model-historicals) borrows its first section title below the header rows instead."""
     at = _section_end(colab, after)
     while any(i == at and (a or b) for i, a, b in colab):      # past the spacer rows of `after`
         at += 1
     insert_rows(pkg, TAB, at, 2)
     part = _part(pkg)
     xml = pkg.text(part)
-    src = next(i for i, a, _ in colab if a and str(a).strip() == like)
+    src = next((i for i, a, _ in colab if a and str(a).strip() == like), None) or \
+        next(i for i, a, _ in colab if a and i > 2)
     src = src + 2 if src >= at else src
     row = re.search(rf'<row r="{src}"[^>]*?(?:/>|>(.*?)</row>)', xml, re.S)
     cells = {}

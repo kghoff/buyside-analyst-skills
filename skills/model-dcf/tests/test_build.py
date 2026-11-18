@@ -333,3 +333,13 @@ def test_a_snapshot_number_with_no_value_is_left_blank_not_written_as_nan(built)
     out = str(built["tmp"] / "nan.xlsx")
     build.build(built["model"], built["ctx"], solved, out, out + ".json")
     assert _ws(out)[f"F{row}"].value is None
+
+
+def test_year_columns_widen_only_when_a_number_would_print_as_hashes():
+    """ABT 2026-11: 2043E-2056E revenue passed $100,000M and the terminal value ~$480,000M; at the user's width 11
+    they printed '###'. The user's width (11) stays whenever the tab's largest number fits (DXCM), and the year
+    columns widen just enough when it doesn't."""
+    assert build.year_col_width([5_000.0, 61_234.5, 98_765.4]) == 11              # DXCM-sized: the user's layout
+    w = build.year_col_width([107_242.2, 480_380.4, -2_000.0])
+    assert w > 11 and w >= len("$480,380.4 ") + 1                                  # "$480,380.4" plus its ")" pad
+    assert build.year_col_width([-480_380.4]) >= len("($480,380.4)") + 1

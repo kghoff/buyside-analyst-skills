@@ -185,7 +185,9 @@ def remap_rows(pkg, target, fn, strict=False):
                     rows = sorted(ROW_ELEM.finditer(sd.group(1)), key=lambda m: int(m.group(1)))
                     xml = xml[:sd.start(1)] + "".join(m.group(0) for m in rows) + xml[sd.end(1):]
             soft = lambda t: map_ref(t, target, target, fn, soft=True)
-            xml = re.sub(r'(<dimension ref=")([^"]+)"', lambda m: f'{m.group(1)}{soft(m.group(2))}"', xml)
+            last = max(map(int, re.findall(r'<row r="(\d+)"', xml)), default=0)   # the used range keeps every row
+            dim = lambda t: re.sub(r"\d+$", lambda e: str(max(int(e.group(0)), last)), soft(t)) if ":" in t else soft(t)
+            xml = re.sub(r'(<dimension ref=")([^"]+)"', lambda m: f'{m.group(1)}{dim(m.group(2))}"', xml)
             xml = re.sub(r'(sqref=")([^"]+)"', lambda m: m.group(1) + " ".join(soft(s) for s in m.group(2).split()) + '"', xml)
             xml = re.sub(r'(topLeftCell=")([^"]+)"', lambda m: f'{m.group(1)}{soft(m.group(2))}"', xml)
             xml = re.sub(r'(activeCell=")([^"]+)"', lambda m: f'{m.group(1)}{soft(m.group(2))}"', xml)

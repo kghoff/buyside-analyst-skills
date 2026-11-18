@@ -154,3 +154,19 @@ def test_a_group_without_a_note_stops_the_layout(tmp_path):
     del plan["layout"][0]["groups"][0]["note"]
     with pytest.raises(ValueError, match="has no note"):
         layout.layout(p, plan, str(tmp_path / "o.xlsx"))
+
+
+def test_a_group_named_like_its_own_line_survives_a_rerun(tmp_path):
+    # ABT 2026-11: group "Total cost" over the line "Total cost". After one layout the empty group-name row came first,
+    # took the line's key, and the line became "Total cost #2": the rerun stopped ("in no group") and build.py would
+    # have written the line's forecast into the empty group-name row
+    from modmap import ModMap
+    plan = _plan()
+    plan["layout"][0]["groups"][0]["title"] = "Total cost"
+    p, o1, o2 = _model(tmp_path), str(tmp_path / "o1.xlsx"), str(tmp_path / "o2.xlsx")
+    layout.layout(p, plan, o1)
+    r = ModMap(o1).row(f"{SEC} | Total cost")
+    assert openpyxl.load_workbook(o1)["MOD"].cell(r, 5).value is not None     # the key is the line, not the group name
+    layout.layout(o1, plan, o2)
+    ws = openpyxl.load_workbook(o2)["MOD"]
+    assert [ws.cell(r, 2).value for r in range(5, 10)] == ["Total cost", "Units", "Cost per unit", "Price check", "Total cost"]
