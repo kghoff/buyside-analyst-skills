@@ -17,17 +17,24 @@ fs.mkdirSync(out, { recursive: true });
 let failed = false;
 for (const t of tickers.map((x) => x.toUpperCase())) {
   const get = () => yf.chart(yahooSymbol(t), { period1: '1970-01-01', interval: '1d', events: 'div|split' });
+  const file = path.join(out, `${t.toLowerCase()}_us_d.csv`);
+  fs.rmSync(file, { force: true });   // a failed ticker must not leave a stale file from an earlier run
   try {
     let r;
-    try { r = await get(); } catch (e) { await sleep(15000); r = await get(); }
-    const q = (r.quotes || []).filter((x) => x.close != null);
-    if (!q.length) throw new Error('no daily closes');
-    const file = path.join(out, `${t.toLowerCase()}_us_d.csv`);
-    fs.writeFileSync(file, toCsv(q));
-    console.log(JSON.stringify({ ticker: t, file, rows: q.length, first: toCsv(q.slice(0, 1)).split('\n')[1].split(',')[0],
-      last: toCsv(q.slice(-1)).split('\n')[1].split(',')[0], dividends: (r.events?.dividends || []).length }));
+    try { r = await get(); } catch (e) {
+      if (/not found|No data|Invalid/i.test(e.message)) throw e;
+      console.error(`Yahoo ${t} failed (${e.message}); retrying in 15s`);
+      await sleep(15000); r = await get();
+    }
+    const lines = toCsv(r.quotes || []).trim().split('\n').slice(1);
+    if (!lines.length) throw new Error('no daily closes');
+    fs.writeFileSync(file + '.tmp', [ 'Date,Open,High,Low,Close,Adj Close,Volume', ...lines ].join('\n') + '\n');
+    fs.renameSync(file + '.tmp', file);   // a crash never leaves a truncated CSV
+    console.log(JSON.stringify({ ticker: t, file, rows: lines.length, first: lines[0].split(',')[0],
+      last: lines.at(-1).split(',')[0], dividends: (r.events?.dividends || []).length }));
   } catch (e) {
     failed = true;
+    console.error(`Yahoo ${t}: ${e.message}`);
     console.log(JSON.stringify({ ticker: t, error: e.message }));
   }
 }
