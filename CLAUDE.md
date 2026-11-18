@@ -16,8 +16,8 @@ plugin `buyside`. Explain everything in plain English.
 | 7 | research-street | where sell-side and investors differ from the company, and why |
 | 8 | model-forecast | driver-based quarterly 3-statement forecast (user approves the plan first) |
 | 9 | model-dcf | 30-year key-driver DCF with reverse DCF; the user owns the inputs |
-| 10 | model-multiples | where the stock trades: history, vs S&P, vs peers, ranges, reverse P/E, forward table, comp sheet (Multiples tab) |
-| 11 | model-valuation | what it's worth and whether the setup is worth owning: 1-3 multiples with reasons, 12-month R/R per multiple and blended, R/R ladder, 3-year IRR and the 3 R's, DCF bear / base / bull from an agent-run reverse DCF, probability tree, valuation note (Valuation tab) |
+| 10 | model-multiples | where the stock trades: history, vs S&P, vs peers, ranges, reverse P/E, forward table, comp sheet with Include? toggles, P/E-vs-growth line through the peers, P/E vs core-peer median chart (Multiples tab) |
+| 11 | model-valuation | what it's worth and whether the setup is worth owning: the agent's Buy / Hold / Sell verdict, 1-3 multiples with reasons, 12-month R/R per multiple and blended, R/R ladder, 3-year IRR and the 3 R's, DCF bear / base / bull from an agent-run reverse DCF, probability tree, valuation note (Valuation tab) |
 | 12 | model-short | short check: FEV scorecard, short type and bucket, verdict, IRR wedge, risk case, print move, crowding, borrow, VaR sizing (Short Check tab) + short note |
 | – | model-industry | optional: industry P&L and peer comparison tabs |
 | – | model-consensus | optional: broker ratings, targets, estimates, rating history, consensus snapshots; rerun each print |
