@@ -8,7 +8,7 @@
 //   node inbox.mjs register <dir> sellside <plan.json> rename to "<date> <firm> <type> - <title>.pdf", file in its tier, register
 //   node inbox.mjs tidy <dir> sellside                 move registered reports still at the folder root into their tier
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, realpathSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -154,4 +154,4 @@ function cli() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) cli();
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) cli();

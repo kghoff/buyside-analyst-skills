@@ -2,7 +2,7 @@
 // filing assembler (cleanEdgarHtml, convertToMarkdown).
 // CLI (used by the IR agent): node convert.mjs <in.html> <out.md>
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as cheerio from 'cheerio';
@@ -117,4 +117,4 @@ function cli() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) cli();
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) cli();

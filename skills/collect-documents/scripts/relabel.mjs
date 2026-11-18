@@ -6,7 +6,7 @@
 // Safe to rerun: year-first names are left alone.
 // Usage: node relabel.mjs <dir> [--dry-run]
 
-import { existsSync, readdirSync, renameSync } from 'node:fs';
+import { existsSync, readdirSync, renameSync, realpathSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -45,7 +45,7 @@ export function relabel(dir, { dryRun = false } = {}) {
   return { files: moves.length, labels };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const { positionals, values } = parseArgs({ allowPositionals: true, options: { 'dry-run': { type: 'boolean' } } });
   const dir = positionals[0];
   if (!dir || !existsSync(join(dir, '_manifest.json'))) {

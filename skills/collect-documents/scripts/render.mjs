@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { stat, readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, basename, resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { secContact, loadSettings } from '../../../lib/settings.mjs';
 
@@ -65,6 +66,6 @@ async function cli() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   cli().catch((e) => { process.stderr.write(`render: ${e.message}\n`); process.exit(1); });
 }

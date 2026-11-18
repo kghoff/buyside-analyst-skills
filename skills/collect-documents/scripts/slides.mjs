@@ -9,7 +9,7 @@
 //   node slides.mjs finish <dir> <id>    check numbers, write <Category>/_md/<name>.md, register it
 //   node slides.mjs recheck <dir> <id>   report: redo the dropped-text check after a hand fix
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -223,4 +223,4 @@ async function cli() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) cli();
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) cli();

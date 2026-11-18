@@ -5,7 +5,7 @@
 //        [--url URL] [--file REL_PATH ...] [--reason TEXT] [--note TEXT]
 //   node manifest.mjs render <dir>
 
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, renameSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -141,4 +141,4 @@ function cli() {
   saveManifest(dir, m);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) cli();
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) cli();
