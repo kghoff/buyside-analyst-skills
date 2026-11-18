@@ -1,1 +1,50 @@
-{}
+{
+ "quarter": "Q4 26E",
+ "net": "Hold into the Q4 print: the guide needs a large order to land, and the Street is already above our numbers.",
+ "key_metric": {"value": "Q4 revenue growth (the large order)", "anchor": "Earnings Calls/_md/TEST 2026-11-02 Q3 call.md:2",
+                "quote": "we expect fourth-quarter revenue growth of about 12%",
+                "reason": "Management pinned the quarter on one order, so the revenue line is what traders will key on."},
+ "setup": {
+  "consensus": {"side": "short", "anchor": "Sellside Research/1 Broker Research/_md/2026-11-12 Broker A preview.md:2",
+                "quote": "consensus looks too high for Q4",
+                "reason": "A broker says consensus already expects a strong quarter, which is the short side of the set-up."},
+  "ratings": {"side": "neutral", "reason": "No rating changes appear in the documents or the consensus log since the last print."},
+  "previews": {"side": "long", "anchor": "Sellside Research/1 Broker Research/_md/2026-11-12 Broker A preview.md:2",
+               "quote": "We expect a cautious guide",
+               "reason": "The one broker preview on file is cautious, which is the long side of the set-up table."},
+  "positioning": {"side": "unknown", "reason": "Nothing on file or on the web says how funds are positioned into this print."},
+  "view": {"side": "neutral", "reason": "Our forecast matches the guided twelve percent, so we see an in-line quarter overall."}
+ },
+ "risks": {
+  "profit_stability": {"score": 2, "reason": "Operating margin has stayed between fifteen and seventeen percent for five years."},
+  "liquidity": {"score": 1, "reason": "Cash covers the business and free cash flow is positive every quarter."},
+  "valuation_skew": {"score": 4, "reason": "The P/E sits at the eighty-fifth percentile of its five-year range."},
+  "rating_change": {"score": 3, "reason": "One cautious preview could become a downgrade if the order slips."},
+  "revision": {"score": 3, "reason": "The fourth quarter needs twelve percent growth after two percent, so numbers can fall."}
+ },
+ "inputs": {
+  "up_eps": {"value": 3.30, "anchor": "Consensus!$L$10", "anchor_value": 2.75,
+             "reason": "Above the Street's FY27 mean of 2.75 if the order lands and next year tracks the guide."},
+  "up_pe": {"value": 18.0, "anchor": "Multiples!$H$7", "anchor_value": 22.0,
+            "reason": "Below the 22x five-year median: a beat restores some multiple but not all of it."},
+  "down_eps": {"value": 2.95, "anchor": "Consensus!$K$10", "anchor_value": 2.45,
+               "reason": "If the order slips, next-twelve-month EPS falls toward the Street's FY26 run rate."},
+  "down_pe": {"value": 15.0, "anchor": "Multiples!$G$7", "anchor_value": 15.0,
+              "reason": "A broken Q4 guide sends the multiple to its five-year low of 15x."},
+  "p_beat": {"value": 0.50, "anchor": "judgment",
+             "reason": "One order decides the quarter and nothing on file says whether it has closed yet, so even odds."}
+ },
+ "call": {"quarter": "in line", "guide": "hold", "expected_move": 0.05,
+          "reason": "Twelve percent is guided and our model agrees; the average print moves the stock about five percent."},
+ "whisper": {"text": "Our estimate: the buy-side wants revenue growth above 12% and a steady 2027 outlook.",
+             "reason": "A broker calls consensus too high while management guided twelve percent, so the bar is above the guide."},
+ "stance": {"value": "hold", "reason": "The rule says hold: reward to risk is near 1.2 and the edge is about five points."},
+ "points": {
+  "last_quarter": [{"text": "Q3 reaffirmed the full-year guide.", "anchor": "Earnings Calls/_md/TEST 2026-11-02 Q3 call.md:3",
+                    "quote": "We reaffirm full-year guidance"}],
+  "since_last_print": [{"text": "At a November conference the CEO said demand is solid.",
+                        "anchor": "Investor Events/_md/TEST 2026-11-10 conference.md:2", "quote": "demand remains solid"}],
+  "checkpoint": []
+ },
+ "judgment_calls": ["P(beat) set at 50% because nothing on file says whether the large order has closed."]
+}
