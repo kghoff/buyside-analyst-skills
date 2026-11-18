@@ -1,6 +1,6 @@
 ---
 name: model-price-history
-description: Add the user's price-history tabs to a company model (TICKER_model.xlsx) - Px Data (daily closes, rolling beta, idiosyncratic return, point-in-time TTM fundamentals, month-end P/E on TTM EPS, annual FCF vs buybacks, weekly 3-factor alpha), Px Events (full-results release dates, TTM EPS and fundamentals linked to MOD, every earnings / preliminary-revenue / investor-event reaction with its idio move) and Idio Chart (price with TTM overlays, TTM P/E with TTM EPS, FCF vs buybacks with P/E, 3-factor alpha with overlays, Top-20 up/down idio days). Asks GAAP vs non-GAAP for the overlays and pauses for the user to download stooq price files. Run after /model-kpis and before /research-filings. Use when the user runs /model-price-history TICKER or asks for the idio chart / price history tabs.
+description: Add the user's price-history tabs to a company model (TICKER_model.xlsx) - Px Data (daily closes, rolling beta, idiosyncratic return, point-in-time TTM fundamentals, month-end P/E on TTM EPS, annual FCF vs buybacks, weekly 3-factor alpha), Px Events (full-results release dates, TTM EPS and fundamentals linked to MOD, every earnings / preliminary-revenue / investor-event reaction with its idio move) and Idio Chart (price with TTM overlays, TTM P/E with TTM EPS, FCF vs buybacks with P/E, 3-factor alpha with overlays, Top-20 up/down idio days). Asks GAAP vs non-GAAP for the overlays and downloads daily prices from Yahoo (stooq download only as a fallback). Run after /model-kpis and before /research-filings. Use when the user runs /model-price-history TICKER or asks for the idio chart / price history tabs.
 ---
 
 # /model-price-history
@@ -78,10 +78,14 @@ Write `$W/price_history.json`:
 The FCF chart's average P/E groups month-ends by fiscal year with it.
 `etf_label` is a short lowercase word for the titles ("medtech", "semis", "regional banks").
 
-## Step 4: The price files (required pause)
+## Step 4: The price files
 
-This pause is part of every run. Ask the user with AskUserQuestion to download these from stooq and **wait** (options
-like "Downloaded them" / "Use a different ETF"). Name the exact files:
+`(cd "$SK/.." && { [ -d node_modules ] || npm install --silent; }) && node "$SK/fetch_prices.mjs" "<model dir>/Price Data" <t> SPY <etf> MTUM`.
+Yahoo gives each file a Close (the traded price: P/E and the price chart) and an Adj Close (dividends in: returns,
+beta, idio, alpha). Exit 1 = Yahoo failed for a ticker: the whole run falls back to stooq (one source per run).
+Delete the Yahoo files this run wrote, then ask the user with AskUserQuestion to download all four from stooq and
+**wait** (options like "Downloaded them" / "Use a different ETF"). Tell them stooq's prices are dividend-adjusted, so
+historical P/E runs low for a dividend payer. Name the exact files:
 
 | File | Why | Link |
 |---|---|---|
@@ -96,7 +100,7 @@ model starting before 2015, the 3-factor chart starts later (or use Ken French's
 
 Then: `python3 "$SK/prices.py" --model "$M" --src "$SRC" --stock <t> --etf <etf> --mom mtum --out "$W/prices.json"`.
 It moves the files into `<model folder>/Price Data/` and deletes any other copies of them in Downloads, the model folder or the gather folder, so they exist only there afterwards (say which in the report). Exit 1 means a file is missing or broken: tell the user exactly
-which and ask again. Read every `notes` line:
+which and ask again. A `problems` line about a different source or Adj Close means refetch. Read every `notes` line:
 - a big move is a split only if no news explains it (look in Px Events / the releases); if it is a real split
   stooq missed, ask the user for a fresh download
 - a factor that starts late pushes the 3-factor start back; say so
@@ -155,6 +159,8 @@ The verify report stays in `$W/verify_report.md` (working files stay in `_model_
   FCF chart, and the overlay axis range (computed from the data)
 - the ETF and why, plus the alternative
 - the price files used, any filled dates, stale days, big moves
+- the price source used (Yahoo or stooq); on stooq, that its prices are dividend-adjusted, so historical P/E runs low
+  for a dividend payer
 - **every judgment call**: events added or removed, timings changed, missing dates found (and where), MOD labels
   matched by fallback patterns, the GAAP / non-GAAP answer
 - the verification result, and a reminder to open the file in Excel, where it recalculates
