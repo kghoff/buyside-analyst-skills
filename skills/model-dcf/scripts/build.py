@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from context import find_rows  # noqa: E402
-from dcfmath import label  # noqa: E402
+from dcfmath import label, prepare, run, to_scn  # noqa: E402
 from modmap import ModMap  # noqa: E402
 from xlsx import CT, Package, Sheet, Styles, colname, comments_parts, esc  # noqa: E402
 from openpyxl.utils import column_index_from_string as openpyxl_col  # noqa: E402
@@ -228,6 +228,14 @@ def _keep(kept, name, y, v):
         kept.setdefault(name, {})[y] = v
 
 
+def year_col_width(values, user=11):
+    """The year columns' width: the user's 11 while the longest number fits in USD format ("$480,380.4" plus its
+    ")" pad or parentheses), otherwise just wide enough for it, so a large company's numbers never print as ###."""
+    longest = max((len(f"${abs(v):,.1f}") + 1 + (v < 0) for v in values if v == v and abs(v) != float("inf")),
+                  default=0)
+    return max(user, longest + 1)
+
+
 def _q(ref):
     """'Px Data!B5' -> "'Px Data'!B5" (sheet names with spaces quoted)."""
     sh, cell = ref.rsplit("!", 1)
@@ -290,6 +298,12 @@ def build(model, ctx, solved, out, written_path=None):
     st = Styles(pkg.text("xl/styles.xml"))
     T = Tab(st)
     P = T.put
+    pc = prepare(ctx, inputs)                # the tab's numbers (dcfmath.run = the tab's math, as check.py proves)
+    o = run(to_scn(inputs, pc), pc)
+    shown = [v for key in ("rev", "gp", "opex", "oi", "nopat", "da", "capex", "wc", "ufcf", "pv") for v in o[key]]
+    shown += [v for lv in o["levels"] for v in lv] + [o["tv"]]
+    w = year_col_width(shown)
+    T.sh.widths.update({col: w for col in range(3, TVC + 1)})
 
     # ---------------------------------------------------------------- title and legend
     ticker = ctx.get("source_model", "").split("_")[0].split(".")[0].upper()
