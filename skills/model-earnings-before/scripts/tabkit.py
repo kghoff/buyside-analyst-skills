@@ -1,8 +1,10 @@
 # skills/model-earnings-before/scripts/tabkit.py
 """(Copied from model-short build.py, Nov 2026; keep in sync. Changes: _n replaces shortmath._n; W.link and W.formula
-take check=False for cells verify.py must not compare, such as dates; W.typed_text and W.value are new.) The
+take check=False for cells verify.py must not compare, such as dates; W.typed_text and W.value are new; W.input_
+writes a date as a serial with a yyyy-mm-dd format.) The
 tab-writing kit: the cell writer W, what a rerun keeps (resolve_values), and the raw-XML steps that place a whole tab
 without touching any other part of the workbook."""
+import datetime as dt
 import math
 import re
 import zipfile
@@ -93,6 +95,9 @@ class W:
     def input_(self, ref, label, v, fmt, note):
         if isinstance(v, str) and v.startswith("="):
             kind, val = "f", v[1:]
+        elif isinstance(v, dt.date):                      # a date the user typed: keep it a date (serial + format)
+            d = v.date() if isinstance(v, dt.datetime) else v
+            kind, val, fmt = "n", (d - dt.date(1899, 12, 30)).days, "yyyy-mm-dd"
         else:
             kind, val = ("n", v) if _n(v) else ("s", str(v))
         self.sh.set(ref, kind, val, self.style(BLUE, fmt, fill=YELLOW))

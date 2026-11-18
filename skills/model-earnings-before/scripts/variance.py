@@ -88,7 +88,7 @@ def grid_cells(ctx, rows):
     def mv(k, row):
         return (V.get(str(row)) or {}).get(k)
 
-    rev_r = rows[0]
+    rev_r = rows[0] if rows else None                           # no rows: every line is dropped below
     for (lab, pct), r in zip(spec, rows):
         out[f"B{r}"] = ("s", lab, lab, "label", "General")
         if lab in ("Revenue", "EPS"):

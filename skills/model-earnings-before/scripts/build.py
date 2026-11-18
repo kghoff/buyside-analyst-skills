@@ -148,8 +148,12 @@ def recode(ctx, H):
 
 
 def _days(v, today):
+    """Days from today to the report date: a date or datetime (typed in Excel), an Excel serial number (a values
+    copy) or ISO text; None for anything else."""
     if isinstance(v, dt.datetime):
         v = v.date()
+    if _n(v):
+        v = dt.date(1899, 12, 30) + dt.timedelta(days=int(v))
     if isinstance(v, str):
         try:
             v = dt.date.fromisoformat(v.strip()[:10])
@@ -442,7 +446,9 @@ def lay_out(w, ctx, plan, used, users, calc, ticker, unverified, frozen, var, fw
     r += 1
     band("6. VARIANCE GRID: consensus against our numbers")
     if var["where"] == "consensus":
-        put(f"On the Consensus tab, rows {var['rows'][0]}-{var['rows'][-1]} (filled by this skill on {ctx['today']}; "
+        where = (f"On the Consensus tab, rows {var['rows'][0]}-{var['rows'][-1]}" if var["rows"]
+                 else "In the Consensus tab's variance block")
+        put(f"{where} (filled by this skill on {ctx['today']}; "
             "the variance formulas in I-K are model-consensus's).")
     else:
         per = ctx["mod"]["periods"]
@@ -600,15 +606,18 @@ def build(model, work, ticker, out, variance="earnings", force_variance=False, r
     if bad:
         os.remove(out)
         raise SystemExit("model-earnings-before: the build changed parts it must not touch: " + ", ".join(bad))
-    serial = {k: v for k, v in calc.items() if k != "inputs"}
+    serial = calc                                               # inputs at their worked values: note.py reads them
     json.dump({"expected": w.expected, "expected_cons": expected_cons, "kinds": w.kinds, "fmt": w.fmt, "refs": R,
                "inputs": w.inputs, "used": used, "users": sorted(users), "calc": serial, "variance": var,
                "frozen": {k: frozen[k] for k in ("quarter", "date", "kept")}, "warnings": warnings},
               open(os.path.join(work, "layout.json"), "w"), indent=0, default=str)
     json.dump({lab: {"value": v, "user": lab in users} for lab, v in used.items()},
               open(os.path.join(work, "inputs_written.next.json"), "w"), indent=1, default=str)
+    vnext = os.path.join(work, "variance_written.next.json")
     if var_written is not None:
-        json.dump(var_written, open(os.path.join(work, "variance_written.next.json"), "w"), indent=1, default=str)
+        json.dump(var_written, open(vnext, "w"), indent=1, default=str)
+    elif os.path.exists(vnext):                                 # an earlier run's record: never promote it
+        os.remove(vnext)
     return {"tab": TAB, "users_kept": sorted(users), "changed_parts": bad, "stance_rule": calc["rule"],
             "stance_used": used[LABEL["stance"]], "variance": var,
             "frozen": {k: frozen[k] for k in ("quarter", "date", "kept")}, "warnings": warnings}

@@ -123,3 +123,57 @@ def test_rule_cell_and_the_agents_stance(built):
     lay = json.load(open(os.path.join(work, "layout.json")))
     assert res["stance_rule"] == "hold" and res["stance_used"] == "hold"
     assert lay["expected"][lay["refs"]["rule"].replace("$", "")] == "hold"
+
+
+def test_stale_variance_record_is_removed_when_this_run_fills_nothing(model, work, tmp_path):
+    """A variance_written.next.json left by an earlier, unpromoted run must not be promoted after a run that wrote
+    nothing on the Consensus tab: the gate would then call the user's later entries 'ours' and overwrite them."""
+    stale = os.path.join(work, "variance_written.next.json")
+    open(stale, "w").write('{"C22": 1}')
+    build.build(model, work, "TEST", str(tmp_path / "o.xlsx"), variance="earnings")
+    assert not os.path.exists(stale)
+
+
+def test_report_date_typed_as_a_real_date(tmp_path):
+    """The user types the announced date in Excel: it reads back as a datetime (or a serial number from a values
+    copy). It must count as a date both in Python and on the tab, not become text."""
+    import datetime as dt
+    from tabkit import W
+    from xlsx import Styles
+    assert build._days(dt.datetime(2027, 2, 10), "2026-11-18") == 84
+    assert build._days(dt.date(2027, 2, 10), "2026-11-18") == 84
+    assert build._days(46428, "2026-11-18") == 84                        # Excel serial of 2027-02-10
+    assert build._days("2027-02-10", "2026-11-18") == 84
+    assert build._days("type the date", "2026-11-18") is None
+    st = Styles(zipfile.ZipFile(mf.build(str(tmp_path / "d7.xlsx"))).read("xl/styles.xml").decode())
+    w = W(st)
+    w.input_("B5", "Report date", dt.datetime(2027, 2, 10), "General", "note")
+    kind, val, _ = w.sh.cells[(5, 2)]
+    assert (kind, val) == ("n", 46428) and w.fmt["B5"] == "yyyy-mm-dd"
+
+
+def test_note_inputs_kept_in_layout_calc(built):
+    """A user's formula in an input is worked at its recalculated value; note.py needs those values, not the
+    formula text, so layout.json keeps them."""
+    _, work, _, _ = built
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    assert set(lay["calc"]["inputs"]) == set(build.em.AGENT_INPUTS)
+
+
+def _no_labels(path):
+    m = mf.build(path)
+    wb = openpyxl.load_workbook(m)
+    for r in range(22, 31):
+        wb["Consensus"][f"B{r}"] = None
+    wb.save(m)
+    return m
+
+
+def test_variance_block_without_rows_does_not_crash(work, tmp_path):
+    m = _no_labels(str(tmp_path / "e.xlsx"))
+    out = str(tmp_path / "o.xlsx")
+    res = build.build(m, work, "TEST", out, variance="consensus", force_variance=True)
+    assert res["variance"]["rows"] == []
+    wb = openpyxl.load_workbook(out)
+    texts = [c.value for row in wb[build.TAB].iter_rows() for c in row if isinstance(c.value, str)]
+    assert any("the Consensus tab's variance block" in t for t in texts)

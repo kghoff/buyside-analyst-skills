@@ -37,6 +37,9 @@ Why things are the way they are. Read before changing scripts.
 - On a rerun context.py reads the rule's thresholds (band 8) from the Earnings tab in the values copy, by their
   column-A label, numbers only, so code's answers and plan.py's stance check use the user's thresholds, not the
   house defaults; context.md says which came from the tab.
+- A report date the user types as a real Excel date is written back as a date serial with a yyyy-mm-dd format
+  (not text), and build._days reads a date, datetime, serial number or ISO text; the days-to-print formula already
+  takes a number or text.
 - The frozen forecast is re-frozen only for a new quarter (or --refreeze), so a rerun the day before the print keeps
   the pre-print view model-earnings-after compares against.
 - lay_out runs twice: the rule (band 1) and the set-up row read rows below them and the thresholds (band 8); pass 1

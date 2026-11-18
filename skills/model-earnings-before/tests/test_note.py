@@ -37,3 +37,26 @@ def test_note_says_when_the_user_overrode_the_stance(model, work, tmp_path):
     json.dump(lay, open(p, "w"))
     md = open(note.write_md(work, "TEST", str(tmp_path), "2026-11-18")).read()
     assert "**add** (the rule says **hold**). **You changed this.**" in md
+
+
+def test_note_prints_a_users_formula_input_at_its_value(model, work, tmp_path):
+    """The user typed a formula over an input (=Multiples!$H$7): the note shows the value it works out to, as the
+    tab does, never n/a."""
+    build.build(model, work, "TEST", str(tmp_path / "o.xlsx"), variance="earnings")
+    p = os.path.join(work, "layout.json")
+    lay = json.load(open(p))
+    lay["used"][build.LABEL["up_pe"]] = "=Multiples!$H$7"
+    lay["calc"]["inputs"]["up_pe"] = 22.0
+    json.dump(lay, open(p, "w"))
+    md = open(note.write_md(work, "TEST", str(tmp_path), "2026-11-18")).read()
+    assert "| Upside case | 22.0x |" in md
+
+
+def test_note_with_an_empty_variance_block(model, work, tmp_path):
+    build.build(model, work, "TEST", str(tmp_path / "o.xlsx"), variance="earnings")
+    p = os.path.join(work, "layout.json")
+    lay = json.load(open(p))
+    lay["variance"] = {"where": "consensus", "rows": []}
+    json.dump(lay, open(p, "w"))
+    md = open(note.write_md(work, "TEST", str(tmp_path), "2026-11-18")).read()
+    assert "In the Consensus tab's variance block" in md

@@ -48,6 +48,8 @@ def write_md(work, ticker, out_dir, date):
     ctx = json.load(open(os.path.join(work, "context.json")))
     c, U, users = lay["calc"], lay["used"], set(lay["users"])
     mine = lambda lab: " **You changed this.**" if lab in users else ""   # noqa: E731
+    I = c.get("inputs") or {}                       # inputs at their worked values (a user's formula at its result)
+    iv = lambda k: I[k] if k in I else U[LABEL[k]]   # noqa: E731
     rd = ctx["report_date"]
     rd_text = f"{U.get(LABEL['report_date'], rd['value'])} (estimated)" if rd["estimated"] else rd["value"]
     L = [f'<div class="cover"><h1>{ticker} earnings preview: {ctx["quarter"]}</h1><p>{date} · Chapter 13 · report '
@@ -57,7 +59,7 @@ def write_md(work, ticker, out_dir, date):
          f"The quarter: {U[LABEL['call_q']]} · the guide: {U[LABEL['call_g']]} · expected move "
          f"±{pct(U[LABEL['expected_move']])}.", "", plan["net"], "",
          f"Reward / risk {mult(c['rr'])} · implied PSUC {pct(c['psuc'])} · our P(upside) "
-         f"{pct(c['inputs']['p_beat'] if 'inputs' in c else U[LABEL['p_beat']])} · edge {pct(c['edge'])}.", "",
+         f"{pct(iv('p_beat'))} · edge {pct(c['edge'])}.", "",
          "## 2. Set-up", "",
          f"Stock minus SPY since the last print ({ctx['last_print']}): {pct(ctx['rates']['rel']['value'])} · P/E "
          f"percentile (5 years): {pct((ctx['links']['multiples'].get('pe_pct') or {}).get('value'))} · options-"
@@ -107,12 +109,13 @@ def write_md(work, ticker, out_dir, date):
         L.append("- No flag fired.")
     var = lay["variance"]
     L += ["", "## 7. Variance", "",
-          (f"On the Consensus tab, rows {var['rows'][0]}-{var['rows'][-1]} (consensus typed from the mean row; ours "
-           "linked to MOD)." if var["where"] == "consensus" else "On the Earnings tab, band 6."), "",
+          ((f"On the Consensus tab, rows {var['rows'][0]}-{var['rows'][-1]}" if var.get("rows")
+            else "In the Consensus tab's variance block") + " (consensus typed from the mean row; ours linked to MOD)."
+           if var["where"] == "consensus" else "On the Earnings tab, band 6."), "",
           "## 8. Risk / reward", "", "| | P/E | EPS | Price | Move |", "|---|---|---|---|---|",
           f"| Today | | | {money(ctx['price']['value'])} | |",
-          f"| Upside case | {mult(U[LABEL['up_pe']])} | {money(U[LABEL['up_eps']])} | {money(c['up_price'])} | {pct(c['up'])} |",
-          f"| Downside case | {mult(U[LABEL['down_pe']])} | {money(U[LABEL['down_eps']])} | {money(c['down_price'])} | {pct(c['down'])} |",
+          f"| Upside case | {mult(iv('up_pe'))} | {money(iv('up_eps'))} | {money(c['up_price'])} | {pct(c['up'])} |",
+          f"| Downside case | {mult(iv('down_pe'))} | {money(iv('down_eps'))} | {money(c['down_price'])} | {pct(c['down'])} |",
           "", f"Reward / risk {mult(c['rr'])}; implied PSUC {pct(c['psuc'])}; edge {pct(c['edge'])}; the rule says "
           f"**{c['rule'] or '?'}**.", "", "| Risk score (1 low, 5 high) | Score | Why |", "|---|---|---|"]
     for rid, lab in em.RISKS:
