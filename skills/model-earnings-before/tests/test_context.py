@@ -59,6 +59,28 @@ def test_warns_when_the_first_forecast_quarter_was_already_reported(tmp_path):
             "in MOD before previewing the next print") in c["warnings"]
 
 
+def test_rerun_reads_the_users_thresholds_from_the_tab(model, work, tmp_path):
+    """On a rerun the user may have changed band 8 (the rule's thresholds). The agent's stance is checked against
+    code's answers and the rule, so both must use the user's thresholds, not the house defaults; text is ignored."""
+    import build
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out, variance="earnings")
+    wb = openpyxl.load_workbook(out)                   # a test copy, standing in for the recalculated values copy
+    ws = wb[build.TAB]
+    rows = {ws.cell(r, 1).value: r for r in range(1, ws.max_row + 1)}
+    ws.cell(rows[em.HOUSE_LABEL["pe_peak"]], 2).value = 0.95
+    ws.cell(rows[em.HOUSE_LABEL["rel_perf"]], 2).value = "five percent"
+    vals = str(tmp_path / "values.xlsx")
+    wb.save(vals)
+    w = tmp_path / "w2"
+    w.mkdir()
+    (w / "earnings.json").write_text(json.dumps(mf.EARN))
+    c = context.run(out, str(w), "TEST", values=vals, research=RESEARCH, forecast_plan=FPLAN, today=TODAY)
+    assert c["house"]["pe_peak"] == 0.95 and c["house"]["rel_perf"] == em.HOUSE["rel_perf"]
+    assert c["code"]["blowups"]["peak_pe"] is False             # P/E percentile 0.85 is below the user's 0.95
+    assert "pe_peak" in open(os.path.join(str(w), "context.md")).read().split("## House thresholds")[0]
+
+
 def test_frozen_forecast_and_files(work):
     c = _ctx(work)
     s = mf.series()

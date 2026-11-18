@@ -34,6 +34,9 @@ Why things are the way they are. Read before changing scripts.
 - Before writing into the Consensus tab, variance.put_cells writes out cell by cell every shared formula group it
   touches (a user's fill-down is stored as one master and children; overwriting the master orphans the children and
   Excel asks to repair the file). Copied from research-filings xledit.unshare, not imported (skills stay separate).
+- On a rerun context.py reads the rule's thresholds (band 8) from the Earnings tab in the values copy, by their
+  column-A label, numbers only, so code's answers and plan.py's stance check use the user's thresholds, not the
+  house defaults; context.md says which came from the tab.
 - The frozen forecast is re-frozen only for a new quarter (or --refreeze), so a rerun the day before the print keeps
   the pre-print view model-earnings-after compares against.
 - lay_out runs twice: the rule (band 1) and the set-up row read rows below them and the thresholds (band 8); pass 1

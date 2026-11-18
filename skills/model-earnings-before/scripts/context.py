@@ -32,6 +32,24 @@ from modmap import ModMap  # noqa: E402
 REQUIRED = {"MOD": "model-historicals", "Px Data": "model-price-history", "Px Events": "model-price-history",
             "Multiples": "model-multiples"}
 OPTIONAL = {"Consensus": "model-consensus", "Valuation": "model-valuation", "Filings Charts": "research-filings"}
+TAB = "Earnings"
+
+
+def house(wb):
+    """The rule's thresholds: the house defaults, or on a rerun the numbers the user keeps in band 8 of the Earnings
+    tab (found by their column-A label, value in column B; text is ignored). Returns (thresholds, keys from the tab)."""
+    H, mine = dict(em.HOUSE), []
+    if TAB not in wb.sheetnames:
+        return H, mine
+    by = {lab: k for k, lab in em.HOUSE_LABEL.items()}
+    for row in wb[TAB].iter_rows(min_row=1, max_col=2):
+        a = getattr(row[0], "value", None)
+        k = by.get(str(a).strip()) if a is not None else None
+        v = row[1].value if len(row) > 1 else None
+        if k and em._n(v):
+            H[k] = v
+            mine.append(k)
+    return H, mine
 
 
 def drivers(mm, plan_path, warnings):
@@ -101,6 +119,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
         if tab not in wb.sheetnames:
             raise SystemExit(f"model-earnings-before: the model has no {tab} tab. Run /{skill} first.")
     missing = [f"{t} (/{s})" for t, s in OPTIONAL.items() if t not in wb.sheetnames]
+    H, from_tab = house(wb)
     g = {t: checks.grid(wb[t]) for t in (*REQUIRED, *[t for t in OPTIONAL if t in wb.sheetnames])}
     warnings = []
     mm = ModMap(values)
@@ -146,7 +165,6 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
                             "straddle holds no print.")
     days = ((dt.date.fromisoformat(report["value"]) - dt.date.fromisoformat(today)).days
             if report["value"] else None)
-    H = dict(em.HOUSE)
     pe_pct = lk["multiples"].get("pe_pct", {}).get("value")
     b = ck["blowup"]
     code = {"setup": {"value_perf": em.setup_code(pe_pct, rt["rel"]["value"], H)},
@@ -161,7 +179,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
            "price": price, "quarter": ck["quarter"], "fy": ck["fy"], "report_date": report, "days_to_print": days,
            "checks": ck, "mod": mod_block(mm, g["MOD"], rows, ck, drv), "rates": rt, "links": lk, "guidance": guide,
            "yahoo": {"implied_move": implied, "surprises": y.get("surprises") or [], "straddle": y.get("straddle")},
-           "code": code, "house": H, "last_print": last["date"] if last else None,
+           "code": code, "house": H, "house_from_tab": from_tab,"last_print": last["date"] if last else None,
            "last_release": last["event_date"] if last else None, "new_docs": new_docs,
            "frozen": frozen(mm, g["MOD"], ck["quarter"], ck["fy"]), "missing": missing, "warnings": warnings}
     json.dump(ctx, open(os.path.join(work, "context.json"), "w"), indent=1, default=str)
@@ -177,7 +195,10 @@ def _md(c):
          f"Report date: {c['report_date']['value']} ({c['report_date']['source']}); days to print: {c['days_to_print']}",
          f"Price: {c['price']['value']} ({c['price']['source']})",
          f"Last print (reaction day): {c['last_print']}; released {c['last_release']}",
-         f"Missing optional tabs: {', '.join(c['missing']) or 'none'}", "", "## Warnings"]
+         f"Missing optional tabs: {', '.join(c['missing']) or 'none'}",
+         "Rule thresholds from the user's Earnings tab: " + (", ".join(f"{k} = {c['house'][k]}" for k in
+                                                                        c["house_from_tab"]) or "none (house defaults)"),
+         "", "## Warnings"]
     L += [f"- {w}" for w in c["warnings"]] or ["- none"]
     L += ["", "## Model checks (value ; formula)"]
     for m in c["checks"]["metrics"]:
