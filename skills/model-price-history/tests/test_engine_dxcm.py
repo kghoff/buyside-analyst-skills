@@ -173,3 +173,30 @@ def test_fcf_chart_pe_groups_month_ends_by_fiscal_year(dxcm_run, ref_values, ref
     i = A["fy"].index(2025)
     assert A["n"][i] == len(want) and abs(A["pe"][i] - sum(want) / len(want)) < 1e-12
     assert A["n"] != dxcm_run["annual"]["n"]              # different from the calendar-year (December) grouping
+
+
+def test_pe_uses_the_traded_price_and_returns_use_total_return(ref_values, reference_model):
+    """Why: stooq/Yahoo dividend-adjusted prices understate a dividend payer's old P/E. P/E must divide the TRADED
+    close; returns (beta, idio, alpha) must use the total-return series. Swap either and this fails."""
+    import os
+    import numpy as np
+    import engine
+    import modmap
+    from conftest import FIX
+    mod = modmap.read(reference_model)
+    ev = ref_values["events"]
+    full = {p: pd.Timestamp(d) for p, d in zip(ev["periods"], ev["full_dates"])}
+    load = lambda t: engine.load_close(os.path.join(FIX, f"{t}_us_d.csv"))
+    stock = load("dxcm")
+    tr = stock * np.linspace(0.8, 1.0, len(stock))          # a made-up dividend history: past prices scaled down
+    prices = {"stock": stock, "stock_tr": tr, "spy": load("spy"), "etf": load("xhe"), "mom": load("mtum")}
+    cfg = {"oi_role": "oi_ng", "ebitda_role": "ebitda_ng", "roic_role": "roic", "eps_role": "eps_ng",
+           "ttm_key": "ttm_n", "fcf_role": "fcf", "bb_roles": ["buyback_net"]}
+    run = engine.run(cfg, prices, mod, full, [])
+    d, t = run["dates"], len(run["dates"]) - 1
+    assert run["px"][t] == pytest.approx(stock.reindex(d).iloc[t])                     # plain close kept for P/E
+    e = run["daily"]["ttm_eps"][t]
+    assert run["daily"]["pe"][t] == pytest.approx(stock.reindex(d).iloc[t] / e)
+    trd = tr.reindex(d)
+    assert run["r"][t] == pytest.approx(trd.iloc[t] / trd.iloc[t - 1] - 1)              # returns on total return
+    assert run["tr"][t] == pytest.approx(trd.iloc[t])

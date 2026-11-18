@@ -36,6 +36,13 @@ def load_close(path):
     return s[~s.index.duplicated(keep="last")].sort_index()
 
 
+def load_tr(path):
+    """Total-return series: Yahoo's Adj Close (dividends in); a stooq file has only Close, which is already adjusted."""
+    df = pd.read_csv(path, parse_dates=["Date"]).set_index("Date")
+    s = df["Adj Close" if "Adj Close" in df.columns else "Close"].dropna().astype(float)
+    return s[~s.index.duplicated(keep="last")].sort_index()
+
+
 def daily_dates(stock, spy, first_fy):
     """(dates, base_index). base = last common date <= Dec 31 of first_fy - 1; start = base - 252 rows."""
     common = stock.index.intersection(spy.index).sort_values()
@@ -143,10 +150,11 @@ def run(cfg, prices, mod, full_dates, events):
     first_fy = min(p["year"] for p in per if p["kind"] == "fy")
     dates, b = daily_dates(prices["stock"], prices["spy"], first_fy)
     n = len(dates)
-    px = prices["stock"].reindex(dates).to_numpy()
+    px = prices["stock"].reindex(dates).to_numpy()                      # traded price: P/E, month-end close, chart
+    pt = prices.get("stock_tr", prices["stock"]).reindex(dates).to_numpy()   # total return: returns, beta, alpha
     sp = prices["spy"].reindex(dates).to_numpy()
     r = np.full(n, NA); rs = np.full(n, NA)
-    r[1:] = px[1:] / px[:-1] - 1
+    r[1:] = pt[1:] / pt[:-1] - 1
     rs[1:] = sp[1:] / sp[:-1] - 1
     beta = np.full(n, NA); idio = np.full(n, NA)
     for t in range(b + 1, n):
@@ -223,7 +231,7 @@ def run(cfg, prices, mod, full_dates, events):
     W["idx3"] = [100.0] + [NA] * (len(wrows) - 1)
     for j in range(1, len(wrows)):
         k, k0 = wrows[j], wrows[j - 1]
-        W["ret"][j] = px[k] / px[k0] - 1
+        W["ret"][j] = pt[k] / pt[k0] - 1
         W["spy_ret"][j] = sp[k] / sp[k0] - 1
         W["ind_x"][j] = ev_[k] / ev_[k0] - 1 - W["spy_ret"][j]
         W["mom_x"][j] = mv_[k] / mv_[k0] - 1 - W["spy_ret"][j]
@@ -250,7 +258,7 @@ def run(cfg, prices, mod, full_dates, events):
         annual["pe"].append(sum(xs) / len(xs) if xs else NA)
         annual["n"].append(len(xs))
 
-    return {"dates": dates, "base": b, "px": px, "spy": sp, "r": r, "rs": rs, "beta": beta, "idio": idio,
+    return {"dates": dates, "base": b, "px": px, "tr": pt, "spy": sp, "r": r, "rs": rs, "beta": beta, "idio": idio,
             "daily": daily, "label": label, "quarters": qt, "events": ev, "monthly": monthly, "weekly": W,
             "annual": annual, "etf": ev_, "mom": mv_, "ind_x": ind_x, "mom_x": mom_x, "okeys": okeys,
             "fills": {"etf": etf_filled, "mom": mom_filled}, "first": {"etf": etf_first, "mom": mom_first}}
