@@ -90,3 +90,15 @@ buybacks 471.9, FY25 avg TTM P/E 43.9x, P/E months from Feb 2019 (11 in 2019), l
 
 Fixture prices were extracted from the reference model (its pasted values, with XHE/MTUM gaps already filled), so
 prices.py's fill / stale checks are not exercised by them.
+
+## ABT (second company, 2026-11-18)
+
+- **Call time anywhere in the release:** `events.timing` read only the first 20,000 raw characters; Abbott prints
+  its "8 a.m. Central time" call notice after long tables, so 33 of 43 releases defaulted to "After close" (a reaction
+  measured a day late). It now reads the whole text. A call at exactly 9:30 ET (8:30 a.m. Central) is "Same day":
+  the release went out before trading. Tests: `tests/test_events.py`.
+- **A full-results release with a file-name suffix** ("2016 Q4 ABT release 2017-01-25 (a17-3070_1ex99d1.htm)") is
+  read as a side exhibit when another exhibit filed that day took the plain name; the Q4 16 date was added by hand.
+- **Stale `<dimension>`** in the model hid MOD rows below 469 from read-only readers, so `modmap` picked the leverage
+  section's FCF helper row; fixed at the source in safe_save (see model-historicals NOTES).
+

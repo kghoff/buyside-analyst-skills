@@ -34,7 +34,8 @@ DOC_TYPES = [("call", r"\bcalls?\b|transcript"), ("release", r"release|press|ear
 
 # /collect-documents's category folders (the Markdown sits in <Category>/_md/)
 CATEGORY_TYPES = {"press releases": "release", "investor decks": "deck", "investor events": "event", "earnings calls": "call",
-                  "10-ks": "10-K", "10-qs": "10-Q", "segment recasts": "recast"}
+                  "10-ks": "10-K", "10-qs": "10-Q", "segment recasts": "recast",
+                  "sellside research": "sellside"}
 
 
 def classify_doc(path):
@@ -148,7 +149,7 @@ def wide_cells(line):
     return clean(label), vals
 
 
-DASH_CELLS = ("—", "-", "–")
+DASH_CELLS = ("—", "-", "–", "--")
 
 
 def wide_tables(text):
@@ -273,10 +274,142 @@ def wide_shares(text, s, P):
     return out
 
 
+# ---------------------------------------------------------------- "specified items" reconciliations (Abbott)
+# One table per period, headed by a period token (3Q26, 12M24; 9M26 is year-to-date and skipped). The line items run
+# down the rows (Gross Margin, R&D, ..., Earnings before taxes, Taxes, Net Earnings, Diluted EPS) and three columns run
+# across: As Reported (GAAP) | Specified Items | As Adjusted. A separate 'Details of Specified Items' table (captioned
+# with its quarter or year) splits each line's specified items by category.
+SPEC_TOKEN = re.compile(r"^([1-4])Q(\d\d)$|^(\d{1,2})M(\d\d)$")
+SPEC_CAPTION = re.compile(r"\b(first|second|third|fourth) quarter ended\b.*?(\d{4})|\b(?:twelve months|year) ended\b.*?(\d{4})", re.I)
+QWORD = {"first": 1, "second": 2, "third": 3, "fourth": 4}
+
+
+def _squash(s): return re.sub(r"[\s|]+", "", s).lower()
+
+
+def spec_tables(text):
+    """-> summaries [(period, basis, header line, {line label: (gaap, specified, adjusted, md line)})],
+          details {period: (categories, {line label: ([category values] or [total], md line)})}"""
+    L = text.split("\n"); summaries, details = [], {}
+    for i, line in enumerate(L):
+        if not line.lstrip().startswith("|"): continue
+        toks = [c.strip() for c in line.strip().strip("|").split("|") if c.strip()]
+        if len(toks) == 1 and SPEC_TOKEN.match(toks[0]):
+            sub = " ".join(L[i + 1:i + 4])
+            if not ("asreported" in _squash(sub) and "specifieditems" in _squash(sub) and "asadjusted" in _squash(sub)): continue
+            m = SPEC_TOKEN.match(toks[0])
+            if m.group(1): per, basis = f"Q{m.group(1)} {m.group(2)}", "3M"
+            elif m.group(3) == "12": per, basis = f"FY {m.group(4)}", "FY"
+            else: continue                                                  # 6M / 9M: year to date
+            rows = {}
+            for k in range(i + 1, len(L)):
+                if not L[k].lstrip().startswith("|"): break
+                lab, vals = wide_cells(L[k])
+                nums = [v for v, pct in vals if not pct]
+                if lab and len(nums) >= 3: rows.setdefault(re.sub(r" \((loss|benefit)\)", "", norm(lab)), (nums[0], nums[1], nums[2], k + 1))
+            summaries.append((per, basis, i + 1, rows))
+        elif "total" in _squash(line) and "specifieds" in _squash(line):
+            cap = next((SPEC_CAPTION.search(L[k]) for k in range(i - 1, max(-1, i - 12), -1) if SPEC_CAPTION.search(L[k])), None)
+            if not cap: continue
+            per = f"Q{QWORD[cap.group(1).lower()]} {cap.group(2)[2:]}" if cap.group(1) else f"FY {cap.group(3)[2:]}"
+            cats = [re.sub(r"\s*\([a-z]\)\s*$", "", re.sub(r"(?<=[a-z])(?=[A-Z])", " ", c)).replace("- ", "-").strip()
+                    for c in toks[:-1]]
+            rows = {}
+            for k in range(i + 1, len(L)):
+                if not L[k].lstrip().startswith("|"): break
+                lab, vals = wide_cells(L[k])
+                if lab and vals: rows.setdefault(norm(re.sub(r"\s*\([a-z]\)\s*$", "", lab)), ([v for v, _ in vals], k + 1))
+            details.setdefault(per, (cats, rows))
+    return summaries, details
+
+
+def _spec_row(rows, pat, avoid=None):
+    return next((v for k, v in rows.items() if re.search(pat, k) and not (avoid and re.search(avoid, k))), None)
+
+
+def specified_candidates(text, s, P, model_of):
+    """Turn each specified-items table into the candidates the row-wise reader makes. model_of(metric, period) is
+    the model's GAAP value: it decides whether the company's gross margin is the model's gross profit as printed, or
+    only after adding back the intangible-amortization line the company deducts inside gross margin."""
+    cands, unresolved = [], []
+    summaries, details = spec_tables(text)
+    yy = int(P[3:])
+    for per, basis, hline, rows in summaries:
+        cur = per == P or (P.startswith("Q4") and per == f"FY {yy:02d}")
+        base = {"period": per, "basis": basis, "vintage": "current" if cur else "comparative", "source": s["path"], "type": s["type"],
+                "page": page_of(text, hline), "col": 0, "ncols": 1, "table": f"specified items {per}"}
+        det_cats, det = details.get(per, ([], {}))
+        def by_category(pat, avoid=None):
+            d = _spec_row(det, pat, avoid)
+            if d and len(d[0]) == len(det_cats) + 1 and abs(sum(d[0][:-1]) - d[0][-1]) <= 0.5:
+                return [(c, v, d[1]) for c, v in zip(det_cats, d[0][:-1]) if v], d[0][-1]
+            return None, None
+        amort = _spec_row(rows, r"^intangible amortization")
+        gm = _spec_row(rows, r"^gross margin")
+        if gm:
+            g, sp, ad, ln = gm
+            mv = model_of("gross profit", per)
+            inside = bool(amort) and abs(amort[2]) < 0.5 and mv is not None and abs(mv - (g + amort[0])) <= 3 < abs(mv - g)
+            start = g + amort[0] if inside else g
+            items, tot = by_category(r"^gross margin")
+            if items is not None and abs(tot - sp) <= 0.5:
+                if inside: items = [x for x in items if not re.search(r"amortization", x[0], re.I)]
+            else:
+                items = [("Specified items", sp - (amort[0] if inside else 0), ln)]
+            cands.append({**base, "metric": "non-gaap gross profit", "line": ln, "start": start, "end": ad, "items": items,
+                          "start_label": "GAAP Gross Margin" + (" + Intangible Amortization (the company deducts it in gross margin)" if inside else ""),
+                          "end_label": "As Adjusted Gross Margin", "start_metric": "gross profit"})
+        ebt = _spec_row(rows, r"before taxes")
+        tax = _spec_row(rows, r"^(taxes|tax expense) on earnings")
+        ni = _spec_row(rows, r"^(net earnings|(net )?earnings from continuing operations)$")
+        if ebt and tax and ni:
+            items, tot = by_category(r"before taxes")
+            if items is None or abs(tot - ebt[1]) > 0.5: items = [("Specified items before tax", ebt[1], ebt[3])]
+            items = items + [("Tax effect of specified items", -tax[1], tax[3])]
+            start = ni[0]
+            # the table starts from earnings from continuing operations; the model's net income includes discontinued
+            # operations. Start from the model's net income and take its discontinued-operations row out first.
+            mv, dv = model_of("net income", per), model_of("discontinued operations", per)
+            if mv is not None and dv and abs(mv - ni[0]) > 0.15 and abs(mv - dv - ni[0]) <= 3:
+                start = mv; items = [("Discontinued operations, net of tax", -dv, ni[3])] + items
+                if abs(mv - dv - ni[0]) > 0.15: items.append(("Rounding (each line is rounded to whole millions)", ni[0] - (mv - dv), ni[3]))
+            if abs(start + sum(v for _, v, _ in items) - ni[2]) > 0.5:
+                unresolved.append((s["path"], "non-gaap net income", per, "specified items do not add up")); continue
+            cands.append({**base, "metric": "non-gaap net income", "line": ni[3], "start": start, "end": ni[2], "items": items,
+                          "start_label": "As Reported (GAAP) " + next(k for k, v in rows.items() if v is ni),
+                          "end_label": "As Adjusted " + next(k for k, v in rows.items() if v is ni), "start_metric": "net income"})
+        eps = _spec_row(rows, r"^diluted earnings per (common )?share")
+        if eps: cands.append({**base, "metric": "reported non-gaap eps", "line": eps[3], "label": "As Adjusted diluted EPS", "value": eps[2]})
+    return cands, unresolved
+
+
+def spec_shares(text, s, P):
+    """The company prints no separate count for adjusted EPS: its release's GAAP diluted count (the line under the
+    EPS summary, one column per period token in the table header) is the one adjusted EPS divides by."""
+    out, toks, prev = [], [], ""
+    for i, line in enumerate(text.split("\n")):
+        if not line.lstrip().startswith("|"): toks = []; continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|") if c.strip()]
+        t = [c for c in cells if SPEC_TOKEN.match(c)]
+        if t: toks = t; continue
+        lab, vals = wide_cells(line)
+        lab, prev = (f"{prev} {lab}" if prev and vals else lab), ("" if vals else lab)   # a label split over two rows
+        if not toks or not re.match(r"^average number of common shares outstanding ?plus dilutive", norm(lab)): continue
+        for k, (tok, (v, _)) in enumerate(zip(toks, vals)):
+            m = SPEC_TOKEN.match(tok)
+            if m.group(1): per, basis = f"Q{m.group(1)} {m.group(2)}", "3M"
+            elif m.group(3) == "12": per, basis = f"FY {m.group(4)}", "FY"
+            else: continue
+            out.append({"metric": "non-gaap diluted shares", "period": per, "basis": basis, "vintage": "current" if k == 0 else "comparative",
+                        "source": s["path"], "type": s["type"], "line": i + 1, "page": page_of(text, i + 1), "value": v, "col": k, "ncols": len(toks),
+                        "label": f"{lab} (GAAP diluted count; the company's adjusted EPS uses it)"})
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True); ap.add_argument("--model", required=True); ap.add_argument("--work", required=True)
-    ap.add_argument("--gaap-rows", default='{"gross profit": "^gross profit", "operating income": "^operating income", "net income": "^net income"}',
+    ap.add_argument("--gaap-rows", default='{"gross profit": "^gross profit", "operating income": "^operating income", "net income": "^net income", "discontinued operations": "discontinued operations"}',
                     help="JSON: block start metric -> regex of the model's GAAP row label (income statement section)")
     a = ap.parse_args(); os.makedirs(a.work, exist_ok=True)
     srcs, pdf_only = discover(a.src)
@@ -353,7 +486,8 @@ def main():
                               "model_start": mv, "start_matches_model": (mv is not None and abs(mv - start) < 0.15) if start_metric in gaap else None,
                               "col": i, "ncols": n})
         wc, wu = wide_candidates(text, s, P, rev_of)
-        unresolved += wu
+        sc, su = specified_candidates(text, s, P, model_val)
+        wc += sc; unresolved += wu + su
         for c in wc:
             if "start" in c:
                 mv = model_val(c["start_metric"], c["period"]) if c["start_metric"] in gaap else None
@@ -370,7 +504,8 @@ def main():
                 c["start_matches_model"] = False if (c["period"], c["basis"]) in off_basis else None
             cands.append(c)
         if wc and s["type"] == "release":
-            cands += [dict(x, start_matches_model=False if (x["period"], x["basis"]) in off_basis else None) for x in wide_shares(text, s, P)]
+            cands += [dict(x, start_matches_model=False if (x["period"], x["basis"]) in off_basis else None)
+                      for x in (spec_shares(text, s, P) if sc else wide_shares(text, s, P))]
     json.dump({"candidates": cands, "unresolved": unresolved, "gaap_rows": gaap, "restatement_bridges": bridges}, open(os.path.join(a.work, "candidates.json"), "w"), indent=1)
     # ---------------- inventory report
     by = {}

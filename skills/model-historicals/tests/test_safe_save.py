@@ -139,3 +139,16 @@ def test_a_block_move_keeps_every_formula_pointing_at_the_same_cells(tmp_path):
     wb.save(src)
     with pytest.raises(S.RefIntoDeleted):
         S.remap_rows(Package(src), "MOD", S.move_fn(3, 4, 11), strict=True)
+
+
+def test_rows_written_below_the_old_last_row_grow_the_sheet_size(tmp_path):
+    # /model-ratios appends FREE CASH FLOW below the old last row. If the stored size (<dimension>) isn't grown, every
+    # read-only reader (later skills' row maps) stops at the old last row and never sees those rows: ABT, 2026-11-18.
+    src = _model(tmp_path)
+    wb = _edit(src)
+    wb["MOD"]["B40"], wb["MOD"]["C40"] = "(+/-) Free Cash Flow", 7
+    out = str(tmp_path / "out.xlsx")
+    S.safe_save(wb, src, out)
+    ws = openpyxl.load_workbook(out, read_only=True)["MOD"]
+    assert ws.max_row == 40
+    assert [r[0] for r in ws.iter_rows(min_row=40, max_row=40, min_col=2, max_col=2, values_only=True)] == ["(+/-) Free Cash Flow"]

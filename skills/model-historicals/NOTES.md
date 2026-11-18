@@ -94,3 +94,7 @@ the split adjustment no longer lines up with the current DXCM folder). Not cause
   differences included. Blue means "reported number from the filings," not "typed constant." Subtotals and ratios
   are black, and links between sections are green. This is set by `INPUT_ROLES` / `color_for` in build.py and
   checked by verify.py.
+- **safe_save grows `<dimension>`** (2026-11-18): row moves shifted it, but rows written below the old last row (model-
+  ratios's FREE CASH FLOW section) didn't grow it, and read-only openpyxl readers stop at its last row. ABT's MOD said
+  A1:BY469 with rows to 484. `put_cells` now grows it to cover every written cell. Test: `test_safe_save.py`.
+

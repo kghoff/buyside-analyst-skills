@@ -49,12 +49,12 @@ def headline(text):
 
 
 def timing(text, default):
-    t = re.sub(r"\s+", " ", text[:20000])
+    t = re.sub(r"\s+", " ", text)
     m = re.search(r"(\d{1,2})(?::(\d\d))?\s*([ap])\.?\s?m\.?,?\s*\(?\s*(Eastern|Pacific|Central|Mountain|[ECMP][SD]?T)\b", t, re.I)
     if m:
         h = int(m[1]) % 12 + (12 if m[3].lower() == "p" else 0)
         et = h + TZ.get(m[4].lower(), 0) + int(m[2] or 0) / 60
-        return ("After close" if et >= 16 else "Same day" if et < 9.5 else default), f"call at {m.group(0)}"
+        return ("After close" if et >= 16 else "Same day" if et <= 9.5 else default), f"call at {m.group(0)}"
     if re.search(r"after (the )?(market|stock market)s? clos", t, re.I):
         return "After close", "text: after the market close"
     if re.search(r"before (the )?(market|stock market)s? open", t, re.I):

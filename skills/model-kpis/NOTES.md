@@ -98,6 +98,35 @@ ng_verify 226 checks, 0 other tabs changed. /model-ratios rerun: no "edited" sto
   the skill fills FY15 / FY16 EPS instead.
 - **Stock split:** pre-split share counts are ×4 (`=94.1*4`), and pre-split EPS is checked ÷4.
 
+## ABT (second company, 2026-11-17)
+
+- **"Specified items" reconciliations** (`specified_candidates`, `spec_shares` in ng_extract.py): one table per period
+  headed by a period token (3Q26, 12M24; 6M / 9M skipped), line items down the rows, As Reported | Specified Items |
+  As Adjusted across, plus a captioned "Details of Specified Items" table split by category. Before this the
+  extractor found 0 candidates for ABT. Tests: `tests/test_specified.py`.
+  - Gross margin there is after intangible amortization; when GAAP margin + the printed amortization line equals the
+    model's gross profit, the bridge starts there and drops the amortization category (not added back twice).
+  - 2016-2020 tables start from earnings from continuing operations: the bridge starts at the model's net income and
+    takes the model's discontinued-operations row out first (a link row in the plan, `sign: -1`).
+  - Labels vary: "(Loss)", "(benefit)", "Net Earnings from Continuing Operations", "AsReported(GAAP)" run together.
+- **Two-class EPS** (ng_build.py): optional EPS row `{"role": "item", "id": "partsec"}` = non-GAAP net income x the
+  model's GAAP participating-securities share (formula, IFERROR - the Evaluator has no IF). It matched ABT's reported
+  adjusted EPS in all 14 periods where the GAAP allocation is filled; the 12 left are years where it is 0.
+- **Sell-side notes are their own document type** (`sellside`): "JPM earnings recap" matched "earnings" and was
+  ranked as a company release in the KPI reading list.
+- Result: ng_verify 156 checks, 12 failed (the two-class years above), all other counts 0; kpi_check 3,404 values,
+  73 metrics, `--built` 0 model problems. DXCM: the new reader adds 0 candidates and 0 unresolved.
+- KPI lessons: readers took pro forma figures (2016 St. Jude businesses, Exact Sciences' pre-close sales) as sales -
+  tell readers "the company's own reported figures only" for dollars; comparable growth *rates* are fine with a note.
+  A business moved between lines mid-year (ICM, Q2 19) breaks the FY sum: `prefer_restated` + the restated quarter.
+- **Share label split over two rows** (2026-11-18): the Q4 20 - Q2 22 releases print "Average Number of Common Shares
+  Outstanding" / "Plus Dilutive Common Stock Options 1,789" on two rows. `spec_shares` joins a label-only row to the
+  next one. Missing it left Q4 20 and Q1 21 EPS blank (a year of /model-price-history's P/E chart); after: 159 checks,
+  the same 12 failed.
+- **ng_verify on a `--replace` rerun** reports thousands of cells "changed outside the sections" when the before copy
+  already has KEY OPERATING METRICS (it aligns rows as if that section were new). A direct cell compare found 0
+  changes outside NON-GAAP METRICS. Not fixed yet.
+
 ## Known limitations / next steps
 
 - **Reconciliation blocks follow "GAAP X → adjustments → Non-GAAP X".** Non-GAAP opex by line, free cash flow

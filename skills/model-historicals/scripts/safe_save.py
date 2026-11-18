@@ -354,7 +354,19 @@ def put_cells(xml, cells, row_attrs):
                 cs[c] = x
         rows[r] = head + "".join(cs[c] for c in sorted(cs)) + "</row>"
     new_body = "".join(rows[r] for r in sorted(rows))
-    return xml[:sd.start()] + f"<sheetData>{new_body}</sheetData>" + xml[sd.end():]
+    xml = xml[:sd.start()] + f"<sheetData>{new_body}</sheetData>" + xml[sd.end():]
+    return _grow_dimension(xml, new_body)
+
+
+def _grow_dimension(xml, body):
+    """Grow <dimension ref> to cover every cell written: read-only readers stop at its last row."""
+    m = re.search(r'<dimension ref="([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?"', xml)
+    refs = [(colnum(c), int(r)) for c, r in re.findall(r'<c r="([A-Z]+)(\d+)"', body)]
+    if not m or not refs:
+        return xml
+    c2, r2 = (colnum(m.group(3)), int(m.group(4))) if m.group(3) else (colnum(m.group(1)), int(m.group(2)))
+    c2, r2 = max(c2, max(c for c, _ in refs)), max(r2, max(r for _, r in refs))
+    return xml[:m.start()] + f'<dimension ref="{m.group(1)}{m.group(2)}:{colname(c2)}{r2}"' + xml[m.end():]
 
 
 def _notes(ws):

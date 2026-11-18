@@ -175,6 +175,12 @@ def main():
                 if ic: put(R["item:ifconv"], c, ic["value"], f"Source: {where(ic)}\n'{ic['label']}' (if-converted add-back)", True)
                 else: put(R["item:ifconv"], c, 0, "No if-converted add-back reported for this period.", True)
                 put(R["sum:ni_eps"], c, f"={L(c)}{R['link:ni']}+{L(c)}{R['item:ifconv']}", None)
+            elif "item:partsec" in R:         # optional: two-class EPS companies (unvested restricted stock shares in earnings)
+                ps, nir = model_link({"label": "participating securities"}), model_link({"label": "^net income$"})
+                put(R["item:partsec"], c, f"=IFERROR({L(c)}{R['link:ni']}*{L(c)}{ps}/{L(c)}{nir},0)",
+                    f"Non-GAAP net income x the GAAP share allocated to participating securities (row {ps} / row {nir}). "
+                    "The company does not print the allocation on adjusted earnings; 0 where the GAAP allocation is 0.")
+                put(R["sum:ni_eps"], c, f"={L(c)}{R['link:ni']}+{L(c)}{R['item:partsec']}", None)
             else:
                 put(R["sum:ni_eps"], c, f"={L(c)}{R['link:ni']}", "Equals non-GAAP net income: no convertible notes, so no if-converted add-back.")
             sh = pick("non-gaap diluted shares", key)
@@ -192,6 +198,8 @@ def main():
             rr = rowof[(m["key"], r["label"])]; role = r["role"]
             if role == "start": txt = f"Company's GAAP starting line, linked to the model's '{ws.cell(model_link(r['link']), 2).value.strip()}' row."
             elif role == "end": txt = "Non-GAAP total = the rows above. Each period's note shows the company's reported figure; ng_verify checks they agree."
+            elif m["key"] == "eps" and r.get("id") == "partsec": txt = ("Two-class EPS: the slice of non-GAAP net income allocated to unvested restricted stock, "
+                                                                         "at the same share as the GAAP allocation (model row 'Earnings Allocated to Participating Securities' / Net Income).")
             elif m["key"] == "eps": txt = {"link": "Non-GAAP net income from the bridge above.", "item": "Interest on convertible notes added back for diluted EPS (if-converted method); 0 where none was reported.",
                                           "sum": "Non-GAAP net income used for diluted EPS.", "shares": "Diluted shares the company used for non-GAAP EPS (split-adjusted where noted).",
                                           "eps": "Non-GAAP diluted EPS = net income for diluted EPS / diluted shares. Each period's note shows the reported figure."}.get(role, "")

@@ -107,3 +107,11 @@ def test_period_from_year_first_and_old_file_names():
     assert period_of("Press Releases/_md/Q3 24 DXCM release 2024-10-24.md") == "Q3 24"
     assert period_of("10-Ks/_md/DXCM 2024 10-K.md") == "FY 24"
     assert period_of("Investor Events/_md/2023-06-23 DXCM Investor Day.md") is None
+
+
+def test_sellside_notes_are_not_company_releases_or_calls():
+    # 'JPM earnings recap' matched 'earnings' and was ranked as a company release, so a broker's figures could be read
+    # into the KPI history as if the company printed them
+    from ng_extract import classify_doc
+    assert classify_doc("/x/ABT/Sellside Research/1 Broker Research/_md/2026-10-21 JPM earnings recap - Model Update.md") == "sellside"
+    assert classify_doc("/x/ABT/Sellside Research/1 Broker Research/_md/2026-10-21 JPM earnings recap - Key Takeaways from Our 3Q26 Call.md") == "sellside"
