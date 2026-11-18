@@ -329,3 +329,57 @@ def test_a_stated_format_survives_a_rerun(tmp_path):
     B.build(o1, plan, o2)
     ws = _o.load_workbook(o2)["MOD"]
     assert ws[f"H{r}"].number_format == "0.0%" and ws[f"N{r}"].number_format == "0.0%"
+
+
+def test_a_fresh_model_without_a_revenue_build_gets_one_styled_like_its_other_titles(tmp_path):
+    # a model straight from /model-historicals has no REVENUE BUILD: the forecast must create it, not crash
+    import openpyxl as _o
+    from openpyxl.styles import PatternFill
+    from test_modmap import _book as _b
+    src = _b(tmp_path)
+    wb = _o.load_workbook(src)
+    for c in range(1, 23):
+        wb["MOD"].cell(4, c).fill = PatternFill("solid", fgColor="FF002060")     # the user's section title colour
+    wb.save(src)
+    plan = {"driver_sections": [{"title": "REVENUE BUILD", "after": "INCOME STATEMENT"},
+                                {"title": "COST DRIVERS", "after": "REVENUE BUILD"}]}
+    out = str(tmp_path / "o.xlsx")
+    B.build(src, plan, out)
+    w = _o.load_workbook(out)["MOD"]
+    titles = [c.value for c in w["A"] if c.value]
+    assert titles.index("INCOME STATEMENT") < titles.index("REVENUE BUILD") < titles.index("COST DRIVERS")
+    for t in ("REVENUE BUILD", "COST DRIVERS"):
+        r = next(c.row for c in w["A"] if c.value == t)
+        assert w.cell(r, 4).fill.fgColor.rgb == "FF002060"
+
+
+def test_a_rerun_keeps_the_number_format_of_a_new_input_row(tmp_path):
+    # ABT 2026-11: a new $ M input row with no history prints #,##0.0 on the first build; the fill pass then styles its
+    # history cells (grey, General), and a rerun copied that General format onto every forecast input ("150" not "150.0")
+    plan = {"new_rows": [{"key": "REVENUE BUILD | Launch sales", "after": "REVENUE BUILD", "unit": "$ M"}],
+            "rows": [{"key": "REVENUE BUILD | Launch sales", "method": "annual", "kind": "annual",
+                      "values": {"2026E": 150, "2027E": 180}, "source": "x"}]}
+    src, o1, o2 = _model(tmp_path), str(tmp_path / "o1.xlsx"), str(tmp_path / "o2.xlsx")
+    B.build(src, plan, o1)
+    r = ModMap(o1).row("REVENUE BUILD | Launch sales")
+    f1 = openpyxl.load_workbook(o1)["MOD"][f"N{r}"].number_format
+    from openpyxl.styles import PatternFill
+    wb = openpyxl.load_workbook(o1)                       # the user's fill convention greys the FY history cell (General)
+    wb["MOD"][f"H{r}"].fill = PatternFill("solid", fgColor="FFD9D9D9")
+    wb.save(o1)
+    B.build(o1, plan, o2)
+    assert f1 == "#,##0.0" and openpyxl.load_workbook(o2)["MOD"][f"N{r}"].number_format == f1
+
+
+def test_the_users_own_general_line_keeps_general_in_the_forecast(tmp_path):
+    # share counts are typed in General in the user's history; the forecast must print like them, not as #,##0.0
+    plan = {"rows": [{"key": "INCOME STATEMENT | Revenue:", "method": "annual", "kind": "annual",
+                      "values": {"2026E": 500, "2027E": 560}, "source": "x"}]}
+    src, out = _model(tmp_path), str(tmp_path / "o.xlsx")
+    wb = openpyxl.load_workbook(src)
+    for c in HIST:                                       # a styled history cell (blue typed) in General
+        wb["MOD"][f"{c}5"].number_format = "General"
+        wb["MOD"][f"{c}5"].font = Font(color="FF0000FF")
+    wb.save(src)
+    B.build(src, plan, out)
+    assert openpyxl.load_workbook(out)["MOD"]["N5"].number_format == "General"

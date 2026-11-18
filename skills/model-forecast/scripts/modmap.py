@@ -1,7 +1,9 @@
 """The user's MOD tab layout: period columns (row 2) and row keys ('<section> | <label>').
 
 usage: python3 modmap.py rowmap <model.xlsx> <out.md>     (the row list the plan agent picks keys from)
-Analysis rows (% yoy, % of sales, ...) are not keys of their own: ModMap.analysis(key, name) finds the one under a line."""
+Analysis rows (% yoy, % of sales, ...) are not keys of their own: ModMap.analysis(key, name) finds the one under a line.
+Duplicate labels in a section are numbered (#2, ...); a row with a unit or a number takes the plain key before a
+label-only row (ModMap.label_only), so a layout group named like its own line never takes the line's key."""
 import re
 import sys
 
@@ -15,14 +17,16 @@ ANALYSIS = {"% yoy", "% 2 year", "% qoq", "% of sales", "% margin", "bps yoy", "
 class ModMap:
     def __init__(self, path, tab="MOD"):
         ws = openpyxl.load_workbook(path, read_only=True)[tab]
-        rows = list(ws.iter_rows(min_row=1, max_col=3, values_only=True))
+        full = list(ws.iter_rows(min_row=1, values_only=True))
+        rows = [(tuple(r) + (None,) * 3)[:3] for r in full]
         self.labels = {}                                   # period label -> column letter
         hdr = next(ws.iter_rows(min_row=2, max_row=2, values_only=True))
         for k, v in enumerate(hdr, start=1):
             if v is not None and k > 3:
                 self.labels[str(v).strip()] = L(k)
         self.order = list(self.labels)
-        self.keys, self.lines, section, seen = {}, [], "", {}
+        pcols = [k - 1 for k, v in enumerate(hdr, start=1) if v is not None and k > 3]
+        self.keys, self.lines, self.label_only, section, found = {}, [], set(), "", []
         for i, (a, b, c) in enumerate(rows, start=1):
             if a:
                 section = str(a).strip()
@@ -31,12 +35,16 @@ class ModMap:
             lab = str(b).strip()
             if lab.lower() in ANALYSIS:
                 continue
-            key = f"{section} | {lab}"
+            if c in (None, "") and all(full[i - 1][k] in (None, "") for k in pcols if k < len(full[i - 1])):
+                self.label_only.add(i)                     # no unit, no number (a new row, or a layout group name)
+            found.append((i, f"{section} | {lab}", c))
+        seen, names = {}, {}
+        for i, key, c in sorted(found, key=lambda x: x[0] in self.label_only):   # a row with data takes the plain key
             seen[key] = seen.get(key, 0) + 1
-            if seen[key] > 1:
-                key = f"{key} #{seen[key]}"
-            self.keys[key] = i
-            self.lines.append((i, key, c))
+            names[i] = key if seen[key] == 1 else f"{key} #{seen[key]}"
+        for i, key, c in found:
+            self.keys[names[i]] = i
+            self.lines.append((i, names[i], c))
         self.analysis_rows = {i: str(r[1]).strip().lower() for i, r in enumerate(rows, start=1)
                               if r[1] and str(r[1]).strip().lower() in ANALYSIS}
 

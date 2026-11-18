@@ -59,14 +59,13 @@ def plan_order(path, plan):
     m = ModMap(path)
     ws = openpyxl.load_workbook(path, read_only=True)[TAB]
     rows = list(ws.iter_rows(min_row=1, max_col=3, values_only=True))
-    full = {i: r for i, r in enumerate(ws.iter_rows(min_row=1, values_only=True), start=1)}
     out, bad = {}, []
     for sec in plan.get("layout", []):
         t, last = _section_rows(rows, sec["section"])
-        titles = {g["title"] for g in sec["groups"]}
         lines = [(r, k) for k, r in m.keys.items() if t < r <= last]
-        empty = lambda r: not any(v not in (None, "") for v in full[r][3:])
-        heads = {r for r, k in lines if k.split(" | ", 1)[1] in titles and empty(r)}
+        listed = [k for g in sec["groups"] for k in g["rows"]]
+        # an earlier layout's group name (any title): label only, not listed, first row of the section or after a blank
+        heads = {r for r, k in lines if r in m.label_only and k not in listed and (r == t + 1 or not any(rows[r - 2]))}
         unit = {}
         for r, k in lines:
             if r in heads:
@@ -75,7 +74,6 @@ def plan_order(path, plan):
             while e in m.analysis_rows:
                 e += 1
             unit[k] = list(range(r, e))
-        listed = [k for g in sec["groups"] for k in g["rows"]]
         bad += [f"{sec['section']}: '{k}' is in no group" for k in unit if k not in listed]
         bad += [f"{sec['section']}: '{k}' is not a row of this section" for k in listed if k not in unit]
         bad += [f"{sec['section']}: '{k}' is in two groups" for k in set(listed) if listed.count(k) > 1]
