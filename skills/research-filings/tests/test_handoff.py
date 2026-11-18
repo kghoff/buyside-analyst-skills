@@ -66,3 +66,35 @@ def test_sector_header_matches_old_and_new_wording():
     import handoff
     for h in ("XHE close (stooq adj.)", "XHE close (dividends in)"):
         assert re.match(handoff.SECTOR_HDR, h).group(1) == "XHE"
+
+
+def _px_model(tmp_path, headers):
+    # a throwaway workbook with only the Px Data header row (row 4), as /model-price-history writes it
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Px Data"
+    for i, h in enumerate(headers):
+        ws.cell(row=4, column=i + 1, value=h)
+    p = str(tmp_path / "m.xlsx")
+    wb.save(p)
+    return p
+
+
+def test_stock_returns_read_the_total_return_column_when_px_data_has_one(tmp_path):
+    # Yahoo-era Px Data: B is the traded price (no dividends), D the total return. The yearly returns and the big
+    # moves must read D, or a dividend payer's return vs SPY (a total return) is understated every year. The weekly
+    # block repeats the header further right; its rows are weeks, so the daily (leftmost) one is the right column.
+    from xlsx import Package
+    p = _px_model(tmp_path, ["Date", "ABT close", "SPY close", "ABT total return (dividends in)", "ABT daily return",
+                             None, None, "ABT total return (dividends in)"])
+    pkg = Package(p)
+    assert handoff._stock_col(pkg, handoff._strings(pkg)) == "D"
+
+
+def test_stock_returns_read_column_b_on_models_without_a_total_return_column(tmp_path):
+    # Models built before the Yahoo switch (stooq): B is already dividend-adjusted and D is the daily return.
+    from xlsx import Package
+    p = _px_model(tmp_path, ["Date", "DXCM close", "SPY close", "DXCM daily return"])
+    pkg = Package(p)
+    assert handoff._stock_col(pkg, handoff._strings(pkg)) == "B"

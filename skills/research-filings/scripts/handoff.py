@@ -885,8 +885,8 @@ def stock_blocks(pkg, st, part, H, ticker, sector):
     HT[r] = 22
     r += 1
     C[f"A{r}"] = ("s", "Written by /research-filings from its stock section; a rerun replaces everything from the row above "
-                       "down. Green / red = beat / lagged SPY that year. Returns are total returns from Px Data (stooq "
-                       "adjusted closes, dividends included).", sty["it"])
+                       "down. Green / red = beat / lagged SPY that year. Returns are total returns from Px Data (dividends "
+                       "included).", sty["it"])
     r += 2
     # yearly returns
     C[f"A{r}"] = ("s", f"{ticker} yearly returns vs the market", sty["t"])
@@ -901,10 +901,11 @@ def stock_blocks(pkg, st, part, H, ticker, sector):
     first = r
     look = lambda y, col: f"LOOKUP(DATE({y},12,31),'Px Data'!$A$5:$A$20000,'Px Data'!${col}$5:${col}$20000)"
     sec_col = H.get("sector_col")
+    sc = H.get("stock_col") or "B"           # the stock's total-return column in Px Data (see _stock_col)
     for y in range(years[0], years[1] + 1):
         lab = f"{y}" if y < years[1] or not H.get("last_is_ytd") else f"{y} YTD"
         C[f"A{r}"] = ("s" if "YTD" in lab else "n", lab if "YTD" in lab else y, sty["yr"])
-        C[f"B{r}"] = ("f", f"IFERROR({look(y, 'B')}/{look(y - 1, 'B')}-1,\"n.a.\")", sty["pct"])
+        C[f"B{r}"] = ("f", f"IFERROR({look(y, sc)}/{look(y - 1, sc)}-1,\"n.a.\")", sty["pct"])
         C[f"C{r}"] = ("f", f"IFERROR({look(y, 'C')}/{look(y - 1, 'C')}-1,\"n.a.\")", sty["pct"])
         if sec_col:
             C[f"D{r}"] = ("f", f"IFERROR({look(y, sec_col)}/{look(y - 1, sec_col)}-1,\"n.a.\")", sty["pct"])
@@ -930,7 +931,7 @@ def stock_blocks(pkg, st, part, H, ticker, sector):
            (f"A{first}:B{last} E{first}:E{last}", f"AND(ISNUMBER($E{first}),$E{first}>=0)", grn)]
     r += 1
     C[f"A{r}"] = ("s", "Total", sty["lab"])
-    C[f"B{r}"] = ("f", f"{look(years[1], 'B')}/{look(years[0] - 1, 'B')}-1", sty["pct"])
+    C[f"B{r}"] = ("f", f"{look(years[1], sc)}/{look(years[0] - 1, sc)}-1", sty["pct"])
     C[f"C{r}"] = ("f", f"{look(years[1], 'C')}/{look(years[0] - 1, 'C')}-1", sty["pct"])
     r += 2
     # event moves
@@ -970,7 +971,7 @@ def stock_blocks(pkg, st, part, H, ticker, sector):
         for e in nv:
             C[f"A{r}"] = ("n", _serial(e["from"]), sty["date"])
             C[f"B{r}"] = ("n", _serial(e["to"]), sty["date"])
-            for col, pc in (("C", "B"), ("D", "C")):
+            for col, pc in (("C", sc), ("D", "C")):
                 lk = lambda cell: f"LOOKUP({cell},'Px Data'!$A$5:$A$20000,'Px Data'!${pc}$5:${pc}$20000)"
                 C[f"{col}{r}"] = ("f", f"IFERROR({lk(f'B{r}')}/{lk(f'A{r}')}-1,\"n.a.\")", sty["pct"])
             C[f"E{r}"] = ("s", e["what"], sty["txt"])
@@ -1021,6 +1022,17 @@ def _sector(pkg, ss):
             if t and t.group(1) != "MTUM":
                 return t.group(1), m.group(1)
     return None, None
+
+
+def _stock_col(pkg, ss):
+    """The stock's total-return column in Px Data: the leftmost row-4 header ending 'total return (dividends in)'
+    (Yahoo-era models, where B is the traded price), else B (older stooq models, where B is already dividend-adjusted)."""
+    cells = _cells(pkg.text(_sheet_part(pkg, "Px Data")), ss)
+    for ref, v in sorted(cells.items(), key=lambda kv: colnum(re.match(r"[A-Z]+", kv[0]).group(0))):
+        m = re.match(r"([A-Z]+)4$", ref)
+        if m and isinstance(v, str) and v.endswith("total return (dividends in)"):
+            return m.group(1)
+    return "B"
 
 
 def context(model, work):
@@ -1113,6 +1125,7 @@ def main():
             out["alpha_axis_assumed"] = axis
         sector, sec_col = _sector(pkg, ss)
         H["sector_col"] = sec_col
+        H["stock_col"] = _stock_col(pkg, ss)
         start, sk2 = stock_blocks(pkg, st, part, H, ticker, sector)
         out.update({"annotation_cells_filled": filled, "kept_users_cells": skipped + sk2, "alpha_notes": n,
                     "stock_rows_from": start})
