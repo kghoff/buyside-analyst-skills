@@ -4,12 +4,11 @@ check(plan, values_path, research_root, context) returns plain-English problems;
 - a cell (Sheet!$A$1): the recalculated model's value must match anchor_value, allowing the rounding anchor_value
   shows (a stated 81.8 matches 81.755; decimals are counted as written, so 30.0 matches 29.96 but not 29.6); text
   must be equal.
-- a forward sum (ntm:<metric>, ntm1:<metric>, y3:<metric>; metric eps, rev, gp, ebitda or fcf): context.json
-  metrics[<metric>][ntm|ntm1|y3].value (the sum of the four MOD quarters), same rounding rule.
 - a research line (<path>.md:N, relative to <research_dir>/<TICKER>/ and inside it): line N must print the number,
   as is, as a percent (x100 when followed by %) or in bps (x10,000 when the line says bps). "20-25%" prints 20% and
   25% (a hyphen between digits is a range); a number glued to letters before it (Q2, FY25, x2) is not a figure.
-- house: the value must be chapter 11's default (context["house"]) unless a reason of >= 12 words says why not.
+- house: the value must be the house default (context["house"]) unless a reason of >= 12 words says why not.
+(model-valuation's ntm:<metric> forward-sum anchor is left out: plan.py allows only cell and line anchors here.)
 - judgment: not checked here (plan.py checks where it is allowed).
 
 usage: anchors.py --plan P --values V --context C [--research R | --research-dir D]   (prints the problems; exit 1 if any)"""
@@ -27,7 +26,6 @@ LINE = re.compile(r"^(?P<path>.+\.md):(?P<n>\d+)$")
 # A figure: not glued to a letter, digit or point before it; "-" is a minus only when nothing alphanumeric precedes
 # it; an optional "-25" / "–25" straight after is the top of a range, not a negative number.
 NUM = re.compile(r"(?<![\w.])(?P<neg>-)?(?P<a>\d+(?:\.\d+)?)(?:[-–](?P<b>\d+(?:\.\d+)?))?")
-NTM = re.compile(r"^(?P<block>ntm|ntm1|y3):(?P<metric>eps|rev|gp|ebitda|fcf)$")
 HOUSE_WHY_WORDS = 12
 
 
@@ -109,15 +107,6 @@ def _cell(name, a, m, claimed, cells):
     return f"{name}: {a} holds {v!r}, plan says {claimed!r}"
 
 
-def _ntm(name, a, m, claimed, metrics):
-    if not metrics:
-        return f"{name}: {a}: context.json has no metrics to check it against"
-    v = ((metrics.get(m["metric"]) or {}).get(m["block"]) or {}).get("value")
-    if not (_num(v) and _num(claimed)):
-        return f"{name}: {a}: no number to compare (context holds {v!r}, plan says {claimed!r})"
-    return None if _close(v, claimed) else f"{name}: {a} is {v:g}, plan says {claimed:g}"
-
-
 def _line(name, a, m, claimed, root):
     if os.path.isabs(m["path"]):
         return f"{name}: {a}: an absolute path; cite the file relative to {root}"
@@ -161,19 +150,17 @@ def check(plan, values_path, research_root, context):
         if a == "house":
             want = house.get(name)
             if x.get("value") != want and len(str(x.get("reason", "")).split()) < HOUSE_WHY_WORDS:
-                out.append(f"{name}: chapter 11's default is {want!r}, plan says {x.get('value')!r}; a change "
+                out.append(f"{name}: the house default is {want!r}, plan says {x.get('value')!r}; a change "
                            f"needs a reason of at least {HOUSE_WHY_WORDS} words saying why")
             continue
         claimed = x.get("anchor_value")
         m = CELL.match(a)
         if m:
             p = _cell(name, a, m, claimed, cells)
-        elif NTM.match(a):
-            p = _ntm(name, a, NTM.match(a), claimed, (context or {}).get("metrics"))
         elif LINE.match(a):
             p = _line(name, a, LINE.match(a), claimed, research_root)
         else:
-            p = f"{name}: anchor {a!r} is not a cell (Sheet!$A$1), a research line (file.md:123) or ntm:<metric>"
+            p = f"{name}: anchor {a!r} is not a cell (Sheet!$A$1) or a research line (file.md:123)"
         if p:
             out.append(p)
     for name, a, q in _quotes(plan):

@@ -33,3 +33,11 @@ def test_quotes_must_be_on_their_line(work):
     p["ticks"]["pricing"]["quote"] = "Price increases of 3%"
     out = _run(p, work)
     assert any("smoke[0]" in x for x in out) and any("ticks.pricing" in x for x in out)
+
+
+def test_a_changed_house_input_names_the_house_default(work):
+    p = json.load(open(os.path.join(work, "short_plan.json")))
+    p["inputs"]["hurdle"]["value"] = 0.10
+    out = _run(p, work)
+    assert any(x.startswith("hurdle: the house default is 0.08") for x in out), out
+    assert not any("chapter 11" in x for x in out)
