@@ -32,9 +32,12 @@ def _run(args, outdir):
 def recalc(path, outdir):
     """Recalculated copy of `path` in outdir (same file name). Returns its path."""
     tmp = tempfile.mkdtemp(prefix="ipnl_recalc_")
-    src = os.path.join(tmp, os.path.basename(path))
-    shutil.copy2(path, src)
-    _run(["--convert-to", "xlsx", src], outdir)
+    try:                                      # the temp copy is a copy of the model: never keep it
+        src = os.path.join(tmp, os.path.basename(path))
+        shutil.copy2(path, src)
+        _run(["--convert-to", "xlsx", src], outdir)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     return os.path.join(outdir, os.path.basename(path))
 
 

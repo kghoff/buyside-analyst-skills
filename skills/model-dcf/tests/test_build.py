@@ -251,7 +251,11 @@ def test_rerun_keeps_what_the_user_typed_and_refreshes_the_rest(built):
     assert [s[0] for s in Package(out2).sheets()].count("DCF") == 1 and xlverify.bad_parts(out2) == []
 
 
-def test_rerun_keeps_a_formula_the_user_typed_as_a_formula(built):
+def test_rerun_keeps_a_formula_the_user_typed_as_a_formula(built, monkeypatch):
+    import tempfile
+    scratch = built["tmp"] / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))    # the formula's value needs a recalculated copy
     R = build.layout(built["ctx"])["rows"]
     c40, c39 = f"{build.tcol(14)}{R['g0']}", f"{build.tcol(13)}{R['g0']}"
     edited = str(built["tmp"] / "f.xlsx")
@@ -264,6 +268,7 @@ def test_rerun_keeps_a_formula_the_user_typed_as_a_formula(built):
     c = _ws(out2)[c40]
     assert c.value == f"={c39}/2" and c.fill.fgColor.rgb == YELLOW
     assert "2040E" not in json.load(open(out2 + ".json"))["Units"]       # a formula is always the user's
+    assert list(scratch.iterdir()) == []      # that recalculated copy of the user's model is not kept
 
 
 def test_rerun_defaults_a_cleared_cell(built):

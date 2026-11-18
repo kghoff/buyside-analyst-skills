@@ -203,10 +203,23 @@ def _forecast_only_term(model, tmp_path, monkeypatch, blank_price=False):
 def test_a_forecast_only_additive_term_is_0_before_the_forecast(model, tmp_path, monkeypatch):
     """Its own term, summed: nothing was there before the forecast, so 0 is the true level and the year-0 identity
     still equals revenue. Stopping here blocked /model-dcf on any model whose plan gained such a term."""
+    import tempfile
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(scratch))
     _forecast_only_term(model, tmp_path, monkeypatch)
-    f = context.build(model)["factors"][3]
+    c = context.build(model)
+    f = c["factors"][3]
     assert f["level_prev"] == 0.0 and f["level0"] == 0.0 and f["mod"] == [-50, -60]
     assert f["refs"]["prev"] == "MOD!F37" and f["refs"]["year0"] == "MOD!I37"
+    assert list(scratch.iterdir()) == []      # the recalculation folder (a copy of the user's model) is not kept
+    # every blank counted as 0 is listed, so the user is told (a blank the user meant to fill would otherwise vanish)
+    assert c["blank_as_0"] == ["MOD!F37 (KEY OPERATING / ALT DATA | Revenue lost, 2025)",
+                               "MOD!I37 (KEY OPERATING / ALT DATA | Revenue lost, 2026E)"]
+
+
+def test_a_model_with_no_blanks_lists_none(model):
+    assert context.build(model)["blank_as_0"] == []
 
 
 def test_a_blank_multiplied_factor_still_stops(model, tmp_path, monkeypatch):

@@ -206,7 +206,12 @@ def read_inputs(model, ctx, written=None):
         if any(not _num(vals.get(r, [None] * (c + 1))[c] if c < len(vals.get(r, [])) else None) for _, _, r, c in need):
             import tempfile
             import lo
-            vals = _rows(lo.recalc(model, tempfile.mkdtemp(prefix="dcf_read_")), True)
+            import shutil
+            tmp = tempfile.mkdtemp(prefix="dcf_read_")
+            try:                              # the recalculated file is a copy of the user's model: never keep it
+                vals = _rows(lo.recalc(model, tmp), True)
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
         for name, y, r, c in need:
             v = vals[r][c] if r in vals and c < len(vals[r]) else None
             if not _num(v):

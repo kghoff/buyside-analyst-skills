@@ -93,8 +93,11 @@ def build(path, plan=None):
         return _build(path, plan=plan)
     except _Missing:
         tmp = tempfile.mkdtemp(prefix="dcf_ctx_")
-        import lo
-        return _build(lo.recalc(path, tmp), orig=path, plan=plan)
+        try:                                  # the recalculated file is a copy of the user's model: never keep it
+            import lo
+            return _build(lo.recalc(path, tmp), orig=path, plan=plan)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class _Missing(Exception):
@@ -121,12 +124,15 @@ def _build(path, orig=None, plan=None):
         ci = openpyxl.utils.column_index_from_string(col) - 1
         return _num(grid[rows[n]][ci]), f"MOD!{col}{rows[n]}"
 
+    blank_as_0 = []                   # blank cells counted as 0 (forecast-only additive terms): the user is told
+
     def need(n, label, blank_is_0=False):
         v, ref = cell(n, label)
         if v is None:
             if orig is None:
                 raise _Missing()
             if blank_is_0:
+                blank_as_0.append(f"{ref} ({keys.get(n, n)}, {label})")
                 return 0.0, ref
             raise SystemExit(f"model-dcf: MOD {ref} ({keys.get(n, n)}, {label}) has no value, even after a recalculation.")
         return v, ref
@@ -174,7 +180,7 @@ def _build(path, orig=None, plan=None):
             idx.append(n)
             n += 1
         terms.append(idx)
-    out["factors"], out["terms"] = factors, terms
+    out["factors"], out["terms"], out["blank_as_0"] = factors, terms, blank_as_0
     out["identity_fallback"], out["forecast_plan"] = plan_path is None, plan_path
 
     mod = {x: [] for x in ("rev", "gp", "opex", "tax_rate", "da", "capex", "wc")}
@@ -260,3 +266,6 @@ if __name__ == "__main__":
     ctx = build(sys.argv[1], sys.argv[3] if len(sys.argv) > 3 else None)
     json.dump(ctx, open(sys.argv[2], "w"), indent=1)
     print(f"wrote {sys.argv[2]}")
+    for b in ctx["blank_as_0"]:
+        print(f"warning: MOD {b} is blank and counts as 0 (a revenue term that starts in the forecast). If it should "
+              "have a value, fill it in MOD and rerun.")

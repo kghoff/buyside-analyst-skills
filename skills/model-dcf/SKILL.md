@@ -112,6 +112,8 @@ Tell the user, in plain English (numbers from `$MW/solved.json` and `$MW/check_r
 - the terminal value's share of value (a common rule of thumb is under ~25%; say if it's over)
 - which inputs were kept from their tab and which took the defaults
 - the drivers and their long-run rates (from the forecast plan), and any `orphans` or `identity_fallback`
+- every `blank_as_0` cell (context.py also prints a warning for each): a revenue term that starts in the forecast is
+  blank in the last actual year and year 0, and those blanks count as 0; ask the user to fill any that should have a value
 - which MOD rows were counted as debt (from context.json)
 - the check: tab equals the Python math, the forecast years equal MOD, nothing outside the DCF tab changed, no errors
 - how to use it: change any yellow cell and the tab recalculates live. The forecast years are links to MOD (change
