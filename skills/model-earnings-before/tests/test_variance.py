@@ -76,6 +76,16 @@ def test_force_overwrites_the_users_cell(tmp_path, work):
     assert va.fill(pkg, st, ctx, info, force=True)["skipped"] == []
 
 
+def test_first_fill_on_the_skeleton_skips_nothing(model, work):
+    """Labels that already read what the grid would write are not the user's words in the way: reporting them as
+    skipped would put a false warning in front of the user on every first fill."""
+    import json
+    ctx = json.load(open(os.path.join(work, "context.json")))
+    pkg = Package(model)
+    st = Styles(pkg.text("xl/styles.xml"))
+    assert va.fill(pkg, st, ctx, va.inspect(model), force=False)["skipped"] == []
+
+
 def _shared_fixture(path):
     """The user filled C22:C24 down in Excel: Excel stores one shared formula (master C22, children C23 and C24).
     openpyxl never writes shared formulas, so patch the sheet XML of a built fixture."""

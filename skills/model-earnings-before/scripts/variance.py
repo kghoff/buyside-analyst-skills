@@ -227,6 +227,8 @@ def fill(pkg, st, ctx, info, force):
             expected[ref] = exp
     for r, lab in zip(info["rows"], info["labels"]):            # rows the grid has no label for stay as they were
         written.setdefault(f"B{r}", lab)
+        if xcells.get(f"B{r}", (None, None))[1] == lab:         # already reads what we would write: leave it alone
+            del xcells[f"B{r}"]
     nref = f"{NOTE_COL}{info['header']}"
     xcells[nref] = ("s", note_text(ctx), st.xf(color=BLACK, fmt="General", sz=11, i=True))
     ph = {f"B{r}" for r, lab in zip(info["rows"], info["labels"]) if lab == DEFAULT[-1]}   # "(key driver)" is
