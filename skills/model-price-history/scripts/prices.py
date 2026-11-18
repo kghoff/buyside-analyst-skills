@@ -38,12 +38,26 @@ def check(ticker, path, dates=None):
     big = [(d.date().isoformat(), round(float(x), 3)) for d, x in r.items() if abs(x) > 0.40]
     res = {"ticker": ticker, "path": path, "ok": True, "first": s.index.min().date().isoformat(),
            "last": s.index.max().date().isoformat(), "rows": len(s), "big_moves": big}
+    res["source"] = "yahoo" if "Adj Close" in df.columns else "stooq"
+    res["adj_problems"] = []
+    if res["source"] == "yahoo":
+        a, c = df["Adj Close"].astype(float), df["Close"].astype(float)
+        if (a > c + 1e-9).any():
+            res["adj_problems"].append(f"{ticker}: Adj Close above Close on {int((a > c + 1e-9).sum())} day(s)")
+        if abs(a.iloc[-1] - c.iloc[-1]) > 1e-6 * max(1.0, c.iloc[-1]):
+            res["adj_problems"].append(f"{ticker}: Adj Close differs from Close on the last day")
     if dates is not None:
         win = df[(df["Date"] >= dates[0]) & (df["Date"] <= dates[-1])]
         res["stale_days"] = int(((win.Open == win.High) & (win.High == win.Low) & (win.Low == win.Close)).sum())
         have = set(s.index)
         res["filled_dates"] = [d.date().isoformat() for d in dates if d >= s.index.min() and d not in have]
     return res
+
+
+def mixed(files):
+    """Keys whose source differs from the stock's: one run must use one source (Yahoo or stooq), never both."""
+    want = files["stock"]["source"]
+    return [k for k, f in files.items() if f.get("source") != want]
 
 
 def main():
@@ -107,6 +121,15 @@ def main():
                                 "chart starts once a full 252-day window exists (about a year later).")
         for d, x in res["big_moves"]:
             out["notes"].append(f"{tick[k]} moved {x:+.0%} on {d}: check for a split stooq missed (news can explain it).")
+    for k, f in out["files"].items():
+        out["problems"] += f.get("adj_problems", [])
+    bad = mixed(out["files"]) if all("source" in f for f in out["files"].values()) else []
+    if bad:
+        out["problems"].append(f"{', '.join(bad)} came from a different source than the stock: refetch all from "
+                               "Yahoo or download all from stooq.")
+    if any(f.get("source") == "stooq" for f in out["files"].values()):
+        out["notes"].append("stooq files carry only dividend-adjusted prices: historical P/E runs low for dividend "
+                            "payers. Yahoo (fetch_prices.mjs) gives the plain close too.")
     json.dump(out, open(a.out, "w"), indent=1)
     print(json.dumps(out, indent=1))
     raise SystemExit(1 if out["problems"] else 0)
