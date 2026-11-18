@@ -1,0 +1,43 @@
+{
+ "ticks": {
+  "decel": {"tick": "yes", "reason": "TTM revenue growth slowed from about 8% to about 4%, a four point deceleration in one year."},
+  "pricing": {"tick": "yes", "anchor": "Filings/test_10q.md:5", "quote": "Price reductions of 3%", "reason": "The 10-Q says prices were cut 3% in the quarter, which is pricing pressure."},
+  "margin_pressure": {"tick": "no", "reason": "Operating margin is still rising to its 20% peak, so there is no cost pressure showing yet."},
+  "tailwind": {"tick": "no", "reason": "Nothing in the filings points to a temporary tailwind that will fade."},
+  "share_loss": {"tick": "no", "reason": "The filings name no competitor taking share in this fixture company."},
+  "incr_margin": {"tick": "yes", "reason": "Margin sits at its ten-year peak, so the only way from here is down."},
+  "capex": {"tick": "yes", "reason": "Capex runs at about 1.8 times D&A, a step-up just to keep the business where it is."},
+  "leaky": {"tick": "no", "reason": "Acquisitions are only about a tenth of operating cash flow over five years, not a leaky bucket."},
+  "fcf": {"tick": "yes", "reason": "Under half of adjusted net income turned into free cash flow over five years."},
+  "hope": {"tick": "no", "reason": "No new product or plan is priced into this fixture stock as far as the documents show."},
+  "overhang": {"tick": "no", "reason": "No regulatory or technology overhang is discussed in the fixture documents."},
+  "miss": {"tick": "unknown", "reason": "There is not enough intra-quarter information to call the next print a miss."},
+  "revisions": {"tick": "yes", "reason": "The Street cut its FY 2027 EPS mean from 2.30 to 2.20 between snapshots."},
+  "vs_dcf": {"tick": "yes", "reason": "The price of about 51 dollars sits above the 42 dollar DCF base value."},
+  "vs_peers": {"tick": "yes", "reason": "The P/E gap to core peers is at its 75th percentile over five years."},
+  "vs_history": {"tick": "yes", "reason": "The trailing P/E sits at its 85th percentile over five years of history."},
+  "vs_algo": {"tick": "yes", "reason": "If the P/E only rolls forward the stock returns about five percent, below the hurdle."}
+ },
+ "inputs": {
+  "hurdle": {"value": 0.08, "anchor": "house", "reason": "House default."},
+  "fund": {"value": 1000.0, "anchor": "house", "reason": "House default."},
+  "bps": {"value": 50.0, "anchor": "house", "reason": "House default."},
+  "short_book": {"value": 500.0, "anchor": "house", "reason": "House default."},
+  "crowded_line": {"value": 0.10, "anchor": "house", "reason": "House default."},
+  "print_miss": {"value": -0.05, "anchor": "house", "reason": "House default."},
+  "print_pe_slip": {"value": 1.0, "anchor": "house", "reason": "House default."},
+  "reward_eps": {"value": 3.2, "anchor": "judgment", "reason": "Cut next year's EPS about ten percent for the price cuts the 10-Q describes flowing through."},
+  "reward_pe": {"value": 22.0, "anchor": "Multiples!$H$7", "anchor_value": 22.0, "reason": "The five-year median P/E: where the stock trades once the premium fades."},
+  "dream_eps": {"value": 4.0, "anchor": "judgment", "reason": "A dream case where price cuts stop and margins expand two more points over a year."},
+  "dream_pe": {"value": 40.0, "anchor": "Multiples!$I$7", "anchor_value": 40.0, "reason": "The five-year peak P/E, what a semi-rational bull would pay."},
+  "takeout_premium": {"value": 0.35, "anchor": "Filings/test_10q.md:3", "anchor_value": 0.35, "reason": "Peers sold at a 35% premium, so that is the takeout risk case."}
+ },
+ "type": {"value": "Subpar algorithm", "reason": "A slowing grower at a rich multiple that returns less than the hurdle if nothing changes."},
+ "bucket": {"value": "Growth deceleration", "reason": "Revenue growth has halved in two years and estimates are coming down."},
+ "catalyst": {"soon": false, "text": "No dated catalyst in the next two prints; the slowdown is gradual.", "anchor": "judgment", "reason": "Nothing in the documents dates a guide cut or event in the next six months."},
+ "takeout_prone": {"value": true, "reason": "Peers have been bought at a 35% premium, so a bid is a real risk to size for."},
+ "smoke": [{"flag": "CFO change", "anchor": "Filings/test_10q.md:4", "quote": "Chief Financial Officer resigned"}],
+ "smoke_checked": "Read the 10-Q for auditor, CFO and CAO changes and changes in the metrics the company discloses.",
+ "verdict": {"value": "Filler short", "reason": "The rule's call: the IRR sits below the hurdle and valuation passes."},
+ "why": "A slowing grower at a peak margin and a rich multiple: a filler short, not an alpha short, with no catalyst."
+}
