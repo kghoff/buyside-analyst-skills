@@ -11,7 +11,7 @@ plugin `buyside`. Explain everything in plain English.
 | 2 | model-historicals | 10-year quarterly + annual income statement, balance sheet, cash flow (MOD tab) |
 | 3 | model-ratios | growth, margins, ROIC / ROE / ROA, leverage, cash conversion, FCF inside MOD |
 | 4 | model-kpis | non-GAAP reconciliations and company-specific operating metrics |
-| 5 | model-price-history | Px Data, Px Events, Idio Chart tabs |
+| 5 | model-price-history | Px Data, Px Events, Idio Chart tabs; daily prices from Yahoo (plain close for P/E, total return for returns; stooq only as fallback) |
 | 6 | research-filings | report from the company's own documents; key drivers; forecast structure; Filings Charts tab |
 | 7 | research-street | where sell-side and investors differ from the company, and why |
 | 8 | model-forecast | driver-based quarterly 3-statement forecast (user approves the plan first) |
