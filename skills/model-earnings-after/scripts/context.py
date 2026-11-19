@@ -164,6 +164,7 @@ def move(g_ev, P, ticker, rel, rx, work, today, warnings):
             "drift": pr["drift"] if drift_ok else None,
             "drift_formula": f"IFERROR({ref(i + rates.DRIFT)}/{ref(i)}-1,NA())" if drift_ok else None,
             "drift_day": rows[i + rates.DRIFT]["date"].isoformat() if drift_ok else None,
+            "drift_due": due.isoformat(),
             "open": o if am._n(o) else None, "close": cl if am._n(cl) else None,
             "prev_close": pc if am._n(pc) else None,
             "gap": am.growth(o, pc), "open_to_close": am.growth(cl, o),
@@ -589,7 +590,7 @@ def main():
         return
     c = run(a.model, a.work, a.ticker.upper(), a.values, a.research, a.forecast_plan, a.today)
     print(json.dumps({"quarter": c["quarter"], "mode": c["mode"], "drift_ready": c["drift_ready"],
-                      "move": {k: c["move"][k] for k in ("reaction_day", "day", "idio", "sigmas")},
+                      "move": {k: c["move"][k] for k in ("reaction_day", "day", "idio", "sigmas", "drift_due")},
                       "docs": c["docs"], "warnings": c["warnings"]}, indent=1, default=str))
 
 

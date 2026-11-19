@@ -358,3 +358,10 @@ def test_quarter_only(model, tmp_path):
     assert p.returncode == 0, p.stderr
     assert json.loads(p.stdout) == {"quarter": "Q4 26", "quarter_e": "Q4 26E", "reaction_day": str(mf.REACTION_DAY)}
     assert not os.path.exists(str(tmp_path / "w" / "values"))
+
+
+def test_drift_due_date_is_reported(ctx):
+    """The SKILL tells the user the day to rerun for the drift; that date must come from code (reaction day + 7
+    trading days), not be worked out by hand in the report."""
+    assert ctx["move"]["drift_due"] == context.add_trading_days(
+        dt.date.fromisoformat(ctx["move"]["reaction_day"]), 7).isoformat()
