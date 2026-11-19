@@ -50,3 +50,85 @@ def test_every_line_cites_its_file_and_line_number():
     rel = _lines()
     l = _get(rel, "Revenue")
     assert l["file"] == "rel.md" and mf.release_md().split("\n")[l["line"] - 1].startswith("| Revenue |")
+
+
+# Small 10-Q style tables for the review fixes (the synthetic release stays as the other suites expect it).
+TENQ_IS = "\n".join([
+    "CONDENSED CONSOLIDATED STATEMENTS OF OPERATIONS", "",
+    "| Three Months Ended September 30, | Nine Months Ended September 30, |", "| --- | --- |",
+    "| (In millions, except per share data) | 2026 |  | 2025 |  | 2026 |  | 2025 |",
+    "| Net sales | $ | 1,200.5 |  |  | $ | 1,100.2 |  |  | $ | 3,500.0 |  |  | $ | 3,200.0 |  |",
+    "| Restructuring | — |  |  | — |  |  | — |  |  | — |  |",
+    "| Net loss | (30.4) |  |  | (12.1) |  |  | (50.0) |  |  | (20.0) |  |",
+    "| Basic and diluted net loss per share | $ | (0.12) |  |  | $ | (0.05) |  |  | $ | (0.20) |  |  | $ | (0.08) |  |",
+    "| Shares used to compute diluted net loss per share | 390.1 |  |  | 392.0 |  |  | 391.0 |  |  | 393.0 |  |",
+    "| Net income used for diluted EPS | 30.4 |  |  | 12.1 |  |  | 50.0 |  |  | 20.0 |  |",
+    ""])
+
+
+def test_a_negative_in_one_cell_must_not_shift_the_current_quarter_onto_last_year():
+    """'(3,133.4)' in one cell was dropped, so values[0] became last year's number and the model got the wrong quarter."""
+    md = "(In millions)\n\n| | Sep 30, 2026 | | Dec 31, 2025 |\n| --- | --- |\n" \
+         "| Treasury stock, at cost | (3,133.4) |  |  | (2,084.8) |  |\n| Total assets | 9,000.0 |  |  | 8,000.0 |  |\n"
+    l = _get(release.parse_text(md, "q.md"), "Treasury stock, at cost")
+    assert l["values"] == [-3133.4, -2084.8] and l["decimals"] == 1
+
+
+def test_a_number_cell_that_cannot_be_read_drops_the_row_loudly_rather_than_sliding_columns():
+    """Skipping one unreadable cell would move every later value one column left; the row is dropped and reported."""
+    md = "(In millions)\n\n| | 2026 | | 2025 |\n| --- | --- |\n| Revenue | 1.2.3 |  | 100.0 |\n| Net income | 5.0 |  | 4.0 |\n"
+    rel = release.parse_text(md, "q.md")
+    assert all(l["label"] != "Revenue" for l in rel["lines"])
+    assert rel["tables"][0]["bad"] == [5]
+
+
+def test_scale_in_the_header_row_is_read_so_a_thousands_10q_is_not_taken_as_millions():
+    """10-Qs print '(In thousands...)' as the first header cell, not above the table."""
+    rel = release.parse_text(TENQ_IS.replace("In millions", "In thousands"), "q.md")
+    t = rel["tables"][0]
+    assert t["scale"] == 0.001 and t["scale_known"] is True
+
+
+def test_blank_lines_do_not_push_the_scale_caption_out_of_reach():
+    md = "(In thousands)\n" + "\n" * 12 + "| | 2026 | | 2025 |\n| --- | --- |\n| Revenue | 1,000 |  | 900 |\n"
+    assert release.parse_text(md, "q.md")["tables"][0]["scale"] == 0.001
+
+
+def test_a_table_with_no_scale_inherits_the_previous_tables_and_with_none_is_flagged_unknown():
+    """Continuation tables carry no '(In ...)'; a file with no scale at all must be flagged so the user is warned."""
+    tbl = "| | 2026 | | 2025 |\n| --- | --- |\n| {} | 1,000 |  | 900 |\n"
+    rel = release.parse_text("(In thousands)\n\n" + tbl.format("Revenue") + "\nSome text.\n\n" + tbl.format("Other"), "q.md")
+    assert [(t["scale"], t["scale_known"]) for t in rel["tables"]] == [(0.001, True), (0.001, True)]
+    t = release.parse_text(tbl.format("Revenue"), "q.md")["tables"][0]
+    assert t["scale"] == 1.0 and t["scale_known"] is False
+
+
+def test_year_header_rows_are_not_data_lines():
+    """'(In millions...) | 2026 | 2025' as a line would match a model row that happens to hold 2,026."""
+    rel = release.parse_text(TENQ_IS, "q.md")
+    assert all(not l["label"].startswith("(In") for l in rel["lines"])
+    assert all(not all(1990 <= v <= 2100 for v in l["values"]) for l in rel["lines"])
+    yrs = "| | 2026 | | 2025 |\n| --- | --- |\n| Fiscal year | 2026 |  | 2025 |\n| Revenue | 2,026.0 |  | 1,999.0 |\n"
+    assert [l["label"] for l in release.parse_text(yrs, "q.md")["lines"]] == ["Revenue"]
+
+
+def test_share_counts_and_income_used_for_eps_are_scaled_only_eps_itself_is_not():
+    """Share counts and 'net income used for diluted EPS' are in the table's units; only per-share amounts are not."""
+    rel = release.parse_text(TENQ_IS.replace("In millions", "In thousands"), "q.md")
+    assert _get(rel, "Basic and diluted net loss per share")["factor"] == 1.0
+    assert _get(rel, "Shares used to compute diluted net loss per share")["factor"] == 0.001
+    assert _get(rel, "Net income used for diluted EPS")["factor"] == 0.001
+
+
+def test_net_sales_and_net_loss_companies_are_still_income_statements():
+    """A 'Net sales' / 'Net loss' company must search the income statement, not fall to 'other'."""
+    rel = release.parse_text(TENQ_IS, "q.md")
+    assert _get(rel, "Net sales")["kind"] == "is"
+    cap = "## Consolidated Statements of Earnings\n\n| | 2026 | | 2025 |\n| --- | --- |\n| Sales | 10.0 |  | 9.0 |\n"
+    assert release.parse_text(cap, "q.md")["lines"][0]["kind"] == "is"
+
+
+def test_a_dash_only_row_gets_the_tables_precision_not_a_half_unit_tolerance():
+    """Decimals 0 on a '—' row meant +/-0.5 million: a 0.3 model value would wrongly match zero."""
+    rel = release.parse_text(TENQ_IS, "q.md")
+    assert _get(rel, "Restructuring")["decimals"] == 1

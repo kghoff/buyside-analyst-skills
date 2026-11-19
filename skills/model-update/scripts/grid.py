@@ -12,6 +12,9 @@ ERRORS = ("#REF!", "#DIV/0!", "#VALUE!", "#NAME?", "#N/A", "#NUM!", "#NULL!")
 
 def dump(path, recalc_dir=None):
     if recalc_dir:
+        if os.path.realpath(recalc_dir) == os.path.realpath(os.path.dirname(os.path.abspath(path))):
+            raise SystemExit(f"grid: recalc dir {recalc_dir} is the model's own folder; LibreOffice would write over "
+                             "the user's workbook. Use <model dir>/_model_work/model-update/.")
         import lo
         path = lo.recalc(path, recalc_dir)
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)

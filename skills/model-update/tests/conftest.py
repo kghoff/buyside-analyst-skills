@@ -24,6 +24,6 @@ def research(tmp_path):
 
 
 @pytest.fixture
-def grid():
+def mod_values():
     """MOD values of the fixture's actual columns (what a recalculation of the fixture returns there)."""
     return make_fixture.values()
