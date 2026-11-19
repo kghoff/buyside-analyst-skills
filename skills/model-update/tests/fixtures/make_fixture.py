@@ -80,14 +80,54 @@ def _f(tpl, p):
     return tpl.format(c=COL[p], py=COL[_py(p)] if p in QS and p[3:5] != "25" else "", pv=COL[_pv(p)] if QS.index(p) else "")
 
 
-def model(path, frozen_quarter="Q3 26E", neg_cost=False):
-    """neg_cost: row 6 is '(-) Cost of sales', stored negative (the house convention for costs)."""
+FLOW_PLUG = {4, 6, 8, 10, 11, 25}            # house=True: Q4 = FY less Q1-Q3, the FY typed
+CF_ROWS = {22, 23}
+Q4R = dict(rev=150, cos=56, opex=37, restr=0, ni=33, eps=1.32, cash=85, oca=17, pre=7, liab=37, cfo=24, capex=-9, amort=3, units=1600)
+Q4R["eq"] = Q4R["cash"] + Q4R["oca"] + Q4R["pre"] - Q4R["liab"]
+
+
+def _year_total(fy, k, extra=()):
+    qs = [q for q in DATA if q.endswith(fy[2:4])]
+    return round(sum(DATA[q][k] for q in qs) + sum(extra), 6)
+
+
+def _house(p, r, k):
+    """house=True history cells for one actual quarter / year: plugs, '=YTD-earlier quarters', typed FY."""
+    if p[0].isdigit():                                       # FY column: typed from the 10-K
+        if r in BS_ROWS:
+            return DATA[f"Q4 {p[2:4]}"][k] if f"Q4 {p[2:4]}" in DATA else None
+        if r == 12:
+            return 3.68
+        if r in FLOW_PLUG | CF_ROWS:
+            return _year_total(p, k)
+        return None
+    n = int(p[1])
+    same = [q for q in QS if q.split()[1][:2] == p.split()[1][:2]]
+    fyc = COL.get("20" + p.split()[1][:2])
+    if n == 4 and r in BS_ROWS:
+        return f"={fyc}{r}"
+    if n == 4 and r in FLOW_PLUG:
+        return f"={fyc}{r}" + "".join(f"-{COL[q]}{r}" for q in reversed(same[:3]))
+    if r in CF_ROWS:
+        if n == 4:
+            return f"={fyc}{r}-SUM({COL[same[0]]}{r}:{COL[same[2]]}{r})"
+        if n > 1:
+            ytd = round(sum(DATA[q][k] for q in same[:n]), 6)
+            return f"={ytd:g}" + "".join(f"-{COL[q]}{r}" for q in reversed(same[:n - 1]))
+    return DATA[p][k]
+
+
+def model(path, frozen_quarter="Q3 26E", neg_cost=False, house=False, actual_q3=False):
+    """neg_cost: row 6 is '(-) Cost of sales', stored negative (the house convention for costs).
+    house: history built the way model-historicals and the user's own models build it: Q4 = FY less Q1-Q3 with the FY
+    typed (flows), Q4 = FY (balances), Q2/Q3 cash flow '=<YTD>-earlier quarters', Q4 cash flow '=FY-SUM(Q1:Q3)'.
+    actual_q3: Q3 26 is already reported (typed from REPORT; header 'Q3 26'), so Q4 26E is the next print."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "MOD"
     ws["A1"] = f"{TICKER} - model"
     for p, c in COL.items():
-        ws[f"{c}2"] = p
+        ws[f"{c}2"] = "Q3 26" if actual_q3 and p == "Q3 26E" else p
     for r, (a, b, unit, k) in ROWS.items():
         if a:
             ws[f"A{r}"] = a
@@ -101,6 +141,17 @@ def model(path, frozen_quarter="Q3 26E", neg_cost=False):
             if not p:
                 continue
             ref = f"{COL[p]}{r}"
+            if house and not k.startswith("=") and (p == "2025" or p in DATA):
+                v = _house(p, r, k)
+                if v is not None:
+                    ws[ref] = v
+                    ws[ref].font = BLUE
+                    continue
+            if actual_q3 and p == "Q3 26E" and not k.startswith("="):
+                y = {kk: DATA["Q1 26"][kk] + DATA["Q2 26"][kk] + REPORT[kk] for kk in ("cfo", "capex")}
+                ws[ref] = (f"={y[k]:g}-{COL['Q2 26']}{r}-{COL['Q1 26']}{r}" if house and r in CF_ROWS else REPORT[k])
+                ws[ref].font = BLUE
+                continue
             if p[0].isdigit():                       # fiscal-year column
                 qs = _fy_quarters(p)
                 if r == 5:
@@ -136,11 +187,13 @@ def model(path, frozen_quarter="Q3 26E", neg_cost=False):
     return path
 
 
-def values(neg_cost=False):
-    """{ref: value} for the actual columns D..K (constants and the subtotal formulas evaluated)."""
+def values(neg_cost=False, actual_q3=False):
+    """{ref: value} for the actual columns D..K (L too with actual_q3) and the 2025 year column H (constants and the
+    formulas evaluated)."""
     out = {}
-    for p in ["Q1 25", "Q2 25", "Q3 25", "Q4 25", "Q1 26", "Q2 26"]:
-        d, c = DATA[p], COL[p]
+    src = dict(DATA, **({"Q3 26E": REPORT} if actual_q3 else {}))
+    for p in ["Q1 25", "Q2 25", "Q3 25", "Q4 25", "Q1 26", "Q2 26"] + (["Q3 26E"] if actual_q3 else []):
+        d, c = src[p], COL[p]
         row = {4: d["rev"], 6: d["cos"], 7: d["rev"] - d["cos"], 8: d["opex"], 9: d["rev"] - d["cos"] - d["opex"],
                10: d["restr"], 11: d["ni"], 12: d["eps"], 14: d["cash"], 15: d["oca"], 16: d["pre"],
                17: d["cash"] + d["oca"] + d["pre"], 18: d["liab"], 19: d["eq"], 20: d["liab"] + d["eq"], 22: d["cfo"],
@@ -148,7 +201,50 @@ def values(neg_cost=False):
         if neg_cost:
             row[6] = -d["cos"]
         out.update({f"{c}{r}": v for r, v in row.items()})
+    h = COL["2025"]
+    for r in ROWS:
+        qv = [out.get(f"{COL[q]}{r}") for q in ("Q1 25", "Q2 25", "Q3 25", "Q4 25")]
+        if None in qv or r == 5:
+            continue
+        out[f"{h}{r}"] = qv[-1] if r in BS_ROWS else (3.68 if r == 12 else round(sum(qv), 6))
     return out
+
+
+def release_q4_md():
+    """The Q4 26 release: three months and twelve months (income statement), Dec 31 balance sheet, twelve-month cash
+    flow, a three-month-only reconciliation (no full-year column: Q4 is typed and the year sums)."""
+    R, P = Q4R, DATA["Q4 25"]
+    y26 = {k: DATA["Q1 26"][k] + DATA["Q2 26"][k] + REPORT[k] + R[k] for k in R}
+    y25 = {k: sum(DATA[q][k] for q in ("Q1 25", "Q2 25", "Q3 25", "Q4 25")) for k in R}
+    y26["eps"], y25["eps"] = 4.60, 3.68
+    n = _n
+    row = lambda lab, k, d=1: (f"| {lab} | {n(R[k], 1, d)} |  |  | {n(P[k], 1, d)} |  |  | {n(y26[k], 1, d)} |  |  | "
+                               f"{n(y25[k], 1, d)} |  |")
+    L = [f"# {TICKER} Reports Fourth Quarter and Full Year 2026 Results", "",
+         "## Condensed Consolidated Statements of Operations", "", "(In millions, except per share data)", "",
+         "|  | Three Months EndedDecember 31, |  | Twelve Months EndedDecember 31, |", "| --- | --- | --- | --- |",
+         "|  | 2026 |  | 2025 |  | 2026 |  | 2025 |",
+         row("Revenue", "rev"), row("Cost of sales", "cos"), row("Total operating expenses", "opex"),
+         "| Restructuring | — |  |  | — |  |  | — |  |  | — |  |",
+         row("Net income", "ni"), row("Diluted net income per share", "eps", 2),
+         "", "## Condensed Consolidated Balance Sheets", "", "(In millions)", "",
+         "|  | December 31, 2026 |  | December 31, 2025 |", "| --- | --- | --- | --- |"]
+    for lab, k in [("Cash and cash equivalents", "cash"), ("Other current assets", "oca"), ("Prepaid expenses", "pre")]:
+        L.append(f"| {lab} | {n(R[k])} |  |  | {n(P[k])} |  |")
+    ta, ta0 = R["cash"] + R["oca"] + R["pre"], P["cash"] + P["oca"] + P["pre"]
+    L += [f"| Total assets | {n(ta)} |  |  | {n(ta0)} |  |", f"| Total liabilities | {n(R['liab'])} |  |  | {n(P['liab'])} |  |",
+          f"| Total stockholders' equity | {n(R['eq'])} |  |  | {n(P['eq'])} |  |",
+          f"| Total liabilities and stockholders' equity | {n(ta)} |  |  | {n(ta0)} |  |",
+          "", "## Condensed Consolidated Statements of Cash Flows", "", "(In millions)", "",
+          "|  | Twelve Months EndedDecember 31, |", "| --- | --- |", "|  | 2026 |  | 2025 |",
+          f"| Net cash provided by operating activities | {n(y26['cfo'])} |  |  | {n(y25['cfo'])} |  |",
+          f"| Purchases of property and equipment | {n(y26['capex'])} |  |  | {n(y25['capex'])} |  |",
+          "", "## Reconciliation of GAAP to Non-GAAP Gross Profit", "", "(In millions)", "",
+          "|  | Three Months EndedDecember 31, |", "| --- | --- |", "|  | 2026 |  | 2025 |",
+          f"| GAAP gross profit | {n(R['rev'] - R['cos'])} |  |  | {n(P['rev'] - P['cos'])} |  |",
+          f"| Amortization of intangible assets | {n(R['amort'])} |  |  | {n(P['amort'])} |  |",
+          f"| Non-GAAP gross profit | {n(R['rev'] - R['cos'] + R['amort'])} |  |  | {n(P['rev'] - P['cos'] + P['amort'])} |  |", ""]
+    return "\n".join(L)
 
 
 def _n(v, k=1.0, dec=1):

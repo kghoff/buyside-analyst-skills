@@ -1,11 +1,42 @@
-# _add_notes, _vml_ns and _alloc_ids copied from skills/model-forecast/scripts/build.py (keep in sync).
+# _add_notes, _vml_ns, _alloc_ids, _ensure_r_ns and AFTER_LEGACY copied from skills/model-forecast/scripts/build.py (keep in sync).
 """Cell notes on MOD, written into its comments part (raw XML). A note starting with NOTE is the skill's own and is
 rewritten on a rerun; on the user's own note the text is appended."""
 import re
 
-from xlsx import CT, RT, colnum, esc, relpath_of, resolve, unesc
+from xledit import _insert_before_first
+from xlsx import CT, RT, colnum, comments_parts, esc, relpath_of, resolve, unesc
 
 NOTE = "Update: "
+AFTER_LEGACY = ("legacyDrawingHF", "picture", "oleObjects", "controls", "webPublishItems", "tableParts", "extLst")
+
+
+def drop_notes(pkg, part, refs, prefixes=("Plan: ", NOTE)):
+    """Remove the notes on `refs` whose text starts with one of `prefixes` (model-forecast's 'Plan: ' notes and the
+    skill's own), with their VML shapes. The user's own notes are kept. Returns the refs whose note was removed."""
+    rels = {t: resolve(part, g) for _, (t, g) in pkg.rels(relpath_of(part)).items()}
+    if not refs or RT["comments"] not in rels:
+        return []
+    cpart, vpart = rels[RT["comments"]], rels.get(RT["vml"])
+    cx, gone = pkg.text(cpart), []
+    for ref in refs:
+        old = re.search(rf'<comment ref="{ref}"[^>]*>.*?</comment>', cx, re.S)
+        if not old:
+            continue
+        text = "".join(unesc(t) for t in re.findall(r"<t\b[^>]*>(.*?)</t>", old.group(0), re.S))
+        if text.startswith(prefixes):
+            cx = cx[:old.start()] + cx[old.end():]
+            gone.append(ref)
+    if not gone:
+        return []
+    pkg.put(cpart, cx)
+    if vpart:
+        vml = pkg.text(vpart)
+        for ref in gone:
+            row, col = int(re.search(r"\d+", ref).group(0)) - 1, colnum(re.match(r"[A-Z]+", ref).group(0)) - 1
+            vml = re.sub(rf"<v:shape\b(?:(?!</v:shape>).)*?<x:Row>{row}</x:Row>\s*<x:Column>{col}</x:Column>.*?</v:shape>",
+                         "", vml, flags=re.S)
+        pkg.put(vpart, vml)
+    return gone
 
 
 def add_notes(pkg, part, notes, prefix=NOTE):
@@ -67,7 +98,14 @@ def add_notes(pkg, part, notes, prefix=NOTE):
     pkg.put(f"xl/drawings/vmlDrawing{vn}.vml", vml)
     lrid = pkg.attach(part, "vml", f"xl/drawings/vmlDrawing{vn}.vml")
     pkg.attach(part, "comments", f"xl/comments{cn}.xml", CT["comments"])
-    pkg.put(part, _insert_before_first(pkg.text(part), AFTER_LEGACY, f'<legacyDrawing r:id="{lrid}"/>'))
+    pkg.put(part, _insert_before_first(_ensure_r_ns(pkg.text(part)), AFTER_LEGACY, f'<legacyDrawing r:id="{lrid}"/>'))
+
+
+def _ensure_r_ns(xml):
+    root = re.search(r"<worksheet\b[^>]*>", xml).group(0)
+    if "xmlns:r=" in root:
+        return xml
+    return xml.replace(root, root[:-1] + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">', 1)
 
 
 VML_NS = {"v": "urn:schemas-microsoft-com:vml", "o": "urn:schemas-microsoft-com:office:office",

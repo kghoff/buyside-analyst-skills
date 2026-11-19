@@ -95,19 +95,42 @@ def _cur(m, grid, rows, q, line, ytd, sign):
     return v
 
 
+def _full_year(m, grid, q, line, row, ytd, sign):
+    """(fy_cur, fy_prior, model's year-ago FY value) for a Q4 print: the full-year column the release prints
+    ('Twelve Months Ended'), or a year-to-date cash flow (at Q4 it is the year). (None, None, None) otherwise."""
+    if not q.startswith("Q4"):
+        return None, None, None
+    f = line["factor"]
+    if line.get("fy_i") is not None:
+        v = line["values"]
+        cur, fy_prior = v[line["fy_i"]] * f * sign, v[line["fy_prior_i"]]
+    elif line["kind"] == "cf" and ytd:
+        cur, fy_prior = _cp(line)[0] * f * sign, None           # the YTD prior was already checked against MOD's year
+    else:
+        return None, None, None
+    py = m.fy_of(m.pyq(q))
+    return cur, (fy_prior * f * sign if fy_prior is not None else None), _num(grid.get(f"{m.col(py)}{row}"))
+
+
 def _entry(m, grid, q, line, row, by, basis, model_prior, ytd, sign):
     key = next(k for r, k, _ in m.lines if r == row)
     cur, prior = _cp(line)
-    return {"line": line["id"], "label": line["label"], "row": row, "key": key, "by": by, "basis": basis,
-            "printed": cur, "prior": prior * line["factor"] * sign, "model_prior": model_prior, "sign": sign,
-            "cur": _cur(m, grid, [row], q, line, ytd, sign), "ytd": ytd, "file": line["file"],
-            "lineno": line["line"], "tol": release.tolerance(line), "factor": line["factor"]}
+    fy_cur, fy_prior, fy_model = _full_year(m, grid, q, line, row, ytd, sign)
+    e = {"line": line["id"], "label": line["label"], "row": row, "key": key, "by": by, "basis": basis,
+         "printed": cur, "prior": prior * line["factor"] * sign, "model_prior": model_prior, "sign": sign,
+         "cur": _cur(m, grid, [row], q, line, ytd, sign), "ytd": ytd, "kind": line["kind"], "file": line["file"],
+         "lineno": line["line"], "tol": release.tolerance(line), "factor": line["factor"]}
+    if fy_cur is not None:
+        e["fy_cur"] = fy_cur
+        if fy_prior is not None:
+            e["fy_prior"], e["fy_model_prior"] = fy_prior, fy_model
+    return e
 
 
 def _open(line, ytd, **extra):
     """A leftover / ambiguous entry: everything the agent's answer needs to become a match."""
     return {"line": line["id"], "label": line["label"], "values": line["values"], "cur_i": line["cur_i"],
-            "prior_i": line["prior_i"], "kind": line["kind"], "ytd": ytd, "file": line["file"],
+            "prior_i": line["prior_i"], "fy_i": line.get("fy_i"), "fy_prior_i": line.get("fy_prior_i"), "kind": line["kind"], "ytd": ytd, "file": line["file"],
             "lineno": line["line"], "factor": line["factor"], "decimals": line["decimals"], **extra}
 
 
@@ -225,7 +248,21 @@ def match(rel, m, grid, q):
             taken.update(comb["rows"])
             continue
         res["leftover"].append(_open(line, ytd))
+    res["diffs"] += _fy_diffs(m, q, res["matched"])
     return res
+
+
+def _fy_diffs(m, q, entries):
+    """Full-year prior values (Q4 print) that differ from MOD's year-ago FY column: restatement candidates too."""
+    out = []
+    for e in entries:
+        mp, new = e.get("fy_model_prior"), e.get("fy_prior")
+        if mp is None or new is None or abs(mp - new) <= e["tol"]:
+            continue
+        fy = m.fy_of(m.pyq(q))
+        out.append({"ref": f"{m.col(fy)}{e['row']}", "key": e["key"], "period": fy, "model": mp, "new": new,
+                    "label": e["label"], "line": e["line"], "file": e["file"], "lineno": e["lineno"]})
+    return out
 
 
 def _diff(m, e):
@@ -324,6 +361,7 @@ def apply_answers(res, answers, m, root, grid, q):
                 add["matched"].append(ent)
                 if model_prior is not None and abs(model_prior - ent["prior"]) > ent["tol"]:
                     add["diffs"].append(_diff(m, ent))
+                add["diffs"] += _fy_diffs(m, q, [ent])
             else:
                 add["combined"].append({"line": lid, "label": e["label"], "rows": rows, "keys": keys, "by": "agent",
                                         "reason": a["reason"], "cur": _cur(m, grid, rows, q, line, e["ytd"], sign),

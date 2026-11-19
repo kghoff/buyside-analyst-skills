@@ -45,9 +45,11 @@ def test_header_loses_its_E_and_the_year_stays_a_forecast(model, tmp_path):
     assert ws["L2"].value == "Q3 26" and ws["N2"].value == "2026E"
 
 
-def test_cash_flow_enters_the_discrete_quarter_with_a_ytd_note(model, tmp_path):
-    ws, _, _ = _build(model, tmp_path)
-    assert ws["L22"].value == 22.0 and "YTD" in ws["L22"].comment.text
+def test_cash_flow_is_the_printed_ytd_less_earlier_quarters_in_blue(model, tmp_path):
+    """The house form for Q2/Q3 cash flow: the printed YTD stays visible in the cell, the quarter falls out."""
+    ws, rep, st = _build(model, tmp_path)
+    assert ws["L22"].value == "=61-K22-J22" and ws["L22"].font.color.rgb == "FF0000FF"
+    assert "YTD" in ws["L22"].comment.text and st["release_values"]["L22"] == 22.0
 
 
 def test_lines_the_release_does_not_print_are_blank_never_forecast(model, tmp_path):

@@ -10,7 +10,8 @@ layout ("years": period columns read from the header years; "assumed": no years 
 read as current, prior; "unknown": more value columns than the header's periods explain, e.g. segment columns) and
 periods (the header years in column order).
 Each line also has cur_i / prior_i: which of its values is the current period and which the year-ago one (None when
-the table's layout can't say; match.py reports such lines, never guesses)."""
+the table's layout can't say; match.py reports such lines, never guesses), and fy_i / fy_prior_i: the current and year-ago full-year values ('Twelve Months Ended' / 'Year Ended'
+group) when the table prints them, else None."""
 import json
 import os
 import re
@@ -24,6 +25,7 @@ DASH = {"—", "-", "–"}
 YEAR_IN = re.compile(r"\b(19\d\d|20\d\d)\b")
 GROUP = re.compile(r"\b(three|six|nine|twelve)\s+months|\b(quarter|year|weeks)\s+ended", re.I)
 QUARTERLY = re.compile(r"\bthree\s+months|\bquarter\s+ended|\b1[2-4]\s+weeks", re.I)
+FULL_YEAR = re.compile(r"\btwelve\s+months|\b(fiscal\s+)?years?\s+ended|\b5[23]\s+weeks", re.I)
 SCALE = [(re.compile(r"in thousands", re.I), 0.001), (re.compile(r"in billions", re.I), 1000.0),
          (re.compile(r"in millions", re.I), 1.0)]
 PER_SHARE = re.compile(r"per share|\bEPS\b", re.I)
@@ -99,20 +101,33 @@ def _kind(labels, caption):
     return "other"
 
 
+def _full_year(groups, size, years):
+    """(current, prior) columns of the full-year group ('Twelve Months Ended' / 'Year Ended'), or None."""
+    fy = [i for i, c in enumerate(groups) if FULL_YEAR.search(c) and not QUARTERLY.search(c)]
+    if len(fy) != 1:
+        return None
+    ys = years[fy[0] * size:(fy[0] + 1) * size]
+    if len(ys) != 2 or ys[0] == ys[1]:
+        return None
+    cur = ys.index(max(ys))
+    return fy[0] * size + cur, fy[0] * size + 1 - cur
+
+
 def _layout(head_rows, kind, ytd):
-    """(layout, years, (cur, prior) column of the current-period group or None) from the header rows above the data.
+    """(layout, years, (cur, prior) column of the current-period group or None, full-year column or None) from the
+    header rows above the data.
     Years: the header row with the most year cells. Groups ('Three Months Ended' / 'Nine Months Ended'): the
     quarterly group is current (the year-to-date one for a year-to-date cash flow); a non-cash-flow table with no
     quarterly group has no quarter to enter. In the group, the latest year is current and the year before it prior."""
     rows = [[c for c in _cells(r) if c] for r in head_rows]
     years = max(([int(YEAR_IN.search(c).group(1)) for c in r if YEAR_IN.search(c)] for r in rows), key=len, default=[])
     if not years:
-        return "assumed", [], None
+        return "assumed", [], None, None
     groups = max(([c for c in r if GROUP.search(c)] for r in rows), key=len, default=[])
     g, size = 0, len(years)
     if groups:
         if len(years) % len(groups):
-            return "unknown", years, None
+            return "unknown", years, None, None
         size = len(years) // len(groups)
         quarterly = [i for i, c in enumerate(groups) if QUARTERLY.search(c)]
         if ytd or (kind == "cf" and not quarterly):
@@ -120,12 +135,12 @@ def _layout(head_rows, kind, ytd):
         elif quarterly:
             g = quarterly[0]
         else:
-            return "unknown", years, None
+            return "unknown", years, None, None
     ys = years[g * size:(g + 1) * size]
     if len(ys) != 2 or ys[0] == ys[1]:
-        return "unknown", years, None
+        return "unknown", years, None, None
     cur = ys.index(max(ys))
-    return "years", years, (g * size + cur, g * size + 1 - cur)
+    return "years", years, (g * size + cur, g * size + 1 - cur), _full_year(groups, size, years) if groups else None
 
 
 def _mode(ds):
@@ -171,7 +186,7 @@ def parse_text(text, name):
         kind = _kind([lab for _, lab, _, _ in data], caption)
         ytd = kind == "cf" and not re.search(r"three months", header, re.I)
         common = _mode([d for _, _, _, d in data])
-        layout, years, cp = _layout(head_rows, kind, ytd)
+        layout, years, cp, fyi = _layout(head_rows, kind, ytd)
         t = len(out_t)
         out_t.append({"kind": kind, "ytd": ytd, "header": header, "scale": scale, "scale_known": known,
                       "bad": bad, "start": start + 1, "layout": layout, "periods": years})
@@ -182,9 +197,10 @@ def parse_text(text, name):
                 ci, pi = 0, 1                            # no header years: releases print current first
             else:
                 ci = pi = None
+            fy_i, fy_pi = fyi if layout == "years" and len(v) == len(years) and fyi else (None, None)
             out_l.append({"id": f"{name}:{k + 1}", "file": name, "line": k + 1, "label": lab, "values": v,
                           "decimals": common if d is None else d, "factor": 1.0 if per_share(lab) else scale,
-                          "kind": kind, "table": t, "cur_i": ci, "prior_i": pi})
+                          "kind": kind, "table": t, "cur_i": ci, "prior_i": pi, "fy_i": fy_i, "fy_prior_i": fy_pi})
     return {"tables": out_t, "lines": out_l}
 
 
