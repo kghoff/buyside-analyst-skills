@@ -9,13 +9,15 @@ import openpyxl
 
 # Strings model-valuation's note.py / build.py write and this parser depends on (tests/test_valnote.py checks them).
 RELIED_ON = ("## 1 The recommendation", "## 2 Targets and risk/reward", "## 3 Three-year IRR", "**Blended**",
-             "reward price", "risk price", "reward / risk", "IRR: price now", "IRR: price in 3 years", "IRR: years",
+             "reward price", "risk price", "reward / risk", "IRR: price now", "IRR: price in ", "IRR: years",
              "Blended ")
 NOTE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (.+) Valuation Note\.md$")
 ROW = re.compile(r"^\| ([^|]+?) \| ([^|]*?) \|")
 BLENDED = re.compile(r"\*\*Blended\*\*: reward [^(]*\(to \$([\d,.]+)\), risk [^(]*\(to \$([\d,.]+)\), "
-                     r"reward / risk ([\d.]+)x")
+                     r"reward / risk (-?[\d.]+x|n/a|#N/A)")
 ROLES = ("primary", "secondary", "tertiary")
+HORIZON = "IRR: price at the horizon"           # canonical key for "IRR: price in N years" (N = horizon)
+HORIZON_RE = re.compile(r"^IRR: price in \d+ years$")
 
 
 def latest_before(research_root, ticker, release_day):
@@ -43,7 +45,7 @@ def parse(path):
     lines = open(path, encoding="utf-8").read().splitlines()
     if not all(any(ln.startswith(h) for ln in lines) for h in RELIED_ON[:3]):
         return {"values": {}, "multiples": [], "problem": "layout not recognised (headings missing)", "path": path}
-    sec, vals, mults = None, {}, []
+    sec, vals, mults, problem = None, {}, [], None
     for i, ln in enumerate(lines, start=1):
         if ln.startswith("## "):
             sec = ln[3:4]
@@ -51,21 +53,31 @@ def parse(path):
         if m and sec == "1" and m.group(2).strip() in ROLES:
             mults.append(m.group(1).strip())
         if m and sec in ("2", "3") and (v := _num(m.group(2))) is not None:
-            vals.setdefault(m.group(1).strip(), {"value": v, "line": i})
-        if sec == "2" and (b := BLENDED.search(ln)):
-            for lab, x in zip(("Blended reward price", "Blended risk price", "Blended reward / risk"), b.groups()):
-                vals[lab] = {"value": float(x.replace(",", "")), "line": i}
-    return {"values": vals, "multiples": mults, "problem": None if vals else "layout not recognised (no values)",
+            lab = m.group(1).strip()
+            vals.setdefault(lab, {"value": v, "line": i})
+            if HORIZON_RE.match(lab):
+                vals.setdefault(HORIZON, {"value": v, "line": i, "label": lab})
+        if sec == "2" and ln.lstrip("- ").startswith("**Blended**"):
+            b = BLENDED.search(ln)
+            if not b:
+                problem = f"the Blended line (line {i}) is not in the expected layout"
+                continue
+            rw, rk, rr = b.groups()
+            vals["Blended reward price"] = {"value": float(rw.replace(",", "")), "line": i}
+            vals["Blended risk price"] = {"value": float(rk.replace(",", "")), "line": i}
+            vals["Blended reward / risk"] = {"value": _num(rr), "line": i}     # n/a or #N/A -> None
+    return {"values": vals, "multiples": mults, "problem": problem if vals else "layout not recognised (no values)",
             "path": path}
 
 
 def labels(multiples):
-    """The labels band 13 compares, before (note) against after (tab)."""
+    """The labels band 13 compares, before (note) against after (tab). The IRR horizon price is HORIZON, whatever
+    N its 'IRR: price in N years' label carries (fewer than 16 forecast quarters shortens it)."""
     out = []
     for m in multiples:
         out += [f"{m}: reward price", f"{m}: risk price", f"{m}: reward / risk"]
     return out + ["Blended reward price", "Blended risk price", "Blended reward / risk", "IRR: price now",
-                  "IRR: price in 3 years", "IRR: years", "IRR"]
+                  HORIZON, "IRR: years", "IRR"]
 
 
 def after(values_path):
@@ -81,6 +93,9 @@ def after(values_path):
         if getattr(a, "row", None) == 1:
             title = a.value
         if isinstance(getattr(a, "value", None), str) and a.value.strip() not in out:
-            out[a.value.strip()] = {"ref": f"'Valuation'!$B${a.row}", "value": getattr(b, "value", None)}
+            lab = a.value.strip()
+            out[lab] = {"ref": f"'Valuation'!$B${a.row}", "value": getattr(b, "value", None)}
+            if HORIZON_RE.match(lab) and HORIZON not in out:
+                out[HORIZON] = {**out[lab], "label": lab}
     wb.close()
     return {"cells": out, "title": title}

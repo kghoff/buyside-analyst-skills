@@ -62,3 +62,37 @@ def test_formats_still_written():
     src = open(os.path.join(MV, "note.py")).read() + open(os.path.join(MV, "build.py")).read()
     for s in valnote.RELIED_ON:
         assert s in src, f"model-valuation no longer writes {s!r}: update valnote.py"
+
+
+def _variant(fixture_research, tmp_path, old, new):
+    text = open(os.path.join(fixture_research, mf.VALNOTE)).read()
+    assert old in text
+    p = tmp_path / "2026-11-17 TEST Valuation Note.md"
+    p.write_text(text.replace(old, new))
+    return valnote.parse(str(p))
+
+
+@pytest.mark.parametrize("rr, want", [("-0.3x", -0.3), ("n/a", None), ("#N/A", None)])
+def test_blended_line_with_a_negative_or_missing_rr(fixture_research, tmp_path, rr, want):
+    """A risk price above today's gives a negative R/R, and an error prints n/a: the prices are still real."""
+    got = _variant(fixture_research, tmp_path, "reward / risk 0.7x: below hurdle.\n\n###",
+                   f"reward / risk {rr}: below hurdle.\n\n###")
+    assert got["problem"] is None and got["values"]["Blended reward / risk"]["value"] == want
+    assert got["values"]["Blended reward price"]["value"] == pytest.approx(106.66)
+
+
+def test_unparsed_blended_line_is_a_problem_not_a_silent_gap(fixture_research, tmp_path):
+    """If the Blended bullet changes shape, say so, and keep every other number the note does give."""
+    got = _variant(fixture_research, tmp_path, "- **Blended**: reward", "- **Blended**: upside")
+    assert "Blended" in got["problem"] and "Blended reward price" not in got["values"]
+    assert got["values"]["P/E: reward price"]["value"] == pytest.approx(107.76)
+
+
+def test_irr_horizon_has_one_key_whatever_the_years(fixture_research, tmp_path, fixture_model):
+    """With fewer than 16 forecast quarters the label reads 'in 2 years'; band 13 must still pair before and after."""
+    got = _variant(fixture_research, tmp_path, "| IRR: price in 3 years |", "| IRR: price in 2 years |")
+    h = got["values"][valnote.HORIZON]
+    assert h["value"] == pytest.approx(121.71) and h["label"] == "IRR: price in 2 years"
+    assert valnote.HORIZON in valnote.labels(["P/E"]) and "IRR: price in 3 years" not in valnote.labels(["P/E"])
+    tab = valnote.after(fixture_model)["cells"][valnote.HORIZON]
+    assert tab["label"] == "IRR: price in 3 years" and tab["value"] == pytest.approx(140.0)
