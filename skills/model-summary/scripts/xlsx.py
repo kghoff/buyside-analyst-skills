@@ -1,4 +1,5 @@
-"""(Copied from model-multiples, Nov 2026; keep in sync. Adds merged cells. Changes: Styles.dxf adds a fill; remove_sheet shifts
+"""(Copied from model-multiples, Nov 2026; keep in sync. Adds merged cells. Changes: Styles.dxf adds a fill;
+Styles.border and xf(border=) add cell borders; remove_sheet shifts
 activeTab / firstSheet down when an earlier sheet goes, so a remove-then-add rerun does not drift.) Raw-XML workbook editing: add / remove whole tabs (with their drawings, charts and comments) without loading the
 workbook in openpyxl, which would drop the user's text boxes, shapes, images and equations and re-serialize their charts.
 
@@ -241,7 +242,7 @@ def relative(base, target):
 
 # ---------------------------------------------------------------- styles
 class Styles:
-    """Appends fonts / fills / numFmts / cellXfs / dxfs to styles.xml and hands back their indices."""
+    """Appends fonts / fills / borders / numFmts / cellXfs / dxfs to styles.xml and hands back their indices."""
     BUILTIN = {"General": 0, "0": 1, "0.00": 2, "#,##0": 3, "#,##0.00": 4, "0%": 9, "0.00%": 10}
 
     def __init__(self, xml):
@@ -250,7 +251,7 @@ class Styles:
         for m in re.finditer(r'<numFmt numFmtId="(\d+)" formatCode="([^"]*)"/>', xml):
             self.fmt[unesc(m.group(2))] = int(m.group(1))
         self.next_fmt = max([163] + list(self.fmt.values())) + 1
-        self.new = {"numFmts": [], "fonts": [], "fills": [], "cellXfs": [], "dxfs": []}
+        self.new = {"numFmts": [], "fonts": [], "fills": [], "borders": [], "cellXfs": [], "dxfs": []}
         self.count = {k: self._count(k) for k in self.new}
         self.cache = {}
 
@@ -258,7 +259,8 @@ class Styles:
         m = re.search(rf"<{tag}\b[^>]*?(?:/>|>(.*?)</{tag}>)", self.xml, re.S)
         if not m or not m.group(1):
             return 0
-        child = {"numFmts": "numFmt", "fonts": "font", "fills": "fill", "cellXfs": "xf", "dxfs": "dxf"}[tag]
+        child = {"numFmts": "numFmt", "fonts": "font", "fills": "fill", "borders": "border", "cellXfs": "xf",
+                 "dxfs": "dxf"}[tag]
         return len(re.findall(rf"<{child}\b", m.group(1)))
 
     def _add(self, tag, xml):
@@ -285,13 +287,21 @@ class Styles:
         return self._add("fills", f'<fill><patternFill patternType="solid"><fgColor rgb="{rgb}"/><bgColor indexed="64"/>'
                                   "</patternFill></fill>")
 
-    def xf(self, color="FF000000", fmt="General", sz=12, b=False, i=False, fill=None, align=None):
+    def border(self, left=None, right=None, top=None, bottom=None):
+        """A cell border; each side None, "thin" or "medium"."""
+        side = lambda tag, s: f'<{tag} style="{s}"><color auto="1"/></{tag}>' if s else f"<{tag}/>"  # noqa: E731
+        return self._add("borders", "<border>" + "".join(side(t, s) for t, s in (("left", left), ("right", right),
+                                                                                ("top", top), ("bottom", bottom)))
+                         + "<diagonal/></border>")
+
+    def xf(self, color="FF000000", fmt="General", sz=12, b=False, i=False, fill=None, align=None, border=0):
         f = self.font(color, sz, b, i)
         fl = self.fill(fill) if fill else 0
         n = self.numfmt(fmt)
         al = f'<alignment horizontal="{align}" vertical="center" wrapText="1"/>' if align else ""
-        return self._add("cellXfs", f'<xf numFmtId="{n}" fontId="{f}" fillId="{fl}" borderId="0" xfId="0" applyNumberFormat="1" '
+        return self._add("cellXfs", f'<xf numFmtId="{n}" fontId="{f}" fillId="{fl}" borderId="{border}" xfId="0" applyNumberFormat="1" '
                                     f'applyFont="1"{" applyFill=" + chr(34) + "1" + chr(34) if fill else ""}'
+                                    f'{" applyBorder=" + chr(34) + "1" + chr(34) if border else ""}'
                                     f'{" applyAlignment=" + chr(34) + "1" + chr(34) + ">" + al + "</xf>" if al else "/>"}')
 
     def dxf_font(self, rgb):
@@ -304,7 +314,7 @@ class Styles:
 
     def render(self):
         x = self.xml
-        for tag in ("numFmts", "fonts", "fills", "cellXfs", "dxfs"):
+        for tag in ("numFmts", "fonts", "fills", "borders", "cellXfs", "dxfs"):
             if not self.new[tag]:
                 continue
             add = "".join(self.new[tag])

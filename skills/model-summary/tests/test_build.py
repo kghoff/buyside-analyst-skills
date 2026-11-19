@@ -63,7 +63,44 @@ def test_colours(built):
     assert ws["C7"].font.color.rgb == "FF008000"                       # link green
     assert ws["C9"].font.color.rgb == "FF000000"                       # formula black
     for ref in ("C19", "C20", "C51", "B54", "E21", "E33"):
-        assert ws[ref].fill.fgColor.rgb == "FFFFFF00", ref                # yellow inputs
+        assert ws[ref].fill.fgColor.rgb == "FFFFFF99", ref                # the house pale yellow (Valuation's)
+
+
+def test_yellow_means_only_yours_to_type(built):
+    """Yellow tells the PM "yours to type"; a key OUTPUT in yellow would invite typing over a formula. Every yellow
+    cell on SUM must be one of the input cells, and the key results are bold and outlined instead."""
+    import json
+    import os
+    ws = _wb(built)["SUM"]
+    inputs = set(json.load(open(os.path.join(built[2], "layout.json")))["inputs"].values())
+    yellow = {c.coordinate for row in ws.iter_rows() for c in row
+              if c.fill.fill_type == "solid" and c.fill.fgColor.rgb in ("FFFFFF99", "FFFFFF00")
+              and not (c.value is None and c.coordinate not in inputs)}
+    assert yellow == inputs - {"C3"}          # Action is a green link to Valuation's verdict until typed over
+    for ref in ("C30", "C31", "C33", "C47", "F10", "F13"):
+        assert ws[ref].font.b and ws[ref].fill.fgColor.rgb != "FFFFFF99", ref
+
+
+def test_section_titles_are_dark_blue_bars(built):
+    """A PM scans the page by its blocks: each block's title is a dark-blue bar with white bold text, across the
+    block's full width, so the blocks read apart at a glance."""
+    import json
+    import os
+    ws = _wb(built)["SUM"]
+    last = json.load(open(os.path.join(built[2], "layout.json")))["refs"]["grid_cols"][-1]
+    for ref in ("B6", "D6", "B26", "D26", "B36", "B43", "E3", f"{last}3", "P3", "U3", "W3", "AA3", "E20", "E32", "B53"):
+        c = ws[ref]
+        assert c.fill.fgColor.rgb == "FF002060" and c.font.color.rgb == "FFFFFFFF" and c.font.b, ref
+    assert ws["F4"].fill.fgColor.rgb == "FFBDD7EE" and ws["F4"].font.b      # the years: a light-blue header row
+
+
+def test_cap_table_is_boxed(built):
+    """The cap table is the anchor of the page (price, shares, EV): a thick outline sets it apart from the targets."""
+    ws = _wb(built)["SUM"]
+    assert all(ws[f"B{r}"].border.left.style == "medium" for r in range(6, 17))
+    assert all(ws[f"{c}16"].border.bottom.style == "medium" for c in "BCD")
+    assert ws["D10"].border.right.style == "medium" and ws["C10"].border.right.style is None
+    assert ws["F14"].border.top.style == "thin"           # the multiples rows sit apart from the P&L rows
 
 
 def test_every_typed_number_has_a_note(built):

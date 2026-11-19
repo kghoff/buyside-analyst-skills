@@ -89,7 +89,7 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
     w = W(st, users)
     R = layout.lay_out(w, L, A, used, ticker, today or dt.date.today())
     w.sh.comments = w.notes
-    w.sh.widths.update({1: 2, 2: 46, 3: 14, 4: 11, 5: 30, **{k: 11 for k in range(6, 15)}, 15: 2, 16: 24,
+    w.sh.widths.update({1: 2, 2: 52, 3: 14, 4: 13, 5: 30, **{k: 11 for k in range(6, 15)}, 15: 2, 16: 34,
                         **{k: 11 for k in range(17, 22)}, 22: 2, **{k: 11 for k in range(23, 28)}})
     part = write_tab(pkg, w)
     pkg.put("xl/styles.xml", st.render())

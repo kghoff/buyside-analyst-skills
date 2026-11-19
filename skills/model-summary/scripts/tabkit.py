@@ -1,6 +1,6 @@
 # skills/model-summary/scripts/tabkit.py
 """(Copied from model-earnings-before, Nov 2026; keep in sync. Changes: W.input_ takes wrap=; move_first replaces
-_move_after. Earlier history: copied from model-short build.py, Nov 2026; keep in sync. Changes: _n replaces shortmath._n; W.link and W.formula
+_move_after; W.style takes border=, W.restyle / W.edge, paint and box add fills and outlines after a cell is written. Earlier history: copied from model-short build.py, Nov 2026; keep in sync. Changes: _n replaces shortmath._n; W.link and W.formula
 take check=False for cells verify.py must not compare, such as dates; W.typed_text and W.value are new; W.input_
 writes a date as a serial with a yyyy-mm-dd format.) The
 tab-writing kit: the cell writer W, what a rerun keeps (resolve_values), and the raw-XML steps that place a whole tab
@@ -10,10 +10,13 @@ import math
 import re
 import zipfile
 
-from xlsx import Package, Sheet, esc, relpath_of, resolve
+from xlsx import Package, Sheet, colname, colnum, esc, relpath_of, resolve
 
-BLUE, BLACK, GREEN, RED, YELLOW = "FF0000FF", "FF000000", "FF008000", "FFC00000", "FFFFFF00"
+BLUE, BLACK, GREEN, RED, YELLOW = "FF0000FF", "FF000000", "FF008000", "FFC00000", "FFFFFF99"
 GEN = "General"
+FIELDS = ("color", "fmt", "b", "i", "fill", "sz", "wrap", "align", "border")
+SIDES = ("left", "right", "top", "bottom")
+WEIGHT = {None: 0, "thin": 1, "medium": 2}
 
 
 def _n(v):
@@ -51,13 +54,33 @@ class W:
     def __init__(self, st, users=()):
         self.sh, self.st, self.s, self.users = Sheet(), st, {}, set(users)
         self.expected, self.notes, self.inputs, self.kinds, self.fmt, self.col_a = {}, {}, {}, {}, {}, {}
+        self.key = {}                                     # style index -> its key, so restyle can change one field
 
-    def style(self, color=BLACK, fmt=GEN, b=False, i=False, fill=None, sz=11, wrap=False, align=None):
-        k = (color, fmt, b, i, fill, sz, wrap, align)
+    def style(self, color=BLACK, fmt=GEN, b=False, i=False, fill=None, sz=11, wrap=False, align=None, border=None):
+        """border: None or a (left, right, top, bottom) tuple of None / "thin" / "medium"."""
+        k = (color, fmt, b, i, fill, sz, wrap, align, border)
         if k not in self.s:
             self.s[k] = self.st.xf(color=color, fmt=fmt, b=b, i=i, fill=fill, sz=sz,
-                                   align=align or ("left" if wrap else None))
+                                   align=align or ("left" if wrap else None),
+                                   border=self.st.border(*border) if border else 0)
+            self.key[self.s[k]] = k
         return self.s[k]
+
+    def restyle(self, ref, **change):
+        """Change style fields of a written cell (an empty cell becomes a blank styled one); value and kind stay."""
+        m = re.match(r"([A-Z]+)(\d+)$", ref)
+        rc = (int(m.group(2)), colnum(m.group(1)))
+        kind, val, st = self.sh.cells.get(rc) or ("blank", None, self.style())
+        k = {**dict(zip(FIELDS, self.key[st])), **change}
+        self.sh.cells[rc] = (kind, val, self.style(**k))
+
+    def edge(self, ref, **sides):
+        """Add border sides to a cell, keeping the heavier where one is already set."""
+        m = re.match(r"([A-Z]+)(\d+)$", ref)
+        cell = self.sh.cells.get((int(m.group(2)), colnum(m.group(1))))
+        old = dict(zip(SIDES, (self.key[cell[2]][-1] if cell else None) or (None,) * 4))
+        new = tuple(max(old[s], sides.get(s), key=WEIGHT.get) for s in SIDES)
+        self.restyle(ref, border=new)
 
     def text(self, ref, t, color=BLACK, b=False, i=False, sz=11, wrap=False, align=None):
         self.sh.set(ref, "s", str(t), self.style(color, GEN, b, i, None, sz, wrap, align))
@@ -104,6 +127,29 @@ class W:
             kind, val = ("n", v) if _n(v) else ("s", str(v))
         self.sh.set(ref, kind, val, self.style(BLUE, fmt, fill=YELLOW, wrap=wrap))
         self.kinds[ref], self.inputs[label], self.notes[ref], self.fmt[ref] = "input", ref, note, fmt
+
+
+def cells(rng):
+    """Every ref in a range like "B6:D16", row by row."""
+    (c0, r0), (c1, r1) = ((colnum(a), int(b)) for a, b in re.findall(r"([A-Z]+)(\d+)", rng))
+    return [[f"{colname(c)}{r}" for c in range(c0, c1 + 1)] for r in range(r0, r1 + 1)]
+
+
+def paint(w, rng, **change):
+    """Restyle every cell of a range: a title bar, a header row, a key-result row."""
+    for row in cells(rng):
+        for ref in row:
+            w.restyle(ref, **change)
+
+
+def box(w, rng, weight="thin"):
+    """Outline a range (each edge cell gets its outer sides; merged ranges need every edge cell bordered)."""
+    g = cells(rng)
+    for i, row in enumerate(g):
+        for j, ref in enumerate(row):
+            sides = {"left": j == 0, "right": j == len(row) - 1, "top": i == 0, "bottom": i == len(g) - 1}
+            if any(sides.values()):
+                w.edge(ref, **{s: weight for s, on in sides.items() if on})
 
 
 def move_first(pkg, name):

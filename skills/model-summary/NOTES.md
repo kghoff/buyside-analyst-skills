@@ -16,7 +16,18 @@
   user declined price-vs-action-price and multiple-vs-history shading. The thresholds point at SUM cells that link
   Valuation's house inputs, not at the other tab directly, because Excel 2007 can't read another sheet in a CF rule.
 
-## Pieces
+## Formatting (2026-11-19, the user, after the DXCM build; modelled on the course instructor's NFLX SUM tab)
+- Each block reads apart: a dark-blue (FF002060) title bar with white bold text across the block, light-blue bold
+  column headers (years, scenario and ladder columns, Min / Median / Max), a thin outline per block, a thick one
+  on the cap table, a top border between the grid's P&L rows and its multiples rows. Title 14 bold, body 11.
+- Yellow means only "yours to type": the pale yellow FFFFFF99 of Valuation and Short Check. The instructor also
+  fills key OUTPUT rows yellow; we don't (house rule). Key results (% return, x money, IRR, EPS, Expected Delta,
+  risk price) are bold on pale blue with an outline instead.
+- Formatting only: no cell moved. Styles are added after writing (tabkit.paint / box re-resolve a cell's style
+  key); blank styled cells carry fills and borders. Mgmt contact's merge widened to B:D to line up with the blocks.
+- Row 4 is fixed at 16pt: right-aligned headers carry wrapText (xlsx.Styles sets it with any alignment) and
+  LibreOffice would otherwise grow the row.
+
 - links.py finds everything by label (formulas only, no recalculation); a missing label stops and names the skill.
 - SUM goes to position 0. tabkit.move_first shifts localSheetId, activeTab and firstSheet; xlsx.remove_sheet now
   shifts activeTab and firstSheet down too, so remove-then-add reruns don't drift the open tab.
