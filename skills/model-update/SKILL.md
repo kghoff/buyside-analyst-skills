@@ -206,7 +206,9 @@ Tell the user, in plain English:
    /model-update <T> once it is collected), `driver` (a forecast driver or a line with no history: the company may
    never print it; type it yourself if you track it), `manual` (an analysis row you keep by hand: re-enter it). Also
    `awaiting` cells left blank (no pre-print value) and `waiting_read_elsewhere` (blank cells other columns read:
-   those show errors or zeros until the filing).
+   those show errors or zeros until the filing). On a Q4, if any FY-column placeholder sits on a line Filings Charts
+   uses (revenue, costs, operating income, net income, cash flow), say that the closed year's chart values include
+   those estimates until the 10-K rerun.
 3. The quarter vs the frozen forecast: 5–8 headline lines from `actual_vs_frozen.md` (a glance; the full comparison is
    model-earnings-after's job).
 4. Every judgment call: agent-mapped and summed lines (with reasons), combined lines, typed subtotals (a printed
