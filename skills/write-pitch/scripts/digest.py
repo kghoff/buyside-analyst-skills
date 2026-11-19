@@ -4,9 +4,12 @@ matter, and a summary (not a row dump) of huge numeric blocks such as daily pric
 usage: python3 digest.py --values <recalculated copy> --out <work>/digest.md [--json <work>/digest.json]
 
 Per tab, in workbook order: Text, Notes, Numbers, Bulk blocks.
-- Bulk rule (any tab): split the used range into vertical blocks at fully empty rows. A block of more than 200 rows
-  whose cells are at least 80% numeric (dates count) is not listed cell by cell; each numeric column gets one line:
-  first (row) value, last (row) value, min, max, latest percentile. Cells outside bulk blocks are still listed.
+- Bulk rule (any tab but MOD): split the used range into vertical blocks at fully empty rows. In a block of more than
+  200 rows, a column with more than 200 non-empty cells that are at least 80% numeric (dates count) is not listed cell
+  by cell; it gets one line: first (row) value, last (row) value, min, max, latest percentile. A column mixing dates
+  and numbers gets one line per type. In such a block a column with more than 200 text cells gets one line too (count,
+  distinct, rows, first, last, up to 30 distinct values). Every other cell, in the block or outside, is still listed,
+  including stray text in a bulk column (only its header, the first text, is folded into the summary line).
 - Numbers, ordinary tab: one line per row, `r12 (<row label>): B <header>=1.2, C <header>=0.3`; the cell is the column
   letter plus the row. Row label = first text in columns A-C of that row. Column header = the nearest text above the
   cell in the same column within its block (omitted when there is none).
@@ -15,7 +18,10 @@ Per tab, in workbook order: Text, Notes, Numbers, Bulk blocks.
   (repeated every 40 rows) and one row per labelled row `| r12 label | v | ... |`; the periods are the annual
   columns, the last 8 actual quarters and every forecast quarter. MOD skips the bulk rule: its
   columns are already filtered, and a long block of lines with 40 period columns would otherwise look like bulk.
-- Notes: every cell comment as `A1 (<row label>) = <value>: <note>`.
+- Notes: every cell comment as `A1 (<row label>) = <value>: <note>`. On MOD, notes on period columns that were dropped
+  are left out, and the count is stated.
+- MOD period headers that match no rule (e.g. a date) are named in a `skipped columns:` line, with the count of older
+  actual quarters dropped. Hidden sheets are marked `(hidden)`.
 The file must be a values copy (data_only), so formulas show their results."""
 import argparse
 import bisect
@@ -80,64 +86,101 @@ def blocks_of(rows):
     return out
 
 
-def is_bulk(block, rows):
+def dkey(v):
+    return v.date() if isinstance(v, datetime.datetime) else v
+
+
+def stat_line(vals, header, c, block):
+    keys = sorted(dkey(v) for _, v in vals)
+    last = vals[-1][1]
+    return {"kind": "numeric", "block": f"rows {block[0]}-{block[-1]}", "column": L(c), "header": header,
+            "first_row": vals[0][0], "first": fmt(vals[0][1]), "last_row": vals[-1][0], "last": fmt(last),
+            "min": fmt(keys[0]), "max": fmt(keys[-1]),
+            "latest_percentile": round(100 * bisect.bisect_right(keys, dkey(last)) / len(keys))}
+
+
+def bulk_columns(block, rows):
+    """(numeric bulk columns, text bulk columns) of a block; none unless the block has more than 200 rows."""
     if len(block) <= BULK_ROWS:
-        return False
-    cells = [v for r in block for _, v in rows[r]]
-    return sum(is_num(v) for v in cells) >= BULK_SHARE * len(cells)
+        return set(), set()
+    n, t = {}, {}
+    for r in block:
+        for c, v in rows[r]:
+            n[c] = n.get(c, 0) + 1
+            if not is_num(v):
+                t[c] = t.get(c, 0) + 1
+    num = {c for c, k in n.items() if k > BULK_ROWS and (k - t.get(c, 0)) >= BULK_SHARE * k}
+    return num, ({c for c, k in t.items() if k > BULK_ROWS and c not in num} if num else set())
 
 
-def summarize(block, rows):
+def summarize(block, rows, num_cols, txt_cols):
     cols, heads = {}, {}
     for r in block:
         for c, v in rows[r]:
-            if is_num(v):
+            if c in num_cols and is_num(v):
                 cols.setdefault(c, []).append((r, v))
-            elif c not in heads:
-                heads[c] = v
+            elif c in num_cols | txt_cols and not is_num(v):
+                if c not in heads:
+                    heads[c] = str(v)
+                elif c in txt_cols:
+                    cols.setdefault(c, []).append((r, str(v)))
     out = []
     for c in sorted(cols):
-        vals = cols[c]
-        try:
-            ordered = sorted(v for _, v in vals)
-        except TypeError:                                    # dates mixed with numbers in one column
+        h = heads.get(c, L(c))
+        if c in txt_cols:
+            vals = cols[c]
+            distinct = list(dict.fromkeys(v for _, v in vals))
+            out.append({"kind": "text", "block": f"rows {block[0]}-{block[-1]}", "column": L(c), "header": h,
+                        "count": len(vals), "distinct": len(distinct), "first_row": vals[0][0],
+                        "last_row": vals[-1][0], "first": vals[0][1], "last": vals[-1][1], "values": distinct[:30]})
             continue
-        last = vals[-1][1]
-        pct = round(100 * bisect.bisect_right(ordered, last) / len(ordered))
-        out.append({"block": f"rows {block[0]}-{block[-1]}", "column": L(c), "header": str(heads.get(c, L(c))),
-                    "first_row": vals[0][0], "first": fmt(vals[0][1]), "last_row": vals[-1][0], "last": fmt(last),
-                    "min": fmt(ordered[0]), "max": fmt(ordered[-1]), "latest_percentile": pct})
+        dates = [x for x in cols[c] if isinstance(x[1], datetime.date)]
+        nums = [x for x in cols[c] if not isinstance(x[1], datetime.date)]
+        for kind, vals in (("dates", dates), ("numbers", nums)):
+            if vals:
+                out.append(stat_line(vals, h + (f" ({kind})" if dates and nums else ""), c, block))
     return out
 
 
 def mod_columns(rows):
-    """Columns kept on MOD: annual, last 8 actual quarters, all forecast quarters."""
-    heads = {c: str(v).strip() for c, v in rows.get(2, []) if c >= 4}
+    """Columns kept on MOD: annual, last 8 actual quarters, all forecast quarters.
+    Also the unrecognised headers (named, so the drop is visible) and how many older actual quarters were dropped."""
+    heads = {c: (v.strip() if isinstance(v, str) else fmt(v)) for c, v in rows.get(2, []) if c >= 4}
     actual = [c for c, h in heads.items() if QTR.match(h) and not QTR.match(h).group(1)]
-    keep = set(c for c, h in heads.items() if YEAR.match(h) and not QTR.match(h))
+    keep = {c for c, h in heads.items() if YEAR.match(h) and not QTR.match(h)}
     keep |= set(actual[-MOD_QUARTERS:])
     keep |= {c for c, h in heads.items() if QTR.match(h) and QTR.match(h).group(1)}
-    return keep, heads
+    skipped = [f"{L(c)}={h}" for c, h in heads.items() if not (YEAR.match(h) or QTR.match(h))]
+    return keep, heads, skipped, max(len(actual) - MOD_QUARTERS, 0)
 
 
 def digest_sheet(ws):
     rows, notes = read_sheet(ws)
-    d = {"text": {}, "notes": [], "numbers": [], "bulk": []}
+    d = {"hidden": ws.sheet_state != "visible", "text": {}, "notes": [], "numbers": [], "bulk": []}
     is_mod = ws.title == "MOD"
-    keep, mod_heads = mod_columns(rows) if is_mod else (set(), {})
+    keep, mod_heads = set(), {}
     if is_mod:
+        keep, mod_heads, d["skipped_columns"], d["old_quarters_dropped"] = mod_columns(rows)
         d["mod_columns"] = [(L(c), mod_heads[c]) for c in sorted(keep)]
-    bulk_rows, section = set(), ""
+    section = ""
     for block in blocks_of(rows):
-        if not is_mod and is_bulk(block, rows):
-            d["bulk"] += summarize(block, rows)
-            bulk_rows.update(block)
-            continue
-        heads = {}
+        num_cols, txt_cols = (set(), set()) if is_mod else bulk_columns(block, rows)
+        d["bulk"] += summarize(block, rows, num_cols, txt_cols) if num_cols else []
+        heads, folded = {}, set()
         for r in block:
-            label = next((x for c, x in rows[r] if c == 2 and isinstance(x, str)), "") if is_mod else row_label(rows[r])
+            label = row_label(rows[r])
+            if is_mod:                                       # the label is column B; fall back to A-C when B is empty
+                label = next((x for c, x in rows[r] if c == 2 and isinstance(x, str)), label)
             cells = []
             for c, v in rows[r]:
+                if c in txt_cols and not is_num(v):
+                    continue
+                if c in num_cols:
+                    if is_num(v):
+                        continue
+                    if c not in folded:                      # the column header, folded into the summary line
+                        folded.add(c)
+                        continue
                 if not is_num(v):
                     d["text"][f"{L(c)}{r}"] = str(v)
                     heads[c] = str(v)
@@ -150,7 +193,11 @@ def digest_sheet(ws):
                     cells.append({"col": L(c), "header": heads.get(c, ""), "value": fmt(v)})
             if cells:
                 d["numbers"].append({"section": section, "row": r, "label": label, "cells": cells})
+    d["notes_omitted"] = 0
     for r, c, v, text in notes:
+        if is_mod and c > 3 and c not in keep:
+            d["notes_omitted"] += 1
+            continue
         d["notes"].append({"cell": f"{L(c)}{r}", "label": row_label(rows.get(r, [])),
                            "value": "" if v is None else fmt(v), "note": text})
     return d
@@ -168,7 +215,7 @@ def mod_tables(d):
                 if i % 40 == 0:
                     out.append(heads)
                 have = {x["col"]: x["value"] for x in g["cells"]}
-                out.append(f"| r{g['row']} {g['label']} | " + " | ".join(have.get(c, "") for c, _ in cols) + " |")
+                out.append(f"| r{g['row']} {g['label'].replace('|', chr(92) + '|')} | " + " | ".join(have.get(c, "") for c, _ in cols) + " |")
             group = []
         if n is not None:
             group.append(n)
@@ -184,17 +231,30 @@ def number_lines(d):
     return out
 
 
+def bulk_line(b):
+    if b["kind"] == "text":
+        return (f"col {b['column']} {b['header']}: {b['count']} text cells, {b['distinct']} distinct, "
+                f"rows {b['first_row']}-{b['last_row']}; first: {b['first']}, last: {b['last']}; "
+                f"values: {'; '.join(b['values'])} [{b['block']}]")
+    return (f"{b['header']}: first ({b['first_row']}) {b['first']}, last ({b['last_row']}) {b['last']}, "
+            f"min {b['min']}, max {b['max']}, latest percentile {b['latest_percentile']}% "
+            f"[col {b['column']}, {b['block']}]")
+
+
 def to_markdown(name, d):
-    out = [f"## {name}", "", "### Text"]
+    out = [f"## {name}{' (hidden)' if d['hidden'] else ''}", "", "### Text"]
     out += [f"{k}: {v}" for k, v in d["text"].items()] or ["(none)"]
     out += ["", "### Notes"]
     out += [f"{n['cell']} ({n['label']}) = {n['value']}: {n['note']}" for n in d["notes"]] or ["(none)"]
+    if d["notes_omitted"]:
+        out.append(f"({d['notes_omitted']} notes on dropped period columns omitted)")
     out += ["", "### Numbers"]
+    if "mod_columns" in d:
+        out.append("skipped columns: " + (", ".join(d["skipped_columns"]) or "none")
+                   + f"; older actual quarters dropped: {d['old_quarters_dropped']}")
     out += (mod_tables(d) if "mod_columns" in d and d["numbers"] else number_lines(d)) or ["(none)"]
     out += ["", "### Bulk blocks"]
-    out += [f"{b['header']}: first ({b['first_row']}) {b['first']}, last ({b['last_row']}) {b['last']}, "
-            f"min {b['min']}, max {b['max']}, latest percentile {b['latest_percentile']}% "
-            f"[col {b['column']}, {b['block']}]" for b in d["bulk"]] or ["(none)"]
+    out += [bulk_line(b) for b in d["bulk"]] or ["(none)"]
     return "\n".join(out) + "\n"
 
 
