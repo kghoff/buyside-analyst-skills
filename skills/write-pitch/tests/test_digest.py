@@ -26,7 +26,7 @@ def test_bulk_block_is_summarized_and_text_and_notes_kept(tmp_path):
     t = out.read_text()
     assert "Bulk blocks" in t and "Close: first (2) 102" in t and "last (301) 401" in t
     assert "B150" not in t                     # no row-by-row dump of the bulk block
-    assert "B3: Buy" in t and "agent call; anchor Multiples!D9" in t and "B5 (Price" in t
+    assert "B3: Buy" in t and "agent call; anchor Multiples!D9" in t and "r5 (Price): B=72.4" in t
 
 
 def test_mod_keeps_annual_last_8_actual_and_forecast_quarters(tmp_path):
@@ -38,10 +38,11 @@ def test_mod_keeps_annual_last_8_actual_and_forecast_quarters(tmp_path):
         ws.cell(5, 4 + k, 1000 + k)
     ws["A4"], ws["B5"] = "INCOME STATEMENT", "Revenue"
     t = run_digest(wb, tmp_path)
-    assert "(Revenue | Q1 23)" not in t and "(Revenue | Q4 23)" not in t    # older than the last 8 actual quarters
-    assert "(Revenue | Q4 24)" in t and "(Revenue | Q3 26)" in t            # last 8 actual: Q4 24 .. Q3 26
-    assert "(Revenue | Q4 26E)" in t and "(Revenue | Q1 27E)" in t          # all forecast quarters
-    assert "(Revenue | 2025)" in t and "(Revenue | 2026E)" in t             # annual columns
+    assert "Q1 23=" not in t and "Q4 23=" not in t                          # older than the last 8 actual quarters
+    assert "Q4 24=" in t and "Q3 26=" in t                                  # last 8 actual: Q4 24 .. Q3 26
+    assert "Q4 26E=" in t and "Q1 27E=" in t                                # all forecast quarters
+    assert "2025=" in t and "2026E=" in t                                   # annual columns
+    assert "| r5 Revenue |" in t and "1000" not in t                         # row kept (anchor = row + column letter), Q1 23 value dropped
 
 
 def test_big_tab_bulk_summarized_but_small_labelled_block_below_listed(tmp_path):
@@ -54,4 +55,4 @@ def test_big_tab_bulk_summarized_but_small_labelled_block_below_listed(tmp_path)
     ws["A500"], ws["B500"] = "Note", "end"
     t = run_digest(wb, tmp_path)
     assert "Px: first (2) 0.2" in t and "B150" not in t
-    assert "B310 (Beta" in t and "B500: end" in t
+    assert "r310 (Beta): B=1.25" in t and "B500: end" in t

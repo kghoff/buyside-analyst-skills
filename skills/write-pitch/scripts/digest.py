@@ -7,10 +7,13 @@ Per tab, in workbook order: Text, Notes, Numbers, Bulk blocks.
 - Bulk rule (any tab): split the used range into vertical blocks at fully empty rows. A block of more than 200 rows
   whose cells are at least 80% numeric (dates count) is not listed cell by cell; each numeric column gets one line:
   first (row) value, last (row) value, min, max, latest percentile. Cells outside bulk blocks are still listed.
-- Numbers, ordinary tab: every numeric cell as `A1 (<row label> | <column header>) = value`. Row label = first text in
-  columns A-C of that row. Column header = the nearest text above the cell in the same column within its block.
-- Numbers, MOD tab (the model's main sheet; period headers in row 2 from column D, labels in column B): per labelled
-  row, the annual columns, the last 8 actual quarters and every forecast quarter. MOD skips the bulk rule: its
+- Numbers, ordinary tab: one line per row, `r12 (<row label>): B <header>=1.2, C <header>=0.3`; the cell is the column
+  letter plus the row. Row label = first text in columns A-C of that row. Column header = the nearest text above the
+  cell in the same column within its block (omitted when there is none).
+- Numbers, MOD tab (the model's main sheet; period headers in row 2 from column D, labels in column B): one table per
+  section (column A name) with a `columns: 2025=H, ...` line above it, the period headers once as the table header
+  (repeated every 40 rows) and one row per labelled row `| r12 label | v | ... |`; the periods are the annual
+  columns, the last 8 actual quarters and every forecast quarter. MOD skips the bulk rule: its
   columns are already filtered, and a long block of lines with 40 period columns would otherwise look like bulk.
 - Notes: every cell comment as `A1 (<row label>) = <value>: <note>`.
 The file must be a values copy (data_only), so formulas show their results."""
@@ -122,7 +125,9 @@ def digest_sheet(ws):
     d = {"text": {}, "notes": [], "numbers": [], "bulk": []}
     is_mod = ws.title == "MOD"
     keep, mod_heads = mod_columns(rows) if is_mod else (set(), {})
-    bulk_rows = set()
+    if is_mod:
+        d["mod_columns"] = [(L(c), mod_heads[c]) for c in sorted(keep)]
+    bulk_rows, section = set(), ""
     for block in blocks_of(rows):
         if not is_mod and is_bulk(block, rows):
             d["bulk"] += summarize(block, rows)
@@ -130,27 +135,53 @@ def digest_sheet(ws):
             continue
         heads = {}
         for r in block:
-            label = row_label(rows[r])
+            label = next((x for c, x in rows[r] if c == 2 and isinstance(x, str)), "") if is_mod else row_label(rows[r])
+            cells = []
             for c, v in rows[r]:
-                cell = f"{L(c)}{r}"
                 if not is_num(v):
-                    d["text"][cell] = str(v)
+                    d["text"][f"{L(c)}{r}"] = str(v)
                     heads[c] = str(v)
+                    if is_mod and c == 1:
+                        section = str(v)
                 elif is_mod:
-                    lab = next((x for cc, x in rows[r] if cc == 2 and isinstance(x, str)), "")
-                    if lab and r != 2 and c in keep:
-                        d["numbers"].append({"cell": cell, "label": lab, "header": mod_heads[c], "value": fmt(v)})
+                    if label and r != 2 and c in keep:
+                        cells.append({"col": L(c), "header": mod_heads[c], "value": fmt(v)})
                 else:
-                    d["numbers"].append({"cell": cell, "label": label, "header": heads.get(c, ""), "value": fmt(v)})
+                    cells.append({"col": L(c), "header": heads.get(c, ""), "value": fmt(v)})
+            if cells:
+                d["numbers"].append({"section": section, "row": r, "label": label, "cells": cells})
     for r, c, v, text in notes:
         d["notes"].append({"cell": f"{L(c)}{r}", "label": row_label(rows.get(r, [])),
                            "value": "" if v is None else fmt(v), "note": text})
     return d
 
 
-def label_bits(*parts):
-    parts = [p for p in parts if p]
-    return f" ({' | '.join(parts)})" if parts else ""
+def mod_tables(d):
+    """One table per MOD section: kept period headers once (repeated every 40 rows), one row per labelled row."""
+    cols = d["mod_columns"]
+    heads = "| row | " + " | ".join(h for _, h in cols) + " |\n|" + "---|" * (len(cols) + 1)
+    out, group = [], []
+    for n in d["numbers"] + [None]:
+        if n is None or (group and n["section"] != group[0]["section"]):
+            out += ["", f"{group[0]['section'] or '(no section)'}", "columns: " + ", ".join(f"{h}={c}" for c, h in cols)]
+            for i, g in enumerate(group):
+                if i % 40 == 0:
+                    out.append(heads)
+                have = {x["col"]: x["value"] for x in g["cells"]}
+                out.append(f"| r{g['row']} {g['label']} | " + " | ".join(have.get(c, "") for c, _ in cols) + " |")
+            group = []
+        if n is not None:
+            group.append(n)
+    return out
+
+
+def number_lines(d):
+    out = []
+    for n in d["numbers"]:
+        cells = ", ".join(f"{c['col']}{' ' + c['header'] if c['header'] else ''}={c['value']}" for c in n["cells"])
+        label = " (" + n["label"] + ")" if n["label"] else ""
+        out.append(f"r{n['row']}{label}: {cells}")
+    return out
 
 
 def to_markdown(name, d):
@@ -159,7 +190,7 @@ def to_markdown(name, d):
     out += ["", "### Notes"]
     out += [f"{n['cell']} ({n['label']}) = {n['value']}: {n['note']}" for n in d["notes"]] or ["(none)"]
     out += ["", "### Numbers"]
-    out += [f"{n['cell']}{label_bits(n['label'], n['header'])} = {n['value']}" for n in d["numbers"]] or ["(none)"]
+    out += (mod_tables(d) if "mod_columns" in d and d["numbers"] else number_lines(d)) or ["(none)"]
     out += ["", "### Bulk blocks"]
     out += [f"{b['header']}: first ({b['first_row']}) {b['first']}, last ({b['last_row']}) {b['last']}, "
             f"min {b['min']}, max {b['max']}, latest percentile {b['latest_percentile']}% "
