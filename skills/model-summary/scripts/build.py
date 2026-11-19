@@ -27,6 +27,7 @@ TAB = "SUM"
 
 def defaults(L):
     return {"Action": "=" + L["val"]["action"], "Buy price": "", "No-brainer price": "", layout.BAND: 0.03,
+            layout.BASIS: "auto", layout.MBAND: 50,
             "Mgmt contact": "", "Thesis Summary": "", "Trading Plan": "", "Valuation Thoughts": ""}
 
 
@@ -82,6 +83,14 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
         warnings.append("There is no inputs_written.json (the record of what the last build wrote), so every yellow "
                         "cell that differs from the default is treated as typed by you or write-pitch.")
     used, users = resolve_values(existing, written, defaults(L))
+    L["street_basis"] = sb = links.street_basis(L, model, work, used[layout.BASIS], warnings)
+    St = L["street"]
+    if "gm" in St["metrics"] and not L["mod"]["rows"]["gp"]:
+        warnings.append("The Street has a gross margin but MOD has no Gross Profit row, so SUM skips it.")
+        del St["metrics"]["gm"]
+    for h in St["unmapped"]:
+        warnings.append(f"The Consensus tab has a '{h}' column SUM has no mapping for (links.STREET_MAP), so it is "
+                        "skipped. Add it to the table to compare it.")
 
     pkg = Package(model)
     st = Styles(pkg.text("xl/styles.xml"))
@@ -89,7 +98,7 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
     w = W(st, users)
     R = layout.lay_out(w, L, A, used, ticker, today or dt.date.today())
     w.sh.comments = w.notes
-    w.sh.widths.update({1: 2, 2: 52, 3: 14, 4: 13, 5: 30, **{k: 11 for k in range(6, 15)}, 15: 2, 16: 34,
+    w.sh.widths.update({1: 2, 2: 52, 3: 14, 4: 13, 5: 38, **{k: 11 for k in range(6, 15)}, 15: 2, 16: 34,
                         **{k: 11 for k in range(17, 22)}, 22: 2, **{k: 11 for k in range(23, 28)}})
     part = write_tab(pkg, w)
     pkg.put("xl/styles.xml", st.render())
@@ -102,16 +111,15 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
         os.remove(out)
         raise SystemExit("model-summary: the build changed parts it must not touch: " + ", ".join(bad))
 
-    St, fy = L["street"], [y for y in L["mod"]["years"] if y.endswith("E")]
+    fy = [y for y in L["mod"]["years"] if y.endswith("E")]
     src = ("the Consensus tab's latest snapshot " + St["snapshot"]) if St["source"] == "consensus" else \
         "the Multiples forward table (no Consensus tab estimates found)"
-    for key, name in (("eps", "EPS"), ("rev", "revenue")):
-        miss = [y for y in fy if y not in St[key]]
+    names = {k: nm for k, _, nm in links.STREET_MAP.values()}
+    for key in ["eps", "rev"] + [k for k in St["metrics"] if k not in ("eps", "rev")]:
+        miss = [y for y in fy if y not in St["metrics"].get(key, {})]
         if miss:
-            warnings.append(f"No Street {name} from {src} for " + ", ".join(miss) + ": those Street cells show n/a.")
-    if L["mod"]["basis"] == "gaap" and St["eps"]:
-        warnings.append("SUM's EPS is GAAP but Street EPS is the analysts' basis (usually non-GAAP), so the EPS "
-                        "Expected Delta compares different bases.")
+            warnings.append(f"No Street {names[key]} from {src} for " + ", ".join(miss) + ": those Street cells "
+                            "show n/a.")
     pos = L["val"].get("position")
     if pos and str(pos["value"]).strip().lower() == "short":
         warnings.append("Valuation is set to a short; SUM's % returns and their colours are long-side math. Read "
@@ -125,8 +133,12 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
     json.dump({lab: {"value": v, "user": lab in users} for lab, v in used.items()},
               open(os.path.join(work, "inputs_written.next.json"), "w"), indent=1, default=str)
     return {"tab": TAB, "primary": L["val"]["kind"], "ntm_quarters": L["mod"]["ntm_quarters"],
-            "years": L["mod"]["years"], "street": {"source": St["source"], "snapshot": St["snapshot"], "eps_years": sorted(St["eps"]),
-                       "rev_years": sorted(St["rev"])},
+            "years": L["mod"]["years"],
+            "street": {"source": St["source"], "snapshot": St["snapshot"],
+                       "eps_years": sorted(St["metrics"].get("eps", {})), "rev_years": sorted(St["metrics"].get("rev", {})),
+                       "metrics": {k: sorted(v) for k, v in St["metrics"].items()}, "unmapped": St["unmapped"]},
+            "street_basis": {k: sb[k] for k in ("chosen", "source", "evidence")},
+            "ebitda": "adjusted" if L["mod"].get("ebitda_adj") else "GAAP (operating income + D&A)",
             "tree": [b["name"] for b in L["val"]["tree"]], "ladder_rungs": len(L["val"]["ladder"]),
             "adv": {"route": A["route"], "note": A["note"]}, "users_kept": sorted(users),
             "action_follows_valuation": "Action" not in users, "warnings": warnings}

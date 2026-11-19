@@ -55,7 +55,9 @@ def test_mod_years_and_ntm_fcf_are_internal(L):
     assert md["years"] == ["2022", "2023", "2024", "2025", "2026E", "2027E", "2028E", "2029E"]
     assert md["ntm_quarters"] == ["Q1 26E", "Q4 26E"]
     assert md["ntm_fcf"].startswith("IF(COUNT(") and md["ntm_fcf"].count("$12") == 8   # 4 quarters x (COUNT + sum)
-    assert md["basis"] == "gaap" and md["rows"]["ebitda"] == [6, 10]                    # GAAP: operating income + D&A
+    r = md["rows"]                       # both bases' rows; street_basis (test_basis) picks one, so none yet
+    assert md["basis"] is None and r["eps"] is None and r["ebitda"] is None
+    assert (r["eps_gaap"], r["eps_ng"], r["ebitda_gaap"], r["ebitda_ng"]) == (8, 14, [6, 10], [15])   # GAAP: OI + D&A
 
 
 def test_moved_row_moves_the_link(fixture_model, tmp_path):
@@ -103,20 +105,6 @@ def test_blended_branch_has_no_case(fixture_model, tmp_path):
     tree = links.collect(m)["val"]["tree"]
     assert [b["name"] for b in tree] == ["Bull", "Base", "Stall", "Bear"]
     assert [b["case"] for b in tree] == [None, None, None, None]
-
-
-def test_non_gaap_basis(fixture_model, tmp_path):
-    m, wb = _copy(fixture_model, tmp_path, "ng.xlsx")
-    wb["Px Data"]["C4"] = "P/E (non-GAAP EPS)"
-    wb["MOD"]["A14"], wb["MOD"]["B14"] = "NON-GAAP METRICS", "Non-GAAP EPS, Diluted"
-    wb.save(m)
-    md = links.collect(m)["mod"]
-    assert md["basis"] == "ng" and md["rows"]["eps"] == 14
-    m2, wb2 = _copy(fixture_model, tmp_path, "ng_missing.xlsx")
-    wb2["Px Data"]["C4"] = "P/E (non-GAAP EPS)"
-    wb2.save(m2)
-    with pytest.raises(SystemExit, match="model-kpis"):
-        links.collect(m2)
 
 
 def test_no_adv_on_comp_sheet(tmp_path):
@@ -167,9 +155,11 @@ def test_consensus_wins_and_only_the_latest_snapshot_is_read(L):
     only, so it appears under eps and not under rev."""
     s = L["street"]
     assert s["source"] == "consensus" and s["snapshot"] == "2026-11-12"
-    assert s["eps"] == {"2026E": {"ref": "Consensus!$C$7", "n": 25}, "2027E": {"ref": "Consensus!$C$8", "n": 25},
-                        "2028E": {"ref": "Consensus!$C$9", "n": 6}}
-    assert s["rev"] == {"2026E": {"ref": "Consensus!$G$7", "n": 27}, "2027E": {"ref": "Consensus!$G$8", "n": 27}}
+    assert s["metrics"]["eps"] == {"2026E": {"ref": "Consensus!$C$7", "n": 25},
+                                   "2027E": {"ref": "Consensus!$C$8", "n": 25}, "2028E": {"ref": "Consensus!$C$9", "n": 6}}
+    assert s["metrics"]["rev"] == {"2026E": {"ref": "Consensus!$G$7", "n": 27}, "2027E": {"ref": "Consensus!$G$8", "n": 27}}
+    assert s["metrics"]["ebitda_m"] == {"2026E": {"ref": "Consensus!$K$7", "n": 12}}    # read generically
+    assert s["unmapped"] == []                                                         # "Mean PT" is not a metric
     assert L["mult"]["street"] == {"2026E": "Multiples!$B$34", "2027E": "Multiples!$C$34"}   # kept as it was
 
 
@@ -182,7 +172,8 @@ def test_consensus_year_label_and_text_dates(fixture_model, tmp_path):
     ws["B7"], ws["C8"] = "FY 2026", "n/a"
     wb.save(m)
     s = links.collect(m)["street"]
-    assert list(s["eps"]) == ["2026E", "2028E"] and s["eps"]["2026E"]["ref"] == "Consensus!$C$7"
+    eps = s["metrics"]["eps"]
+    assert list(eps) == ["2026E", "2028E"] and eps["2026E"]["ref"] == "Consensus!$C$7"
 
 
 def test_no_consensus_tab_or_no_snapshots_falls_back(fixture_model, tmp_path):
@@ -191,8 +182,9 @@ def test_no_consensus_tab_or_no_snapshots_falls_back(fixture_model, tmp_path):
     del wb["Consensus"]
     wb.save(m)
     s = links.collect(m)["street"]
-    assert s["source"] == "multiples" and s["snapshot"] is None and s["rev"] == {}
-    assert s["eps"] == {"2026E": {"ref": "Multiples!$B$34", "n": None}, "2027E": {"ref": "Multiples!$C$34", "n": None}}
+    assert s["source"] == "multiples" and s["snapshot"] is None and "rev" not in s["metrics"]
+    assert s["metrics"] == {"eps": {"2026E": {"ref": "Multiples!$B$34", "n": None},
+                                    "2027E": {"ref": "Multiples!$C$34", "n": None}}}
     m2, wb2 = _copy(fixture_model, tmp_path, "nosnap.xlsx")
     for r in range(5, 10):
         wb2["Consensus"].cell(r, 1).value = None

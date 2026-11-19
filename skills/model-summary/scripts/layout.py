@@ -6,6 +6,8 @@ headers, outlines, bold key results) and its conditional formatting. Pure: reads
 (links.collect), the ADV (adv.adv) and the yellow values to write (used); writes through W; returns {name: SUM ref}."""
 import datetime as dt
 
+from links import STREET_MAP
+
 from tabkit import GEN, box, paint
 from xlsx import colname
 
@@ -13,9 +15,12 @@ MNY, PX, PCT, MULT, X, BPS, SHR, DATE, TURNS = ('#,##0;(#,##0)', '$#,##0.00', '0
                                                 '#,##0;(#,##0)', '#,##0.0', 'yyyy-mm-dd', '0.0;(0.0)')
 GOOD, BAD, AMBER = ("FFC6EFCE", "FF006100"), ("FFFFC7CE", "FF9C0006"), ("FFFFEB9C", "FF9C5700")
 BAND = "Street variance band (±)"
+BASIS = "Street EPS basis"
+MBAND = "Street margin band (bps)"
 # The yellow cells: label -> (columns, rows) from the label cell to the value cell. build.py finds them by label on a
 # rerun, so a change of shape never loses what was typed.
-INPUT_OFFSET = {"Action": (1, 0), "Buy price": (1, 0), "No-brainer price": (1, 0), BAND: (1, 0),
+INPUT_OFFSET = {"Action": (1, 0), "Buy price": (1, 0), "No-brainer price": (1, 0), BAND: (1, 0), BASIS: (1, 0),
+                MBAND: (1, 0),
                 "Mgmt contact": (0, 1), "Thesis Summary": (0, 1), "Trading Plan": (0, 1), "Valuation Thoughts": (0, 1)}
 NAVY, WHITE, LIGHT, PALE = "FF002060", "FFFFFFFF", "FFBDD7EE", "FFDDEBF7"
 PITCH = "Yellow: write-pitch (or you) fills this; a rerun keeps it."
@@ -142,12 +147,20 @@ def lay_out(w, L, adv, used, ticker, today):
     w.text("B51", BAND)
     w.input_("C51", BAND, used[BAND], PCT, "Expected Delta turns green above +band and red below -band. 3% is the "
                                            "skill's default, not a course number; change it here (a rerun keeps it).")
-    w.text("B53", "Mgmt contact")
-    w.input_("B54", "Mgmt contact", used["Mgmt contact"], GEN, PITCH, wrap=True)
-    w.sh.merges.append("B54:D57")
-    box(w, "B49:D51"), bar(w, "B53:D53"), box(w, "B54:D57")
+    w.text("B52", BASIS)
+    w.input_("C52", BASIS, used[BASIS], GEN, "auto = the basis closest to the Street's current-year EPS; type GAAP or "
+                                             "non-GAAP to force it, then rerun /model-summary.")
+    w.text("B53", MBAND)
+    w.input_("C53", MBAND, used[MBAND], BPS, "Margin deltas (bps) turn green above +band and red below -band. 50 bps "
+                                            "is the skill's default, not a course number; change it here (a rerun "
+                                            "keeps it).")
+    w.text("B55", "Mgmt contact")
+    w.input_("B56", "Mgmt contact", used["Mgmt contact"], GEN, PITCH, wrap=True)
+    w.sh.merges.append("B56:D59")
+    box(w, "B49:D53"), bar(w, "B55:D55"), box(w, "B56:D59")
     R.update(price="C7", mcap="C9", ev="C13", adv="C15", ret3="C30", target3="C29", years="C32", irr="C33",
-             hurdle="C34", base="C39", risk="C46", blended_rr="C49", buy_rr="C50", band="C51")
+             hurdle="C34", base="C39", risk="C46", blended_rr="C49", buy_rr="C50", band="C51", basis="C52",
+             margin_band="C53")
 
     # ---- middle block (E:N): internal estimates, today's price and EV on every year
     yrs = Md["years"]
@@ -156,18 +169,38 @@ def lay_out(w, L, adv, used, ticker, today):
     m = lambda y, r: f"MOD!${Md['col'][y]}${r}"                                         # noqa: E731
     eb = lambda y: "+".join(m(y, r) for r in rows["ebitda"])                             # noqa: E731
     head("E3", "Internal estimates (our model; multiples at today's price and EV)")
-    St = L["street"]
-    eps_lab = "EPS (non-GAAP)" if Md["basis"] == "ng" else "EPS (GAAP)"
+    St, sb = L["street"], L["street_basis"]
+    word = "non-GAAP" if Md["basis"] == "ng" else "GAAP"
+    why = {"auto": "the Street's basis", "px_data": "Px Data's basis"}.get(sb["source"]) or (
+        "the Street's basis" if sb["chosen"] == sb.get("auto") else "your override")
+    eb_lab = "EBITDA (adjusted)" if Md.get("ebitda_adj") else "EBITDA (operating income + D&A)"
     extra = {"EV/GP": "EV/GP", "FCF yield": "FCF yield"}.get(kind)
-    names = ["rev", "rev_g", "s_rev", "d_rev", "ebitda", "margin", "bps", "eps", "eps_g", "s_eps", "d_eps", "ev_s",
-             "ev_e", "pe", "s_pe"] + (["extra"] if extra else [])
-    rw = {n: 5 + k for k, n in enumerate(names)}
-    for n, t in zip(names, ("Revenue", "% yoy", "Street revenue", "Revenue delta (ours vs Street)", "EBITDA",
-                            "% margin", "bps yoy", eps_lab, "% yoy", "Street EPS (analysts' basis)",
-                            "Expected Delta (ours vs Street)", "EV/Sales", "EV/EBITDA", "P/E", "Street P/E", extra)):
-        if n in rw:
-            w.text(f"E{rw[n]}", t)
+    by_key = {k: (kd, nm) for k, kd, nm in STREET_MAP.values()}
+    street = {"eps": {}, "rev": {}, **St["metrics"]}          # EPS and revenue always show (n/a when empty)
+
+    def st_rows(*keys):                                       # a Street row and a delta row per metric it has
+        out = []
+        for k in keys:
+            if k in street:
+                kd, nm = by_key[k]
+                out += [(f"s_{k}", f"Street {nm}"), (f"d_{k}", "Expected Delta (ours vs Street)" if k == "eps" else
+                                                     f"{nm[0].upper()}{nm[1:]} delta (ours vs Street"
+                                                     + (", bps)" if kd == "margin" else ")"))]
+        return out
+    seq = ([("rev", "Revenue"), ("rev_g", "% yoy")] + st_rows("rev")
+           + ([("gm", "Gross margin")] + st_rows("gm") if "gm" in street else [])
+           + [("ebitda", eb_lab), ("margin", "% margin"), ("bps", "bps yoy")] + st_rows("ebitda", "ebitda_m")
+           + ([("om", "Operating margin")] + st_rows("om") if "om" in street else [])
+           + [("eps", f"EPS ({word}, {why})"), ("eps_g", "% yoy")] + st_rows("eps")
+           + [("ev_s", "EV/Sales"), ("ev_e", "EV/EBITDA"), ("pe", "P/E"), ("s_pe", "Street P/E")]
+           + ([("extra", extra)] if extra else []))
+    rw = {n: 5 + k for k, (n, _) in enumerate(seq)}
+    for n, t in seq:
+        w.text(f"E{rw[n]}", t)
+    names = [n for n, _ in seq]
     c_ = lambda n, c: f"{c}{rw[n]}"                                                      # noqa: E731
+    ours = {"eps": "eps", "rev": "rev", "ebitda": "ebitda", "ebitda_m": "margin", "gm": "gm", "om": "om"}
+    sfmt = {"eps": PX, "rev": MNY, "ebitda": MNY}
 
     def note(n):
         d = St["snapshot"]
@@ -180,6 +213,9 @@ def lay_out(w, L, adv, used, ticker, today):
         link(c_("rev", c), m(y, rows["rev"]), MNY)
         link(c_("ebitda", c), eb(y), MNY)
         f(c_("margin", c), f"IF({c_('rev', c)}>0,{c_('ebitda', c)}/{c_('rev', c)},NA())", PCT)
+        for k, r_ in (("gm", rows["gp"]), ("om", rows["oi"])):
+            if k in rw:
+                f(c_(k, c), f"IF({c_('rev', c)}>0,{m(y, r_)}/{c_('rev', c)},NA())", PCT)
         link(c_("eps", c), m(y, rows["eps"]), PX)
         if p:
             f(c_("rev_g", c), f"IFERROR({m(y, rows['rev'])}/{m(p, rows['rev'])}-1,NA())", PCT)
@@ -187,23 +223,24 @@ def lay_out(w, L, adv, used, ticker, today):
             f(c_("eps_g", c), f"IF({m(p, rows['eps'])}>0,{m(y, rows['eps'])}/{m(p, rows['eps'])}-1,NA())", PCT)
         else:
             na(c_("rev_g", c)), na(c_("bps", c)), na(c_("eps_g", c))
-        s = St["eps"].get(y)
-        if s:
-            se, de, sp = c_("s_eps", c), c_("eps", c), c_("s_pe", c)
-            link(se, s["ref"], PX)
-            f(c_("d_eps", c), f"IF(AND({se}>0,ISNUMBER({de})),{de}/{se}-1,NA())", PCT)
-            f(sp, f"IF({se}>0,$C$7/{se},NA())", MULT)
-            w.notes[se] = w.notes[sp] = note(s["n"])
-        else:
-            na(c_("s_eps", c)), na(c_("d_eps", c)), na(c_("s_pe", c))
-        s = St["rev"].get(y)
-        if s:
-            sr, dr = c_("s_rev", c), c_("rev", c)
-            link(sr, s["ref"], MNY)
-            f(c_("d_rev", c), f"IF(AND({sr}>0,ISNUMBER({dr})),{dr}/{sr}-1,NA())", PCT)
+        for k, yrs_k in street.items():
+            s, sr, dr, o = yrs_k.get(y), c_(f"s_{k}", c), c_(f"d_{k}", c), c_(ours[k], c)
+            if not s:
+                na(sr), na(dr)
+                continue
+            if by_key[k][0] == "margin":
+                link(sr, s["ref"], PCT)
+                f(dr, f"IF(AND(ISNUMBER({sr}),ISNUMBER({o})),({o}-{sr})*10000,NA())", BPS)
+            else:
+                link(sr, s["ref"], sfmt[k])
+                f(dr, f"IF(AND({sr}>0,ISNUMBER({o})),{o}/{sr}-1,NA())", PCT)
             w.notes[sr] = note(s["n"])
+        s = street.get("eps", {}).get(y)
+        if s:
+            f(c_("s_pe", c), f"IF({c_('s_eps', c)}>0,$C$7/{c_('s_eps', c)},NA())", MULT)
+            w.notes[c_("s_pe", c)] = note(s["n"])
         else:
-            na(c_("s_rev", c)), na(c_("d_rev", c))
+            na(c_("s_pe", c))
         f(c_("ev_s", c), f"IF({c_('rev', c)}>0,$C$13/{c_('rev', c)},NA())", MULT)
         f(c_("ev_e", c), f"IF({c_('ebitda', c)}>0,$C$13/{c_('ebitda', c)},NA())", MULT)
         f(c_("pe", c), f"IF({c_('eps', c)}>0,$C$7/{c_('eps', c)},NA())", MULT)
@@ -214,12 +251,13 @@ def lay_out(w, L, adv, used, ticker, today):
     last = cols[-1]
     assert last <= "N" and len(last) == 1, f"the estimates grid ran past column N ({last}); it would hit the scenario block"
     tl = cols[0]
-    for n in ("d_rev", "d_eps"):                              # the band's colour rules apply to both delta rows
-        r_ = rw[n]
-        w.sh.cf.append((f"{tl}{r_}:{last}{r_}", f"AND(ISNUMBER({tl}{r_}),{tl}{r_}>$C$51)", w.st.dxf(*GOOD)))
-        w.sh.cf.append((f"{tl}{r_}:{last}{r_}", f"AND(ISNUMBER({tl}{r_}),{tl}{r_}<-$C$51)", w.st.dxf(*BAD)))
+    deltas = [n for n in names if n.startswith("d_")]
+    for n in deltas:                                          # levels on the % band, margins on the bps band
+        r_, th = rw[n], "$C$53" if by_key[n[2:]][0] == "margin" else "$C$51"
+        w.sh.cf.append((f"{tl}{r_}:{last}{r_}", f"AND(ISNUMBER({tl}{r_}),{tl}{r_}>{th})", w.st.dxf(*GOOD)))
+        w.sh.cf.append((f"{tl}{r_}:{last}{r_}", f"AND(ISNUMBER({tl}{r_}),{tl}{r_}<-{th})", w.st.dxf(*BAD)))
     bar(w, f"E3:{last}3"), hdr(w, f"E4:{last}4")
-    for n in ("eps", "d_eps", "d_rev"):
+    for n in ["eps"] + deltas:
         result(w, f"E{rw[n]}:{last}{rw[n]}")
     for c in ["E"] + cols:                                    # the multiples rows sit apart from the P&L rows
         w.edge(f"{c}{rw['ev_s']}", top="thin")
@@ -235,7 +273,7 @@ def lay_out(w, L, adv, used, ticker, today):
     w.sh.merges.append(f"E{t2 + 1}:{last}{t2 + 10}")
     for t in (t1, t2):
         bar(w, f"E{t}:{last}{t}"), box(w, f"E{t + 1}:{last}{t + 10}")
-    R.update(grid_cols=cols, delta_row=rw["d_eps"], rev_delta_row=rw["d_rev"], eps_row=rw["eps"], rows=rw,
+    R.update(grid_cols=cols, delta_row=rw.get("d_eps"), rev_delta_row=rw.get("d_rev"), eps_row=rw["eps"], rows=rw,
              thesis_row=t1, plan_row=t2)
 
     # ---- right block (P:U): Valuation's probability tree, row for row

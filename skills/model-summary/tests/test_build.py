@@ -41,21 +41,21 @@ def test_estimates_grid_and_street_variance(built):
     ws = _wb(built)["SUM"]
     assert [ws.cell(4, c).value for c in range(6, 14)] == ["2022A", "2023A", "2024A", "2025A", "2026E", "2027E",
                                                            "2028E", "2029E"]
-    assert ws["E14"].value == "Street EPS (analysts' basis)" and ws["E7"].value == "Street revenue"
-    assert ws["J14"].value == "=Consensus!$C$7" and ws["K14"].value == "=Consensus!$C$8"   # latest snapshot only
-    assert ws["J15"].value == "=IF(AND(J14>0,ISNUMBER(J12)),J12/J14-1,NA())"
+    assert ws["E16"].value == "Street EPS" and ws["E7"].value == "Street revenue"
+    assert ws["J16"].value == "=Consensus!$C$7" and ws["K16"].value == "=Consensus!$C$8"   # latest snapshot only
+    assert ws["J17"].value == "=IF(AND(J16>0,ISNUMBER(J14)),J14/J16-1,NA())"
     assert ws["J7"].value == "=Consensus!$G$7" and ws["J8"].value == "=IF(AND(J7>0,ISNUMBER(J5)),J5/J7-1,NA())"
-    assert ws["L14"].value == "=Consensus!$C$9"                         # 2028E: EPS ...
+    assert ws["L16"].value == "=Consensus!$C$9"                         # 2028E: EPS ...
     assert ws["L7"].value == "n/a" and ws["L8"].value == "n/a"          # ... but no revenue
-    assert ws["M14"].value == "n/a" and ws["M15"].value == "n/a"        # 2029E: nothing from the Street
+    assert ws["M16"].value == "n/a" and ws["M17"].value == "n/a"        # 2029E: nothing from the Street
 
 
 def test_every_street_cell_carries_its_snapshot_and_analyst_count(built):
     """A PM must see how stale and how thin the Street number is: the date of the snapshot and how many analysts."""
     ws = _wb(built)["SUM"]
-    assert ws["J14"].comment.text.strip().startswith("Consensus snapshot 2026-11-12, 25 analysts")
-    assert "27 analysts" in ws["J7"].comment.text and "6 analysts" in ws["L14"].comment.text
-    assert "6 analysts" in ws["L19"].comment.text                       # Street P/E rides the same estimate
+    assert ws["J16"].comment.text.strip().startswith("Consensus snapshot 2026-11-12, 25 analysts")
+    assert "27 analysts" in ws["J7"].comment.text and "6 analysts" in ws["L16"].comment.text
+    assert "6 analysts" in ws["L21"].comment.text                       # Street P/E rides the same estimate
 
 
 def test_thesis_and_plan_boxes_sit_below_the_grid(built):
@@ -69,15 +69,11 @@ def test_thesis_and_plan_boxes_sit_below_the_grid(built):
     assert ws[f"E{R['thesis_row']}"].value == "Thesis Summary" and ws[f"E{R['plan_row']}"].value == "Trading Plan"
 
 
-def test_gaap_basis_warns_about_street_eps(built):
-    """Analysts' EPS is usually non-GAAP; comparing it with GAAP EPS in Expected Delta must be flagged."""
-    assert any("SUM's EPS is GAAP but Street EPS is the analysts' basis" in w for w in built[1]["warnings"])
-
-
 def test_report_names_the_street_source_and_years(built):
     st = built[1]["street"]
     assert st == {"source": "consensus", "snapshot": "2026-11-12", "eps_years": ["2026E", "2027E", "2028E"],
-                  "rev_years": ["2026E", "2027E"]}
+                  "rev_years": ["2026E", "2027E"], "unmapped": [],
+                  "metrics": {"eps": ["2026E", "2027E", "2028E"], "rev": ["2026E", "2027E"], "ebitda_m": ["2026E"]}}
     assert any("revenue" in w and "2028E" in w and "2029E" in w for w in built[1]["warnings"])
 
 
@@ -89,7 +85,8 @@ def test_no_consensus_tab_falls_back_to_multiples(tmp_path):
     rep = build.build(m, str(tmp_path / "w"), "TEST", str(tmp_path / "o.xlsx"), research_dir=str(tmp_path),
                       fetch=lambda *a: (_ for _ in ()).throw(AssertionError("no Yahoo")))
     ws = openpyxl.load_workbook(str(tmp_path / "o.xlsx"))["SUM"]
-    assert rep["street"] == {"source": "multiples", "snapshot": None, "eps_years": ["2026E", "2027E"], "rev_years": []}
+    assert rep["street"] == {"source": "multiples", "snapshot": None, "eps_years": ["2026E", "2027E"], "rev_years": [],
+                             "metrics": {"eps": ["2026E", "2027E"]}, "unmapped": []}
     assert ws["J14"].value == "=Multiples!$B$34" and ws["L14"].value == "n/a"
     assert all(ws.cell(7, c).value == "n/a" for c in range(10, 14))
 
@@ -111,7 +108,7 @@ def test_colours(built):
     ws = _wb(built)["SUM"]
     assert ws["C7"].font.color.rgb == "FF008000"                       # link green
     assert ws["C9"].font.color.rgb == "FF000000"                       # formula black
-    for ref in ("C19", "C20", "C51", "B54", "E22", "E34"):
+    for ref in ("C19", "C20", "C51", "C52", "C53", "B56", "E24", "E36"):
         assert ws[ref].fill.fgColor.rgb == "FFFFFF99", ref                # the house pale yellow (Valuation's)
 
 
@@ -126,7 +123,7 @@ def test_yellow_means_only_yours_to_type(built):
               if c.fill.fill_type == "solid" and c.fill.fgColor.rgb in ("FFFFFF99", "FFFFFF00")
               and not (c.value is None and c.coordinate not in inputs)}
     assert yellow == inputs - {"C3"}          # Action is a green link to Valuation's verdict until typed over
-    for ref in ("C30", "C31", "C33", "C47", "F12", "F15", "F8"):
+    for ref in ("C30", "C31", "C33", "C47", "F14", "F17", "F8", "F13"):
         assert ws[ref].font.b and ws[ref].fill.fgColor.rgb != "FFFFFF99", ref
 
 
@@ -137,7 +134,7 @@ def test_section_titles_are_dark_blue_bars(built):
     import os
     ws = _wb(built)["SUM"]
     last = json.load(open(os.path.join(built[2], "layout.json")))["refs"]["grid_cols"][-1]
-    for ref in ("B6", "D6", "B26", "D26", "B36", "B43", "E3", f"{last}3", "P3", "U3", "W3", "AA3", "E21", "E33", "B53"):
+    for ref in ("B6", "D6", "B26", "D26", "B36", "B43", "E3", f"{last}3", "P3", "U3", "W3", "AA3", "E23", "E35", "B55"):
         c = ws[ref]
         assert c.fill.fgColor.rgb == "FF002060" and c.font.color.rgb == "FFFFFFFF" and c.font.b, ref
     assert ws["F4"].fill.fgColor.rgb == "FFBDD7EE" and ws["F4"].font.b      # the years: a light-blue header row
@@ -149,7 +146,7 @@ def test_cap_table_is_boxed(built):
     assert all(ws[f"B{r}"].border.left.style == "medium" for r in range(6, 17))
     assert all(ws[f"{c}16"].border.bottom.style == "medium" for c in "BCD")
     assert ws["D10"].border.right.style == "medium" and ws["C10"].border.right.style is None
-    assert ws["F16"].border.top.style == "thin"           # the multiples rows sit apart from the P&L rows
+    assert ws["F18"].border.top.style == "thin"           # the multiples rows sit apart from the P&L rows
 
 
 def test_every_typed_number_has_a_note(built):

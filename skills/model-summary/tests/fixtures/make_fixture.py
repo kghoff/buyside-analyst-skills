@@ -1,6 +1,6 @@
 # skills/model-summary/tests/fixtures/make_fixture.py
-"""TEST_model.xlsx with only what model-summary reads: MOD (Q1 16 - Q4 29E plus FY columns; actual years 2016-2025),
-Px Data, DCF, Multiples and Valuation with the labels the real skills write (ABT's model, 2026-11-19). Constants,
+"""TEST_model.xlsx with only what model-summary reads: MOD (Q1 16 - Q4 29E plus FY columns; actual years 2016-2025; GAAP and non-GAAP EPS, adjusted EBITDA),
+Px Data, DCF, Multiples, Valuation and Consensus with the labels the real skills write (ABT's model, 2026-11-19). Constants,
 except the Valuation formulas a link must resolve through (the tree's targets, which links.py classifies). MOD has
 a print area and Valuation is the open tab, so the tests can prove SUM's insertion moves neither. A test workbook
 made by openpyxl: never a user's model."""
@@ -14,17 +14,19 @@ PRICE = 50.0
 MOD_ROWS = [(3, "INCOME STATEMENT", "Revenue", "rev"), (4, None, "% yoy", None), (5, None, "Gross Profit", "gp"),
             (6, None, "Operating Income", "oi"), (7, None, "Shares, diluted", "shares"), (8, None, "EPS, diluted", "eps"),
             (10, "CASH FLOWS FROM OPERATING ACTIVITIES:", "(+) Depreciation & Amortization", "da"),
-            (12, "FREE CASH FLOW", "(+/-) Free Cash Flow", "fcf")]
+            (12, "FREE CASH FLOW", "(+/-) Free Cash Flow", "fcf"),
+            (14, "NON-GAAP METRICS", "Non-GAAP EPS, Diluted", "eps_ng"), (15, None, "Adjusted EBITDA", "ebitda_ng")]
 
 
 def series():
-    out, rev = {k: [] for k in ("q", "y", "rev", "gp", "oi", "shares", "eps", "da", "fcf")}, 100.0
+    out, rev = {k: [] for k in ("q", "y", "rev", "gp", "oi", "shares", "eps", "da", "fcf", "eps_ng", "ebitda_ng")}, 100.0
     for y in YEARS:
         for qn in range(1, 5):
             rev *= 1.02
             oi = rev * 0.2
             for k, v in dict(q=f"Q{qn} {y % 100:02d}" + ("E" if y > LAST_ACTUAL else ""), y=y, rev=rev, gp=rev * 0.6,
-                             oi=oi, shares=50.0, eps=oi * 0.75 / 50.0, da=rev * 0.05, fcf=oi * 0.8).items():
+                             oi=oi, shares=50.0, eps=oi * 0.75 / 50.0, da=rev * 0.05, fcf=oi * 0.8,
+                             eps_ng=oi * 0.75 / 50.0 + 0.1, ebitda_ng=rev * 0.27).items():
                 out[k].append(v)
     return out
 
@@ -135,22 +137,26 @@ def _val(ws):
 
 
 SNAP_HEADS = ["Snapshot", "Period", "EPS mean", "EPS low", "EPS high", "# EPS", "Rev mean ($M)", "Rev low", "Rev high",
-              "# Rev"]
+              "# Rev", "EBITDA margin mean", "# EBITDA margin", "Mean PT"]
 
 
 def _consensus(ws):
     """Two snapshots: the older one has different numbers, so a test proves only the latest is read. The latest has
-    FY 26 / FY 27 with EPS and revenue, FY 28 with EPS only (as the real tab does)."""
+    FY 26 / FY 27 with EPS and revenue, FY 28 with EPS only (as the real tab does). FY 26's EPS mean (3.2) sits near
+    our non-GAAP EPS (3.18), not GAAP (2.78), as analysts' numbers usually do. FY 26 also has an EBITDA margin mean
+    (a metric model-consensus may add later; SUM must pick it up generically). "Mean PT" is not a "<Metric> mean"."""
     ws["A3"] = "5. CONSENSUS SNAPSHOTS"
     for c, h in enumerate(SNAP_HEADS, 1):
         ws.cell(4, c, h)
     old, new = dt.datetime(2026, 8, 6), dt.datetime(2026, 11, 12)
     for r, (d, per, eps, ne, rev, nr) in enumerate((
             (old, "FY 26", 1.5, 20, 900.0, 20), (old, "FY 27", 1.9, 20, 950.0, 20),
-            (new, "FY 26", 2.7, 25, 1000.0, 27), (new, "FY 27", 3.1, 25, 1100.0, 27), (new, "FY 28", 3.6, 6, None, None)), 5):
+            (new, "FY 26", 3.2, 25, 1000.0, 27), (new, "FY 27", 3.5, 25, 1100.0, 27), (new, "FY 28", 3.9, 6, None, None)), 5):
         ws.cell(r, 1, d), ws.cell(r, 2, per), ws.cell(r, 3, eps), ws.cell(r, 6, ne)
         if rev is not None:
             ws.cell(r, 7, rev), ws.cell(r, 10, nr)
+        ws.cell(r, 13, 120.0)
+    ws["K7"], ws["L7"] = 0.265, 12                            # FY 26 only: EBITDA margin mean, # EBITDA margin
 
 
 def build(path, multiples_adv=True, consensus=True):

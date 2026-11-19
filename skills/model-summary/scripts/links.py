@@ -2,15 +2,18 @@
 """Every cell SUM links to, found by its label on the source tab, never by another skill's work files (they go
 stale): DCF (the cap-table bridge), Valuation (verdict, house inputs, the primary multiple's block, blended R/R, the
 R/R ladder, the 3-year IRR, the probability tree), Multiples (ranges, the forward table's Street EPS, the comp
-sheet's subject 3M ADV), the Consensus tab's latest snapshot (Street EPS and revenue by forecast year; optional,
-Multiples' forward table is the fallback) and MOD (rows by label within their section, FY columns, the first four forecast quarters).
-A missing piece stops the build and names the skill to rerun. Reads formulas only (no recalculation needed).
+sheet's subject 3M ADV), the Consensus tab's latest snapshot (every "<Metric> mean" by forecast year, mapped through
+STREET_MAP; optional, Multiples' forward table is the EPS fallback) and MOD (rows by label within their section, FY
+columns, the first four forecast quarters). A missing piece stops the build and names the skill to rerun. collect
+reads formulas only; street_basis reads values (cached, else a recalculated copy) to match the Street's EPS basis.
 
-collect(model) -> {"dcf", "val", "mult", "mod", "street"} of sheet-qualified refs ('Valuation!$B$39') and labels."""
+collect(model) -> {"dcf", "val", "mult", "mod", "street"} of sheet-qualified refs ('Valuation!$B$39') and labels;
+street_basis(L, model, work, override) then sets L["mod"]'s EPS and EBITDA rows."""
+import os
 import re
 
 import openpyxl
-from openpyxl.utils import get_column_letter as L
+from openpyxl.utils import column_index_from_string, get_column_letter as L
 
 import modrows
 from modmap import ModMap
@@ -178,20 +181,28 @@ def multiples(g, kind):
     return {"ranges": ranges, "street": street, "adv": adv}
 
 
+# The Street metrics SUM compares, by the Consensus tab's "<Metric> mean" header: (SUM key, kind, name on SUM).
+# A level's delta is ours / Street - 1; a margin's is (ours - Street) x 10000 bps, our margin being the metric over
+# revenue. EPS and EBITDA are on the basis street_basis matches. A new model-consensus metric needs only a line here.
+STREET_MAP = {"EPS": ("eps", "level", "EPS"), "Rev": ("rev", "level", "revenue"), "EBITDA": ("ebitda", "level", "EBITDA"),
+              "Gross margin": ("gm", "margin", "gross margin"), "EBITDA margin": ("ebitda_m", "margin", "EBITDA margin"),
+              "Operating margin": ("om", "margin", "operating margin")}
+MEAN = re.compile(r"^(.+?) mean(?: \(.*\))?$")
+
+
 def consensus(g, years):
-    """The Consensus tab's latest snapshot as links: {"eps": {year: {"ref", "n"}}, "rev": {...}, "snapshot": date}.
-    Only forecast years that are SUM years ("FY 26" or "FY 2026" -> "2026E"), only where the mean is a number.
-    None when the tab has no snapshot block or no snapshots (Consensus is optional)."""
+    """The Consensus tab's latest snapshot as links: {"metrics": {key: {year: {"ref", "n"}}}, "unmapped": [header],
+    "snapshot": date}. Every "<Metric> mean" header is read (with its "# <Metric>" count); a STREET_MAP metric becomes
+    its key, any other is listed in "unmapped". Only forecast years that are SUM years ("FY 26" or "FY 2026" -> "2026E"),
+    only where the mean is a number. None when the tab has no snapshot block or no snapshots (Consensus is optional)."""
     a = labels(g)
     top = first(a, lambda t: t.startswith("5. CONSENSUS SNAPSHOTS"))
     if top is None:
         return None
     heads = {str(v).strip(): c for (r, c), v in g.items() if r == top + 1 and isinstance(v, str)}
-    col = lambda test: next((c for h, c in heads.items() if test(h)), None)        # noqa: E731
     cs, cp = heads.get("Snapshot"), heads.get("Period")
-    ce, cne = heads.get("EPS mean"), heads.get("# EPS")
-    cr, cnr = col(lambda h: h.startswith("Rev mean")), heads.get("# Rev")
-    if not (cs and cp and ce):
+    means = {MEAN.match(h)[1]: c for h, c in heads.items() if MEAN.match(h)}
+    if not (cs and cp and means):
         return None
     rows, r = [], top + 2
     while g.get((r, cs)) is not None:
@@ -201,7 +212,9 @@ def consensus(g, years):
         return None
     latest = max(d for _, d, _ in rows)
     num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)         # noqa: E731
-    out = {"eps": {}, "rev": {}, "snapshot": latest}
+    mapped = {k: c for k, c in means.items() if k in STREET_MAP}
+    out = {"metrics": {STREET_MAP[k][0]: {} for k in mapped}, "snapshot": latest,
+           "unmapped": sorted(f"{k} mean" for k in means if k not in STREET_MAP)}
     for r, d, p in rows:
         m = re.fullmatch(r"(?i)FY\s*(\d{4}|\d{2})", p)
         if d != latest or not m:
@@ -209,21 +222,19 @@ def consensus(g, years):
         y = f"{int(m[1]) + (2000 if len(m[1]) == 2 else 0)}E"
         if y not in years:
             continue
-        for key, cm, cn in (("eps", ce, cne), ("rev", cr, cnr)):
-            if cm and num(g.get((r, cm))):
+        for k, cm in mapped.items():
+            if num(g.get((r, cm))):
+                cn = heads.get(f"# {k}")
                 n = g.get((r, cn)) if cn else None
-                out[key][y] = {"ref": ref("Consensus", L(cm), r), "n": int(n) if num(n) else None}
+                out["metrics"][STREET_MAP[k][0]][y] = {"ref": ref("Consensus", L(cm), r), "n": int(n) if num(n) else None}
+    out["metrics"] = {k: v for k, v in out["metrics"].items() if v}
     return out
 
 
 def mod(model):
+    """MOD's rows and columns for SUM. EPS and EBITDA are left to street_basis, which picks the basis."""
     mm = ModMap(model)
     R = modrows.find_rows(mm)
-    basis = modrows.eps_basis(model)
-    if basis == "ng" and "eps_ng" not in R:
-        stop("MOD's 'Non-GAAP EPS, Diluted' row (Px Data's P/E is non-GAAP)", "model-kpis")
-    eps = R["eps_ng"] if basis == "ng" else R["eps_gaap"]
-    ebitda = [R["ebitda_ng"]] if basis == "ng" and "ebitda_ng" in R else [R["oi"], R["da"]]
     actual = [p for p in mm.order if re.fullmatch(r"\d{4}", p)][-4:]
     years = actual + mm.forecast_years()[:MAX_FORECAST_YEARS]
     fq = mm.forecast_quarters()[:4]
@@ -235,9 +246,104 @@ def mod(model):
         prev[y] = next((p for p in (f"{n}E", str(n)) if p in mm.labels), None)
     col = {p: mm.col(p) for p in set(years) | {p for p in prev.values() if p}}
     refs = [f"MOD!${mm.col(q)}${R['fcf']}" for q in fq]
-    return {"years": years, "n_actual": len(actual), "col": col, "prev": prev, "basis": basis,
-            "rows": {"rev": R["rev"], "gp": R.get("gp"), "ebitda": ebitda, "eps": eps, "fcf": R["fcf"]},
+    return {"years": years, "n_actual": len(actual), "col": col, "prev": prev, "basis": None,
+            "rows": {"rev": R["rev"], "gp": R.get("gp"), "oi": R["oi"], "eps": None, "ebitda": None, "fcf": R["fcf"],
+                     "eps_gaap": R["eps_gaap"], "eps_ng": R.get("eps_ng"), "ebitda_gaap": [R["oi"], R["da"]],
+                     "ebitda_ng": [R["ebitda_ng"]] if "ebitda_ng" in R else None},
             "ntm_fcf": f"IF(COUNT({','.join(refs)})=4,{'+'.join(refs)},NA())", "ntm_quarters": [fq[0], fq[-1]]}
+
+
+def values(model, refs, work):
+    """{ref: value} for sheet-qualified refs. Cached values first (read-only); if any is not a number, a COPY is
+    recalculated with LibreOffice into work/basis_values, read, and deleted. The user's file is only ever read."""
+    def read(path):
+        want = {}
+        for x in refs:
+            m = re.match(r"^'?([^'!]+)'?!\$([A-Z]+)\$(\d+)$", x)
+            want.setdefault(m[1], []).append((x, m[2], int(m[3])))
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        try:
+            out = {}
+            for tab, cells in want.items():
+                for x, c, r in cells:
+                    out[x] = next(wb[tab].iter_rows(min_row=r, max_row=r, min_col=column_index_from_string(c),
+                                                    max_col=column_index_from_string(c), values_only=True))[0]
+        finally:
+            wb.close()
+        return out
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)         # noqa: E731
+    got = read(model)
+    if all(num(v) for v in got.values()):
+        return got, "cached values"
+    import shutil
+    import lo
+    d = os.path.join(work, "basis_values")
+    try:
+        got = read(lo.recalc(model, d))
+    finally:
+        shutil.rmtree(d, ignore_errors=True)               # a recalculated copy of the model: never keep it
+    return got, "recalculated copy"
+
+
+BASES = {"auto": "auto", "gaap": "GAAP", "nongaap": "non-GAAP"}
+
+
+def street_basis(L, model, work, override="auto", warnings=None):
+    """Choose the EPS basis the Street uses and point L["mod"]'s eps / ebitda rows at it. Evidence: the first forecast
+    year with a Street EPS mean; the candidate (GAAP, non-GAAP if MOD has it) closest to it, by |ours / Street - 1|,
+    wins. override ("auto", "GAAP", "non-GAAP", the yellow cell) forces a basis; invalid, or non-GAAP with no MOD row,
+    warns and uses auto. No Street EPS: Px Data's P/E basis. Returns {"chosen", "source" (auto / override / px_data),
+    "evidence", "auto" (what auto picks), "values_from" (cached values / recalculated copy / None)}."""
+    w = warnings if warnings is not None else []
+    md, St = L["mod"], L["street"]
+    R = md["rows"]
+    want = BASES.get(re.sub(r"[\s_-]", "", str(override or "auto")).lower())
+    if want is None:
+        w.append(f"Street EPS basis holds {override!r}; it takes auto, GAAP or non-GAAP, so auto decided.")
+        want = "auto"
+    if want == "non-GAAP" and not R["eps_ng"]:
+        w.append("Street EPS basis says non-GAAP but MOD has no 'Non-GAAP EPS, Diluted' row (run /model-kpis), "
+                 "so auto decided.")
+        want = "auto"
+    eps = St["metrics"].get("eps", {})
+    y = next((y for y in md["years"] if y.endswith("E") and y in eps), None)
+    auto, evidence, vfrom = None, None, None
+    if y:
+        cands = {"GAAP": R["eps_gaap"], **({"non-GAAP": R["eps_ng"]} if R["eps_ng"] else {})}
+        refs = {k: f"MOD!${md['col'][y]}${r}" for k, r in cands.items()}
+        v, vfrom = values(model, [eps[y]["ref"], *refs.values()], work)
+        s, ours = v[eps[y]["ref"]], {k: v[x] for k, x in refs.items()}
+        ok = {k: x for k, x in ours.items() if isinstance(x, (int, float)) and not isinstance(x, bool)}
+        if isinstance(s, (int, float)) and ok:
+            gap = lambda x: abs(x / s - 1) if s else abs(x)                          # noqa: E731
+            auto = min(ok, key=lambda k: gap(ok[k]))
+            src = f"Consensus {St['snapshot']}" if St["source"] == "consensus" else "Multiples forward table"
+            mine = ", ".join(f"{k} {ok[k]:.2f}" if k in ok else f"{k} n/a" for k in ("non-GAAP", "GAAP") if k in ours)
+            evidence = (f"Street FY{y[2:4]} EPS {s:.2f} ({src}); ours {mine}"
+                        + ("" if R["eps_ng"] else " (MOD has no non-GAAP EPS row)") + f", so {auto}")
+        else:
+            w.append(f"Street FY{y[2:4]} EPS or our EPS that year is not a number even after recalculation, so the "
+                     "basis falls back to Px Data's P/E.")
+    if auto is None:
+        px = "non-GAAP" if modrows.eps_basis(model) == "ng" else "GAAP"
+        if px == "non-GAAP" and not R["eps_ng"] and want != "GAAP":
+            stop("MOD's 'Non-GAAP EPS, Diluted' row (Px Data's P/E is non-GAAP)", "model-kpis")
+        auto, evidence = px, f"no Street EPS to compare with, so Px Data's P/E basis: {px}"
+        source = "px_data"
+    else:
+        source = "auto"
+    chosen = auto
+    if want != "auto":
+        chosen, source = want, "override"
+        if want != auto:
+            w.append(f"Street EPS basis is set to {want}, but auto would pick {auto} ({evidence}). SUM compares "
+                     f"{want} EPS with the Street as you asked.")
+    ng = chosen == "non-GAAP"
+    md["basis"] = "ng" if ng else "gaap"
+    R["eps"] = R["eps_ng"] if ng else R["eps_gaap"]
+    md["ebitda_adj"] = bool(ng and R["ebitda_ng"])
+    R["ebitda"] = R["ebitda_ng"] if md["ebitda_adj"] else R["ebitda_gaap"]
+    return {"chosen": chosen, "source": source, "evidence": evidence, "auto": auto, "values_from": vfrom}
 
 
 def collect(model):
@@ -256,9 +362,11 @@ def collect(model):
         wb.close()
     out["mod"] = mod(model)
     c = consensus(cg, out["mod"]["years"]) if cg else None
-    if c and c["eps"]:
-        out["street"] = {"eps": c["eps"], "rev": c["rev"], "source": "consensus", "snapshot": c["snapshot"]}
+    if c and c["metrics"].get("eps"):
+        out["street"] = {"metrics": c["metrics"], "unmapped": c["unmapped"], "source": "consensus",
+                         "snapshot": c["snapshot"]}
     else:                                          # Multiples' forward table: EPS only, no revenue, no snapshot date
-        out["street"] = {"eps": {y: {"ref": s, "n": None} for y, s in out["mult"]["street"].items()}, "rev": {},
-                         "source": "multiples", "snapshot": None}
+        eps = {y: {"ref": s, "n": None} for y, s in out["mult"]["street"].items()}
+        out["street"] = {"metrics": {"eps": eps} if eps else {}, "unmapped": [], "source": "multiples",
+                         "snapshot": None}
     return out
