@@ -14,20 +14,28 @@ Placeholder idx convention (same on every layout)
   title      12 pic (the cover picture)
   summary    12 area (cap table, left)  13 area (our-vs-Street grid, right)  14 text (bullets, bottom)
   setup      12 text (bullets, left)  13 pic (price chart, right)
-  thesis     12, 13, 14 text: three columns, one per point (bold head as the first paragraph)
-  risks      12 text (risk 1, left)  13 text (risk 2, right)  14 text (tripwire strip, bottom)
-  why_now    12 text (bullets, left)  13 text (the alpha bucket, right box)
+  thesis     12, 13, 14 headbox: three columns, one per point
+  risks      12 headbox (risk 1, left)  13 headbox (risk 2, right)  14 strip (tripwires, bottom, every paragraph bulleted)
+  why_now    12 text (bullets, left)  13 box (the alpha bucket, right, plain)
   valuation  12 text (bullets, left)  13 pic (P/E history chart, right)
   different  12 area (ours vs Street table, top)  13 text (bullets, bottom)
-  risk_reward 12 area (cases table, top left)  13 area (R/R ladder, below it)  14 pic (chart, right)
-             15 text (IRR, three R's, short lines, bottom)
-  catalysts  12 text (bullets, left)  13 text (tripwires, right box)
+  risk_reward 12 area (cases table, top left)  13 area (R/R ladder, below it)  14 pic (chart, top right)
+             15 text (IRR line, three R's line, Watch lead; bottom left)  16 small (the 5 short-pitch lines; bottom right)
+  catalysts  12 text (bullets, left)  13 bulbox (tripwires, right, bulleted)
   text_chart 12 text (bullets, left)  13 pic (right)
   table      12 area (one wide table)
   quote      12 text (the quotes, wide)  13 text (what they prove, bottom)
-  two_column 12 text (left, bold head first)  13 text (right, bold head first)
-  image      12 pic (wide)  13 text (caption strip)
-  checklist  12 area (one wide table of question / answer)
+  two_column 12 colbox (left)  13 colbox (right)
+  image      12 pic (wide)  13 caption (one plain line)
+  checklist  12 area (one wide table of question / answer: 15 rows x 90 chars fit at 11pt with the question
+             column at least 10in wide)
+
+Paragraph levels (python-pptx paragraph.level, 0-based). The template styles them so the builder only sets the level:
+  text, small, strip, bulbox   level 0 = bullet (every paragraph)
+  headbox   level 0 = bold head (no bullet), level 1 = plain paragraph, level 2 = bullet   (thesis, risks)
+  colbox    level 0 = bold head (no bullet), level 1 = bullet                                 (two_column)
+  box, caption   level 0 = plain
+A short idx 16 stays empty on a long call; delete it.
 """
 import argparse
 import datetime
@@ -42,7 +50,6 @@ from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.opc.packuri import PackURI
 from pptx.parts.slide import SlideLayoutPart
 from pptx.util import Emu
-from pptx.util import Inches
 from lxml import etree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -83,12 +90,17 @@ def sp(id_, name, ph, geom, fill=None, line=None, body="", anchor="t", ins=(0.08
             f'</p:txBody></p:sp>')
 
 
-def lvl1(sz, color, bullet=False, bold=False, italic=False):
+def lvl(n, sz, color, bullet=False, bold=False, italic=False):
+    """List-level style n (1 = first paragraph, python-pptx paragraph.level 0)."""
     bu = (f'<a:buClr><a:srgbClr val="{THEME["navy"]}"/></a:buClr><a:buFont typeface="Arial"/><a:buChar char="&#8226;"/>'
           if bullet else '<a:buNone/>')
     mar = 'marL="171450" indent="-171450"' if bullet else 'marL="0" indent="0"'
-    return (f'<a:lvl1pPr {mar} algn="l"><a:spcBef><a:spcPts val="{300 if bullet else 200}"/></a:spcBef>{bu}'
-            f'{rpr(sz, color, bold, italic)}</a:lvl1pPr>')
+    return (f'<a:lvl{n}pPr {mar} algn="l"><a:spcBef><a:spcPts val="{300 if bullet else 200}"/></a:spcBef>{bu}'
+            f'{rpr(sz, color, bold, italic)}</a:lvl{n}pPr>')
+
+
+def lvl1(sz, color, bullet=False, bold=False, italic=False):
+    return lvl(1, sz, color, bullet, bold, italic)
 
 
 def chrome(first_id):
@@ -107,23 +119,26 @@ def full(h, y=TOP):
 LAYOUTS = {
     "title": {12: ("pic", (LM, TOP, CW, BOT - TOP))},
     "summary": {12: ("area", (LM, TOP, 4.0, 3.7)), 13: ("area", (4.6, TOP, 8.33, 3.7)),
-                14: ("text", (LM, 5.2, CW, BOT - 5.2))},
+                14: ("text", (LM, 5.2, CW, BOT - 5.2))},   # 3 bullets x 170 chars at 13pt = 6 lines, fits
     "setup": {12: ("text", (LM, TOP, 4.9, BOT - TOP)), 13: ("pic", (5.5, TOP, 7.43, BOT - TOP))},
-    "thesis": {12: ("box", (LM, TOP, 4.0, BOT - TOP)), 13: ("box", (4.67, TOP, 4.0, BOT - TOP)),
-               14: ("box", (8.93, TOP, 4.0, BOT - TOP))},
-    "risks": {12: ("box", (LM, TOP, 6.1, 4.0)), 13: ("box", (6.83, TOP, 6.1, 4.0)),
-              14: ("strip", (LM, 5.55, CW, BOT - 5.55))},
+    "thesis": {12: ("headbox", (LM, TOP, 4.0, BOT - TOP)), 13: ("headbox", (4.67, TOP, 4.0, BOT - TOP)),
+               14: ("headbox", (8.93, TOP, 4.0, BOT - TOP))},
+    "risks": {12: ("headbox", (LM, TOP, 6.1, 3.5)), 13: ("headbox", (6.83, TOP, 6.1, 3.5)),
+              14: ("strip", (LM, 4.95, CW, BOT - 4.95))},
     "why_now": {12: ("text", (LM, TOP, 7.4, BOT - TOP)), 13: ("box", (8.0, TOP, 4.93, 2.6))},
     "valuation": {12: ("text", (LM, TOP, 4.9, BOT - TOP)), 13: ("pic", (5.5, TOP, 7.43, BOT - TOP))},
     "different": {12: ("area", (LM, TOP, CW, 3.2)), 13: ("text", (LM, 4.7, CW, BOT - 4.7))},
-    "risk_reward": {12: ("area", (LM, TOP, 6.3, 2.2)), 13: ("area", (LM, 3.7, 6.3, 1.9)),
-                    14: ("pic", (6.9, TOP, 6.03, 4.25)), 15: ("text", (LM, 5.7, CW, BOT - 5.7))},
-    "catalysts": {12: ("text", (LM, TOP, 7.6, BOT - TOP)), 13: ("box", (8.2, TOP, 4.73, 3.4))},
+    # left: cases, ladder, then the IRR / three R's / lead lines; right: chart, then the short-pitch lines
+    # (5 fields x 170 chars at 10pt = 15 lines in a 6in column, fits). Lead (Watch) and short never appear together.
+    "risk_reward": {12: ("area", (LM, TOP, 6.3, 1.75)), 13: ("area", (LM, 3.2, 6.3, 1.7)),
+                    14: ("pic", (6.9, TOP, 6.03, 2.6)), 15: ("text", (LM, 5.0, 6.3, BOT - 5.0)),
+                    16: ("small", (6.9, 4.05, 6.03, BOT - 4.05))},
+    "catalysts": {12: ("text", (LM, TOP, 7.6, BOT - TOP)), 13: ("bulbox", (8.2, TOP, 4.73, 3.4))},
     "text_chart": {12: ("text", (LM, TOP, 4.9, BOT - TOP)), 13: ("pic", (5.5, TOP, 7.43, BOT - TOP))},
     "table": {12: ("area", (LM, TOP, CW, BOT - TOP))},
     "quote": {12: ("text", (LM, TOP, CW, 3.9)), 13: ("text", (LM, 5.4, CW, BOT - 5.4))},
-    "two_column": {12: ("box", (LM, TOP, 6.1, BOT - TOP)), 13: ("box", (6.83, TOP, 6.1, BOT - TOP))},
-    "image": {12: ("pic", (LM, TOP, CW, 5.0)), 13: ("strip", (LM, 6.45, CW, 0.45))},
+    "two_column": {12: ("colbox", (LM, TOP, 6.1, BOT - TOP)), 13: ("colbox", (6.83, TOP, 6.1, BOT - TOP))},
+    "image": {12: ("pic", (LM, TOP, CW, 5.0)), 13: ("caption", (LM, 6.45, CW, 0.45))},
     "checklist": {12: ("area", (LM, TOP, CW, BOT - TOP))},
 }
 NAMES = CORE_TYPES + SUPPORT_LAYOUTS
@@ -140,24 +155,38 @@ def body_shape(i, idx, kind, geom):
                 f'<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle>{lvl1(10, t["grey"])}</a:lstStyle>'
                 f'<a:p><a:r><a:rPr lang="en-US"/><a:t>Picture</a:t></a:r></a:p></p:txBody></p:sp>')
     ph = f'<p:ph type="body" sz="quarter" idx="{idx}"/>'
+    tx, nv = t["text"], t["navy"]
     if kind == "text":
-        return sp(i, name, ph, geom, lst=lvl1(13, t["text"], bullet=True), prompt="Bullets")
+        return sp(i, name, ph, geom, lst=lvl(1, 13, tx, bullet=True), prompt="Bullets")
+    if kind == "small":
+        return sp(i, name, ph, geom, lst=lvl(1, 10, tx, bullet=True), prompt="Bullets")
     if kind == "box":
-        return sp(i, name, ph, geom, line=t["line"], ins=(0.12, 0.1), lst=lvl1(12, t["text"]), prompt="Box")
+        return sp(i, name, ph, geom, line=t["line"], ins=(0.12, 0.1), lst=lvl(1, 12, tx), prompt="Box")
+    if kind == "headbox":
+        return sp(i, name, ph, geom, line=t["line"], ins=(0.12, 0.1), prompt="Head, then text",
+                  lst=lvl(1, 13, nv, bold=True) + lvl(2, 12, tx) + lvl(3, 12, tx, bullet=True))
+    if kind == "colbox":
+        return sp(i, name, ph, geom, line=t["line"], ins=(0.12, 0.1), prompt="Head, then bullets",
+                  lst=lvl(1, 13, nv, bold=True) + lvl(2, 12, tx, bullet=True))
+    if kind == "bulbox":
+        return sp(i, name, ph, geom, line=t["line"], ins=(0.12, 0.1), lst=lvl(1, 11, tx, bullet=True), prompt="Bullets")
     if kind == "strip":
-        return sp(i, name, ph, geom, fill=t["strip"], anchor="ctr", ins=(0.12, 0.05), lst=lvl1(11, t["text"]), prompt="Strip")
-    return sp(i, name, ph, geom, lst=lvl1(10, t["text"]), prompt="Table, chart or text area")
+        return sp(i, name, ph, geom, fill=t["strip"], anchor="ctr", ins=(0.12, 0.05),
+                  lst=lvl(1, 11, tx, bullet=True), prompt="Bullets")
+    if kind == "caption":
+        return sp(i, name, ph, geom, fill=t["strip"], anchor="ctr", ins=(0.12, 0.05), lst=lvl(1, 11, tx), prompt="Caption")
+    return sp(i, name, ph, geom, lst=lvl(1, 10, tx), prompt="Table, chart or text area")
 
 
 def layout_xml(name):
     t = THEME
     shapes = [
         sp(2, "Title", '<p:ph type="title"/>', (0, 0, W, 0.62), fill=t["navy"], anchor="ctr", ins=(LM, 0.04),
-           lst=lvl1(20, "FFFFFF", bold=True), prompt="Title"),
+           lst=lvl(1, 20, "FFFFFF", bold=True), prompt="Title"),
         sp(3, "Takeaway", '<p:ph type="body" sz="quarter" idx="10"/>', (0, 0.62, W, 0.58), fill=t["band"], anchor="ctr",
-           ins=(LM, 0.03), lst=lvl1(12, t["text"], italic=True), prompt="Takeaway: the one sentence to remember"),
+           ins=(LM, 0.03), lst=lvl(1, 12, t["text"], italic=True), prompt="Takeaway: the one sentence to remember"),
         sp(4, "Source", '<p:ph type="body" sz="quarter" idx="11"/>', (LM, 7.05, W - 2.0 - LM + 0.6, 0.3), anchor="ctr",
-           ins=(0, 0), lst=lvl1(7.5, t["grey"]), prompt="Source"),
+           ins=(0, 0), lst=lvl(1, 7.5, t["grey"]), prompt="Source"),
     ]
     for n, (idx, (kind, geom)) in enumerate(sorted(LAYOUTS[name].items())):
         shapes.append(body_shape(5 + n, idx, kind, geom))
@@ -192,6 +221,12 @@ def build():
         e = etree.SubElement(lst, '{http://schemas.openxmlformats.org/presentationml/2006/main}sldLayoutId')
         e.set('id', str(2147483649 + n))
         e.set('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id', rid)
+    for part in prs.part.package.iter_parts():       # app.xml names the default template's 4:3 / Mac PowerPoint
+        if str(part.partname) == "/docProps/app.xml":
+            part._blob = (b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                          b'<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
+                          b'<Application>write-pitch</Application><PresentationFormat>Widescreen</PresentationFormat>'
+                          b'</Properties>')
     cp = prs.core_properties
     cp.author = cp.last_modified_by = "write-pitch"
     cp.title, cp.subject, cp.keywords, cp.comments, cp.category = "write-pitch template", "", "", "", ""
@@ -215,5 +250,6 @@ def write(out):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True)
-    write(ap.parse_args().out)
-    print("wrote", ap.parse_args().out)
+    args = ap.parse_args()
+    write(args.out)
+    print("wrote", args.out)

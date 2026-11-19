@@ -282,7 +282,7 @@ a recent large acquisition.
   then "Likely question: ..." and "Answer: ...". Notes are what the user rehearses from; they must make sense read
   aloud.
 - **Text budgets** (common.BUDGET, characters): title 70; takeaway 160; bullet 170 (each thesis head, risk head,
-  `if_hits`, `mitigant`, tripwire, napkin bullet, checklist question); box 420 (each thesis body, `pitch_20s` and
+  `if_hits`, `mitigant`, tripwire, napkin bullet); row 90 (checklist question); box 420 (each thesis body, `pitch_20s` and
   each SUM text box); note 1,500 (speaker notes); quote 400; cell 24 (table cells, checklist answers).
   `plan_schema.md` lists which field takes which budget. Short beats long: a slide a PM can read in ten seconds.
 - **Numbers only through `{key}`** placeholders (plan_schema.md). Never type a number into text.

@@ -157,7 +157,7 @@ Core slides carry no `section`.
 | type | Fields beyond the common ones | What code adds |
 |---|---|---|
 | `title` | `image` (optional): `{"pdf": "<file>", "page": n, "crop": [x0, y0, x1, y1]}`, the crop as fractions of page width and height from the top-left; or `{"png": "<file in the tabs folder>"}`. The `title` carries the call: "LONG XYZ", "SHORT XYZ", "WATCH XYZ". | the picture |
-| `summary` | `takeaway`: the 20-second pitch cut to 160 characters; `bullets` (optional, 3-5) | the cap table and our-vs-Street grid from SUM |
+| `summary` | `takeaway`: the 20-second pitch cut to 160 characters; `bullets` (optional, 0-3) | the cap table and our-vs-Street grid from SUM |
 | `setup` | `bullets` (3-5): the set-up story; `events` (optional): `[{"date": "YYYY-MM-DD", "label": "..."}]` for the big moves to label | the price chart with Px Events markers |
 | `thesis` | `points`: exactly 3 `{"head", "body"}` | |
 | `risks` | `risks`: exactly 2 `{"head", "prob", "if_hits", "mitigant"}`, `prob` a number strictly between 0 and 1: your own judgment, not a model number, so it needs no `{key}` or anchor (it is a structured field, not text); `tripwires`: 2-4 strings | each `prob` as a percent labelled "our estimate" |
@@ -179,7 +179,7 @@ one support slide for each). Put the support slides before the appendix slides.
 | `quote` | `quotes`: 1-3 quote ids; `bullets` (optional): what the quotes prove |
 | `two_column` | `left` and `right`: each `{"head": "...", "bullets": [...]}` (Likes / Dislikes, bull / bear) |
 | `image` | `image` and an optional `caption` |
-| `checklist` | `items`: 3-15 `{"q", "a"}`; `q` the question (bullet budget), `a` a short answer (cell budget): "Yes", "No", "Partly", or a `{key}`. The two appendix checklists use it: the 15-question stock-selection checklist, and the 7-area risk checklist (`q` names the area and gives your one-line answer; `a` is the verdict, e.g. "Low risk", "High risk"). |
+| `checklist` | `items`: 3-15 `{"q", "a"}`; `q` the question (row budget, 90), `a` a short answer (cell budget): "Yes", "No", "Partly", or a `{key}`. The two appendix checklists use it: the 15-question stock-selection checklist, and the 7-area risk checklist (`q` names the area and gives your one-line answer; `a` is the verdict, e.g. "Low risk", "High risk"). |
 
 ## 8. pitch_sheet
 - `script_3min`: exactly 12 short paragraphs in the 3-to-5-minute script's order (pitch_brief.md section 10).
@@ -206,10 +206,11 @@ Characters, counted after each `{key}` is replaced by its `shown` (common.BUDGET
 |---|---|---|
 | title | 70 | every slide `title` |
 | takeaway | 160 | every slide `takeaway` |
-| bullet | 170 | thesis `head`; risk `head`, `if_hits`, `mitigant`; each item of `bullets` and `tripwires`; each `napkin` item; each `hard_questions` `q`; two_column `head`s and `bullets`; `caption`; `bucket`; risk_reward `lead` and each `short` field; each checklist `q` |
+| bullet | 170 | thesis `head`; risk `head`, `if_hits`, `mitigant`; each item of `bullets` and `tripwires`; each `napkin` item; each `hard_questions` `q`; two_column `head`s and `bullets`; `caption`; `bucket`; risk_reward `lead` and each `short` field |
 | box | 420 | thesis `body`; `most_important_thing`; `pitch_20s`; each `script_3min` paragraph; each `hard_questions` `a`; each text value of `sum_boxes` |
 | note | 1500 | every slide `notes` |
 | quote | 400 | each quote `text` |
+| row | 90 | each checklist `q` (15 rows must fit one slide) |
 | cell | 24 | each table `header` and `rows` cell; each risk_reward case field; `irr`; each `three_rs` field; each checklist `a` |
 
 ## 12. Every rule the code enforces
@@ -228,7 +229,7 @@ Structure (`plan.py`):
 - **[R6]** Every later slide has `section` `support` or `appendix` and a `type` in `text_chart`, `table`, `quote`,
   `two_column`, `image`, `checklist`.
 - **[R7]** Every slide is an object with non-empty `notes` and `source`.
-- **[R8]** Counts and shapes by slide type. `bullets`: `summary` 3-5 or none; `setup` and `why_now` 3-5; `valuation`
+- **[R8]** Counts and shapes by slide type. `bullets`: `summary` 0-3; `setup` and `why_now` 3-5; `valuation`
   and `different` 2-4; `catalysts` 3-6; `text_chart` 2-5. `tripwires`: `risks` 2-4; `catalysts` 0-4. A `quote` slide
   names 1-3 quote ids. A `two_column` slide's `left` and `right` are each an object with a non-empty `head` and a
   `bullets` list. A `checklist` slide has 3-15 `items`, each an object with non-empty `q` and `a`.

@@ -25,8 +25,8 @@ HOLDER = re.compile(r"\{(\w+)\}")
 VERDICT_CALL = {"buy": "Long", "sell": "Short", "hold": "Watch"}
 REQUIRED = ("price", "base_ret", "risk_ret", "irr_3y", "target_3y", "buy_price", "nobrainer_price")
 KNOW_COLD = ("price", "base_ret", "risk_ret", "irr_3y", "buy_price")
-BULLETS = {"summary": (3, 5), "setup": (3, 5), "why_now": (3, 5), "valuation": (2, 4), "different": (2, 4),
-           "catalysts": (3, 6), "text_chart": (2, 5)}       # bullets per slide type; summary's are optional
+BULLETS = {"summary": (0, 3), "setup": (3, 5), "why_now": (3, 5), "valuation": (2, 4), "different": (2, 4),
+           "catalysts": (3, 6), "text_chart": (2, 5)}       # bullets per slide type; summary's are optional (0-3)
 SUPPORTS = ("thesis.1", "thesis.2", "thesis.3", "risks.1", "risks.2")
 SUPPORT_COUNT = (10, 25)                                     # support slides in the long deck
 CHECKLIST_ITEMS = (3, 15)
@@ -90,7 +90,7 @@ def _fields(slide, quotes):
             yield f"short {k}", "bullet", v
     for i, it in enumerate(_as_list(slide.get("items")), 1):
         if isinstance(it, dict):
-            yield f"item {i} q", "bullet", it.get("q")
+            yield f"item {i} q", "row", it.get("q")
             yield f"item {i} a", "cell", it.get("a")
     yield "irr", "cell", slide.get("irr")
     if isinstance(slide.get("three_rs"), dict):

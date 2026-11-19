@@ -3,7 +3,6 @@ import hashlib
 import os
 import sys
 
-import pytest
 from pptx import Presentation
 from pptx.util import Inches
 
@@ -11,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import make_template
 from common import CORE_TYPES
 from common import SUPPORT_LAYOUTS
+from common import THEME
 
 TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "assets", "pitch_template.pptx")
 NAMES = CORE_TYPES + SUPPORT_LAYOUTS
@@ -77,3 +77,40 @@ def test_regenerating_does_not_drift(tmp_path):
     out2 = tmp_path / "t2.pptx"
     make_template.write(str(out2))
     assert hashlib.sha1(out.read_bytes()).hexdigest() == hashlib.sha1(out2.read_bytes()).hexdigest()
+
+
+def _style(ph):
+    """(fill hex, font size pt, bold, italic, colour hex) from the layout placeholder's own XML."""
+    ns = {"a": "http://schemas.openxmlformats.org/drawingml/2006/main"}
+    el = ph._element
+    fill = el.xpath("./p:spPr/a:solidFill/a:srgbClr/@val")
+    d = el.xpath(".//a:lvl1pPr/a:defRPr")[0]
+    return (fill[0] if fill else None, int(d.get("sz")) / 100, d.get("b") == "1", d.get("i") == "1",
+            d.xpath("./a:solidFill/a:srgbClr/@val")[0])
+
+
+def test_chrome_matches_theme():
+    # a look change in THEME (or a hand edit of the template) must fail here so the docs and builder stay in step
+    for layout in Presentation(TEMPLATE).slide_layouts:
+        ph = {p.placeholder_format.idx: p for p in layout.placeholders}
+        assert _style(ph[0]) == (THEME["navy"], 20, True, False, "FFFFFF"), layout.name
+        assert _style(ph[10]) == (THEME["band"], 12, False, True, THEME["text"]), layout.name
+        assert _style(ph[11]) == (None, 7.5, False, False, THEME["grey"]), layout.name
+        fields = layout._element.xpath('.//a:fld[@type="slidenum"]')
+        assert len(fields) == 1, layout.name          # slide number shows with no code
+
+
+def test_app_xml_is_not_the_default_templates():
+    import zipfile
+    app = zipfile.ZipFile(TEMPLATE).read("docProps/app.xml").decode()
+    assert "Macintosh" not in app and "On-screen Show (4:3)" not in app
+
+
+def test_capacity_geometry():
+    # full-budget text must fit: 15 checklist rows of 11pt need ~0.3in each; the question column is the full width
+    prs = Presentation(TEMPLATE)
+    lay = {l.name: {p.placeholder_format.idx: p for p in l.placeholders} for l in prs.slide_layouts}
+    assert lay["checklist"][12].height >= Inches(15 * 0.3 + 0.4)
+    assert lay["risk_reward"][16].height >= Inches(2.8)       # five short-pitch lines at 10pt
+    assert lay["risks"][14].height >= Inches(1.8)             # four 170-char tripwires
+    assert lay["summary"][14].height >= Inches(1.5)           # three 170-char bullets
