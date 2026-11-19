@@ -384,3 +384,20 @@ def test_double_path_words_follow_the_multiple(model, work, tmp_path):
     f = lay["formula_text"][ref]
     assert "multiple expansion" in f and "metric growth" in f and "P/E" not in f and "EPS" not in f
     assert lay["expected"][ref] in ("multiple expansion", "metric growth", "both", "no double path (price falls)")
+
+
+def test_a_driver_with_no_growth_rate_prints_na_not_nan(model, work, tmp_path):
+    """A revenue driver that is 0 at both ends of the 5 years (a business spun off, e.g. ABT's Nutrition from 2028) has
+    no CAGR: scenario_eval returns NaN. Written as a number, '<v>nan</v>' is invalid XML and the file won't open
+    (ABT, 2026-11-18)."""
+    rp = os.path.join(work, "scenarios_result_1.json")
+    res = json.load(open(rp))
+    for case in ("bear", "base", "bull"):
+        res[case]["rev_cagr5"] = float("nan")
+        for f in res[case].get("factor_cagr5", {}):
+            res[case]["factor_cagr5"][f] = float("nan")
+    json.dump(res, open(rp, "w"))
+    out = str(tmp_path / "out.xlsx")
+    build.build(model, work, "TEST", out)
+    ws = _ws(out)                                              # openpyxl raised 'invalid literal for int(): nan'
+    assert _cell_by_label(ws, "5-year revenue CAGR", "B").value == "n/a"

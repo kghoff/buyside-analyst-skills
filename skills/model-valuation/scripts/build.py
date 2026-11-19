@@ -16,6 +16,7 @@ section's size follows the plan. Named cells go in b.ref (absolute refs such as 
 usage: python3 build.py --model M --work W --ticker T --out OUT"""
 import argparse
 import json
+import math
 import os
 import re
 from types import SimpleNamespace
@@ -104,6 +105,8 @@ class W:
             self.col_a[ref] = t
 
     def typed_(self, ref, v, fmt, note, kind="n", fill=None):
+        if kind == "n" and isinstance(v, float) and not math.isfinite(v):
+            kind, v = "s", "n/a"           # no value (e.g. a CAGR of a driver that is 0 at both ends); 'nan' is invalid XML
         self.sh.set(ref, kind, v, self.style(BLUE, fmt, fill=fill))
         self.typed.append(ref)
         self.notes[ref] = note
