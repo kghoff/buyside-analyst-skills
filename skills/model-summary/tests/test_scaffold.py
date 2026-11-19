@@ -72,7 +72,7 @@ def test_first_sheet_is_reset_so_sum_is_visible(tmp_path):
         for n in zin.namelist():
             d = zin.read(n)
             if n == "xl/workbook.xml":
-                d = re.sub(rb"<workbookView\b", b'<workbookView firstSheet="2"', d, 1)
+                d = re.sub(rb"<workbookView\b", b'<workbookView firstSheet="2"', d, count=1)
             z.writestr(n, d)
     res = _add_sum(out, str(tmp_path / "fs2.xlsx"))
     xml = zipfile.ZipFile(res).read("xl/workbook.xml").decode()
