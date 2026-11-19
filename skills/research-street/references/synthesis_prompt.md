@@ -56,6 +56,17 @@ Use these headings, in this order:
 - `## Answers to the user's questions`: only if questions were given. Numbered to match `questions.md`, each with
   citations.
 
+## Peer documents (a competitor's own call or filing)
+If a competitor's own earnings call, 10-Q, 10-K or earnings release would settle a point, don't look for it on the web
+(transcript sites block). Append a line to `{WORK}/synthesis/doc_requests.txt`:
+`TICKER kinds quarters | why`, e.g. `DXCM calls 2026Q3 | CGM share and price`. Kinds: `calls`, `10-Q`, `10-K`,
+`releases` (comma-separated); quarters: `2026Q3[,2026Q2]` or `last2`. At most 6 lines; never {TICKER} itself (its
+documents are in the filings research).
+Finish your work, then say "requested N peer documents" in your reply. You'll be sent the files to read. Cite each by
+its label exactly as sent (a transcript has no pages: `[2026 Q3 DXCM call]`). Mark the holder `official`. A peer's
+figures about its own business are facts; its claims about the market or about {COMPANY} are an interested party's
+opinion, weighted below tier 1.
+
 ## Rules
 - Copy every citation exactly from the marks or notes. Never add a fact, a number or a citation.
 - Weigh, don't count. One well-reasoned bear case outweighs five analysts repeating guidance.

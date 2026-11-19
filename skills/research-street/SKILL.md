@@ -114,6 +114,13 @@ If `sellside` is 0, tell the user the report will use web sources only. The cove
      agent once (SendMessage): "Widen the search: other phrasings, competitor names, conference names, the CEO and
      CFO by name. Append to fetched.csv, searches.txt, excerpts.md, marks.csv and notes.md; never overwrite them."
      Rerun both checks. After that, accept the result and note it.
+   - **Peer documents** (a competitor's own call or filing): if the agent wrote `<its out dir>/doc_requests.txt`, check
+     the peer's folder and fetch only what's missing, with collect-documents' targeted fetch (never the full skill):
+     `node "$SKILLS/collect-documents/scripts/peer_docs.mjs" --requests <its out dir>/doc_requests.txt --subject <T>`.
+     It writes `peer_docs.json` beside the requests. Resume the same agent (SendMessage) with the `found` / `local`
+     paths: "Read these peer documents and append to notes.md and marks.csv; cite each by its label." Rerun both
+     checks (they accept the peer labels fetched for that agent). One round per agent; anything `missing` or
+     `deferred` (Alpha Vantage's daily limit) goes in the thin-coverage notes.
 4. **Don't continue** until `python3 $R/scripts/p2check.py --src "$SRC" status` shows every agent at `pass`.
 
 ## 3. Merge
@@ -122,7 +129,8 @@ If `sellside` is 0, tell the user the report will use web sources only. The cove
 - how many gaps are closed, estimate-only, or still open
 
 ## 4. Synthesis, PM review, response
-1. Dispatch the synthesis agent (opus, `synthesis_prompt.md`).
+1. Dispatch the synthesis agent (opus, `synthesis_prompt.md`). If it wrote `$W/synthesis/doc_requests.txt`, fetch and
+   resume it as in step 2.3.
 2. Dispatch a separate PM reviewer (opus, `pm_review_prompt.md`).
 3. Send `pm_review.md` back to the synthesis agent. It answers each challenge under `## Response to the PM review`
    and revises the synthesis where the challenge wins. Disagreement that's left stays in the file.
@@ -161,14 +169,15 @@ If `sellside` is 0, tell the user the report will use web sources only. The cove
 4. Rerun both scripts. Whatever is still unconfirmed goes at the end of section 09, under "### Unconfirmed numbers".
 
 ## 8. Render and look
-1. Render:
+1. Render (the first line lists the peer documents fetched for agents, so their footnotes print as outside views):
    ```bash
-   python3 $R1/scripts/render.py "$P/sections" "$P/<YYYY-MM-DD> <T> Street Research Report.pdf" --footer "<T> street research · <Mon YYYY>" --preview "$W/preview"
+   python3 -c "import sys; sys.path.insert(0, '$R/scripts'); import p2common; print('\n'.join(i['label'] for i in p2common.peer_items('$SRC')))" > "$W/outside_labels.txt"
+   python3 $R1/scripts/render.py "$P/sections" "$P/<YYYY-MM-DD> <T> Street Research Report.pdf" --footer "<T> street research · <Mon YYYY>" --preview "$W/preview" --outside-labels "$W/outside_labels.txt"
    ```
    The table of contents is on by default; keep it in every report.
    The .md keeps its bracket citations; the PDF turns each into a numbered footnote at the foot of its page,
    restarting at 1 in each section (each `#` / `##` heading). Purple numbers are outside views (sell-side reports,
-   investor letters, web pages), blue are company documents and the filings research report, orange are our own work
+   investor letters, web pages, peers' own calls and filings), blue are company documents and the filings research report, orange are our own work
    (citations starting `Calc`, `Model` or `price.csv`); `[unconfirmed]` prints as a small yellow flag. render.py
    checks that every footnote lands on the page of its number and moves a paragraph to the next page when one
    doesn't; a `WARNING: footnote ...` line means one still didn't fit. Tell the user which page and source.
@@ -182,8 +191,9 @@ If `sellside` is 0, tell the user the report will use web sources only. The cove
 Tell the user, in plain English:
 - **The takeaway,** in 2–3 sentences: do outsiders agree on the key drivers, and what is the biggest difference?
 - **The PDF path** and its page count.
-- **Sources:** sell-side reports read, web pages read, pages blocked (and whether dropping some in as PDFs would
-  help), and searches run.
+- **Sources:** sell-side reports read, peer documents fetched (and any still missing), web pages read, pages blocked
+  (and whether dropping some in as PDFs would help), and searches run. A peer's call or filing is never on the blocked
+  list: it is fetched in step 2.3.
 - **Gaps:** closed with a fact, estimate only, and still open.
 - **Check results:** the numcheck counts and the repeat-check result.
 - **Judgment calls:** how researchers were split, thin areas, and any hindsight sources excluded.
