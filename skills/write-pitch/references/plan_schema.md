@@ -186,7 +186,7 @@ one support slide for each). Put the support slides before the appendix slides.
 - `napkin`: 3-5 bullets.
 - `hard_questions`: 3-5 `{"q", "a"}` with your answers. In the first draft (before the PM has run) write the hardest
   questions you expect yourself; after the PM review, replace them with the hardest challenges left standing.
-- `know_cold`: number keys (each must exist in `numbers`), at least `price`, `base_ret`, `risk_ret`, `irr_3y`,
+- `know_cold`: 5-10 number keys (each must exist in `numbers`; at most 10 so the sheet stays two pages), at least `price`, `base_ret`, `risk_ret`, `irr_3y`,
   `buy_price` and our vs Street EPS for next year.
 
 ## 9. sum_boxes
@@ -251,7 +251,7 @@ Structure (`plan.py`):
 - **[R16]** Every text field is within its budget (section 11), counted after each `{key}` is replaced by its `shown`.
 - **[R17]** `pitch_sheet` is an object: `script_3min` exactly 12 paragraphs; `napkin` 3-5 bullets; `hard_questions`
   3-5 items; every `know_cold` key exists in `numbers`, and `know_cold` includes `price`, `base_ret`, `risk_ret`,
-  `irr_3y` and `buy_price`.
+  `irr_3y` and `buy_price`; at most 10 keys.
 - **[R18]** `sum_boxes`, if present, is an object whose keys are among the six SUM box names.
 - **[R19]** The call against the verdicts (the skill reads them from the tabs; failing that, `starting_verdicts`;
   case ignored). If the Valuation verdict is Buy, Sell or Hold, a call other than its mapping (Buy → Long,

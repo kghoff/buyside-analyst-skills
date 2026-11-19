@@ -24,18 +24,19 @@ def _style(doc):
     for name in ("Normal", "List Number", "List Bullet"):
         st = doc.styles[name]
         st.font.name = FONT
-        st.font.size = Pt(9)
+        st.font.size = Pt(8.5)
         st.element.rPr.rFonts.set(qn("w:eastAsia"), FONT)
-        st.paragraph_format.space_after = Pt(2)
+        st.paragraph_format.space_after = Pt(1)
         st.paragraph_format.space_before = Pt(0)
+        st.paragraph_format.line_spacing = 1.0
     sec = doc.sections[0]
-    sec.left_margin = sec.right_margin = Inches(0.5)
-    sec.top_margin = sec.bottom_margin = Inches(0.5)
+    sec.left_margin = sec.right_margin = Inches(0.45)
+    sec.top_margin = sec.bottom_margin = Inches(0.45)
 
 
-def _head(doc, text, size=12):
+def _head(doc, text, size=11):
     p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(6)
+    p.paragraph_format.space_before = Pt(4)
     p.paragraph_format.keep_with_next = True
     r = p.add_run(text)
     r.bold = True

@@ -308,6 +308,8 @@ def _sheet(plan, nums, out):
     gone = [k for k in KNOW_COLD if k not in kc]
     if gone:
         out.append(f"[R17] pitch_sheet know_cold: must include {', '.join(gone)}")
+    if len(kc) > 10:
+        out.append(f"[R17] pitch_sheet know_cold: at most 10 keys (the sheet is two pages), has {len(kc)}")
     n = len(_as_list(sheet.get("script_3min")))
     if n != 12:
         out.append(f"[R17] pitch_sheet script_3min: needs exactly 12 paragraphs, has {n}")

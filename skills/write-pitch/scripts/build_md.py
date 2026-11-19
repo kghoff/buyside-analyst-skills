@@ -20,9 +20,9 @@ def _anchor(s):
 def _verdict(path):
     try:
         for line in open(path, encoding="utf-8"):
-            if line.startswith("## Verdict"):
-                return line.lstrip("# ").strip()
-    except OSError:
+            if re.match(r"\s*#+\s*verdict\b", line, re.I):
+                return line.lstrip("# \t").strip()
+    except (OSError, UnicodeDecodeError):
         pass
     return None
 
@@ -38,14 +38,33 @@ def _table(t, f):
     return out
 
 
+SUPPORTS = {"thesis": "thesis point", "risks": "risk"}
+
+
+def _image(im):
+    if "png" in im:
+        return f"Image: {im['png']}"
+    crop = f", crop {im['crop']}" if im.get("crop") else ""
+    return f"Image: {im.get('pdf', '')} page {im.get('page', '')}{crop}"
+
+
 def _slide(s, i, plan, f):
-    L = [f"### {i}. {f(s['title'])}", "", f"**{f(s['takeaway'])}**", ""]
+    L = [f"### {i}. {f(s['title'])}", ""]
+    if s.get("supports"):
+        kind, _, num = s["supports"].partition(".")
+        L += [f"Supports: {SUPPORTS.get(kind, kind)} {num}", ""]
+    L += [f"**{f(s['takeaway'])}**", ""]
     bl = lambda items: [f"- {f(x)}" for x in items] + [""]  # noqa: E731
+    if s.get("bucket"):
+        L += [f"Alpha bucket: {f(s['bucket'])}", ""]
     if s.get("image"):
-        im = s["image"]
-        L += [f"Image: {im.get('pdf', '')} p.{im.get('page', '')}", ""]
+        L += [_image(s["image"]), ""]
+    if s.get("caption"):
+        L += [f"Caption: {f(s['caption'])}", ""]
     if s.get("bullets"):
         L += bl(s["bullets"])
+    if s.get("events"):
+        L += ["Events marked on the chart:"] + [f"- {e['date']}: {f(e['label'])}" for e in s["events"]] + [""]
     for k, p in enumerate(s.get("points", []), 1):
         L += [f"{k}. **{f(p['head'])}**: {f(p['body'])}"]
     if s.get("points"):
@@ -75,19 +94,21 @@ def _slide(s, i, plan, f):
         for c in s["cases"]:
             L += ["| " + " | ".join(_cell(f(c[k])) for k in ("name", "eps", "pe", "ret", "prob")) + " |"]
         L += [""]
-        if s.get("irr"):
-            L += [f"3-year IRR: {f(s['irr'])}", ""]
-        if s.get("three_rs"):
-            t = s["three_rs"]
-            L += [f"3 R's: roll {f(t['roll'])}; revisions {f(t['revisions'])}; rerating {f(t['rerating'])}", ""]
-        if s.get("lead"):
-            L += [f(s["lead"]), ""]
-        for k, v in (s.get("short") or {}).items():
-            L += [f"- Short, {k}: {f(v)}"]
-        if s.get("short"):
-            L += [""]
+    if s.get("ladder"):
+        L += [f"R/R ladder: read from the {s['ladder']} tab", ""]
+    if s.get("irr"):
+        L += [f"3-year IRR: {f(s['irr'])}", ""]
+    if s.get("three_rs"):
+        t = s["three_rs"]
+        L += [f"3 R's: roll {f(t['roll'])}; revisions {f(t['revisions'])}; rerating {f(t['rerating'])}", ""]
+    if s.get("lead"):
+        L += [f(s["lead"]), ""]
+    for k, v in (s.get("short") or {}).items():
+        L += [f"- Short, {k}: {f(v)}"]
+    if s.get("short"):
+        L += [""]
     if s.get("notes"):
-        L += ["Speaker notes: " + f(s["notes"]), ""]
+        L += ["**Speaker notes:** " + f(s["notes"]), ""]
     if s.get("source"):
         L += [f"Source: {s['source']}", ""]
     return L
@@ -99,12 +120,17 @@ def build(plan, pm_review, out):
     sheet = plan["pitch_sheet"]
     L = [f"**Call: {plan['call']}. Action: {plan['action']}.**", ""]
     if plan.get("override"):
-        L += [f"Override: {f(plan['override'])}" if isinstance(plan["override"], str)
-              else f"Override: {plan['override']}", ""]
+        o = plan["override"]
+        if isinstance(o, dict):
+            L += [f"Override: {f(o.get('reason', ''))} Evidence: {f(o.get('evidence', ''))}", ""]
+        else:
+            L += [f"Override: {f(o)}", ""]
     L += [f"Most important thing: {f(plan['most_important_thing'])}", "",
           f"# {plan['ticker']} pitch", "", f"As of {plan['as_of']}", "", "## Contents", ""]
-    heads = ["20-second pitch"] + ["Slides"] + ["Pitch sheet", "PM review", "Judgment calls"]
-    L += [f"- [{h}](#{_anchor(h)})" for h in heads] + ["", "## 20-second pitch", "", f(plan["pitch_20s"]), "",
+    L += [f"- [20-second pitch](#20-second-pitch)", "- [Slides](#slides)"]
+    L += [f"  - [{i}. {f(s['title'])}](#{_anchor(f'{i}. ' + f(s['title']))})" for i, s in enumerate(plan["slides"], 1)]
+    L += [f"- [{h}](#{_anchor(h)})" for h in ("Pitch sheet", "PM review", "Judgment calls")]
+    L += ["", "## 20-second pitch", "", f(plan["pitch_20s"]), "",
                                                         "## Slides", ""]
     for i, s in enumerate(plan["slides"], 1):
         L += _slide(s, i, plan, f)

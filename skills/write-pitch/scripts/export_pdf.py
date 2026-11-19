@@ -4,23 +4,37 @@ usage: python3 export_pdf.py in.pptx|in.docx --out-dir DIR        (prints the PD
        python3 export_pdf.py --pngs in.pdf --out-dir DIR [--width 1600]   (prints each PNG path)"""
 import argparse
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with python3 -I
 import lo  # noqa: E402
 
 
 def to_pdf(path, outdir):
-    """PDF of a .pptx / .docx in outdir. lo._run passes --calc (wrong for Writer / Impress), so run it here."""
+    """PDF of a .pptx / .docx in outdir. Each call uses its own throwaway LibreOffice profile, so two conversions can
+    run at once (a shared profile makes the second one fail). Failures end as one plain sentence."""
+    if not os.path.exists(path):
+        raise SystemExit(f"Cannot export: {path} does not exist.")
     if not lo.SOFFICE:
         raise SystemExit("LibreOffice not found. Install it once with: brew install --cask libreoffice")
-    os.makedirs(os.path.join(lo.PROFILE, "user"), exist_ok=True)
-    with open(os.path.join(lo.PROFILE, "user", "registrymodifications.xcu"), "w") as f:
-        f.write(lo.XCU)
     os.makedirs(outdir, exist_ok=True)
-    subprocess.run([lo.SOFFICE, f"-env:UserInstallation=file://{lo.PROFILE}", "--headless", "--convert-to", "pdf",
-                    "--outdir", outdir, path], check=True, capture_output=True, timeout=900)
+    profile = tempfile.mkdtemp(prefix="write-pitch-lo-")
+    try:
+        subprocess.run([lo.SOFFICE, f"-env:UserInstallation=file://{profile}", "--headless", "--convert-to", "pdf",
+                        "--outdir", outdir, path], check=True, capture_output=True, timeout=180)
+    except subprocess.CalledProcessError as e:
+        tail = (e.stderr or b"").decode("utf-8", "replace").strip()[-300:]
+        raise SystemExit(f"LibreOffice could not convert {path} to PDF. {tail}")
+    except subprocess.TimeoutExpired as e:
+        tail = (e.stderr or b"").decode("utf-8", "replace").strip()[-300:] if e.stderr else ""
+        raise SystemExit(f"LibreOffice took over 3 minutes converting {path} and was stopped. {tail}")
+    except OSError as e:
+        raise SystemExit(f"LibreOffice could not be started ({e}).")
+    finally:
+        shutil.rmtree(profile, ignore_errors=True)
     pdf = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".pdf")
     if not os.path.exists(pdf):
         raise SystemExit(f"LibreOffice made no PDF for {path}")

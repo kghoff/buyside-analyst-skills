@@ -1,6 +1,6 @@
 # skills/write-pitch/scripts/fill.py
 """fill(text, numbers): put each {key} placeholder's `numbers[key]["shown"]` into the text (a key that is not in
-numbers raises KeyError: a broken plan must not print a raw placeholder). label(key) gives a readable name for a key.
+numbers raises KeyError("no number named ... in plan numbers"): a broken plan must not print a raw placeholder). label(key) gives a readable name for a key.
 usage: from fill import fill, label"""
 import os
 import re
@@ -15,7 +15,11 @@ def fill(text, numbers):
     """text with every {key} replaced by numbers[key]['shown']."""
     if not isinstance(text, str):
         return text
-    return HOLDER.sub(lambda m: str(numbers[m.group(1)]["shown"]), text)
+    def one(m):
+        if m.group(1) not in numbers:
+            raise KeyError(f"no number named {m.group(1)} in plan numbers")
+        return str(numbers[m.group(1)]["shown"])
+    return HOLDER.sub(one, text)
 
 
 def label(key):
