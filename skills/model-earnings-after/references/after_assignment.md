@@ -40,8 +40,8 @@ Paths are relative to R. Note the line numbers of everything you will cite.
 - catalysts: a list of {text, when} (text required; when may be "" if no date is known).
 - controversies: a list of strings, what management still has to clarify.
 - headline (>= 8 words) and quarter_thoughts (>= 8 words): the wrap's first lines.
-- played_out: only when context.json mode is "rerun" and drift_ready is true: {value yes / no / partly, reason
-  >= 8 words} on whether the react call played out by T+7. Otherwise null.
+- played_out: whenever context.json drift_ready is true (the T+7 rerun, or a first run made after T+7):
+  {value yes / no / partly, reason >= 8 words} on whether the react call played out by T+7. Otherwise null.
 - judgment_calls: a list of every judgment call you made (at least one).
 
 ## Rules code checks (plan.py first; anchors.py only on a plan that passed plan.py)
@@ -53,7 +53,7 @@ Paths are relative to R. Note the line numbers of everything you will cite.
   each figure from context.md or from that item's own cited line, and name where it comes from ("the 4.0% beat on
   revenue against the frozen forecast"). Write figures as digits, not words. Never type a number no source prints.
 
-## T+7 rerun (context.json mode "rerun")
+## T+7 rerun (context.json mode "rerun" and drift_ready true)
 Copy the previous W/after_plan.json, fill played_out, and change react only if the drift changes the call; say so
 in judgment_calls either way.
 

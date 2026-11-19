@@ -184,10 +184,11 @@ def check(p, ctx):
     for k in ("headline", "quarter_thoughts"):
         if words(p.get(k)) < 8:
             out.append(f"{k}: needs at least 8 words")
-    if ctx.get("mode") == "rerun" and ctx.get("drift_ready"):
+    if ctx.get("drift_ready"):            # any run once T+7 has closed, a first run after T+7 included
         po = p.get("played_out") if isinstance(p.get("played_out"), dict) else {}
         if po.get("value") not in PLAYED or words(po.get("reason")) < 8:
-            out.append(f"played_out: the T+7 rerun needs value {'/'.join(PLAYED)} and a reason of 8+ words")
+            out.append(f"played_out: the drift to T+7 is in (drift_ready), so give value {'/'.join(PLAYED)} and a "
+                       "reason of 8+ words")
     jc = p.get("judgment_calls")
     if not isinstance(jc, list) or not jc or not all(_text(x) for x in jc):
         out.append("judgment_calls: list every judgment call (at least one, each a sentence)")

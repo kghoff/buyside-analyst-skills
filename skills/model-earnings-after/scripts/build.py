@@ -41,6 +41,7 @@ REACT = (("call", "React: the call"), ("pattern", "React: the pattern"),
          ("wrong_if", "React: what would prove it wrong"), ("watch", "React: what to watch through T+7"))
 PLAYED = "Played out by T+7?"
 CHECKPOINT = "Checkpoint: is the thesis on track? (green / yellow / red)"
+OURS = (PLACEHOLDER, T7_FILL, T7_ASK, "?")   # texts build.py writes in cells that are not inputs
 TARGET = "Blended reward price"          # the blended target band 13's "target change minus the day's move" reads
 
 
@@ -63,7 +64,8 @@ def guidance_labels(plan):
 
 
 def played_asked(ctx):
-    return ctx.get("mode") == "rerun" and bool(ctx.get("drift_ready"))
+    """Asked whenever the drift to T+7 is in: on the T+7 rerun and on a first run made after T+7."""
+    return bool(ctx.get("drift_ready"))
 
 
 def agent_values(plan, ctx):
@@ -82,8 +84,10 @@ def agent_values(plan, ctx):
     return v, {lab: cols.get(lab, "B") for lab in v}
 
 
-def read_inputs(path, cols, start):
-    """{label: value} of the input cells on the tab now (band 9 down), by column-A label, formulas as written."""
+def read_inputs(path, cols, start, prior=None):
+    """{label: value} of the input cells on the tab now (band 9 down), by column-A label, formulas as written. Only
+    labels that were inputs in the last build (prior; None = unknown) count, and never the texts build.py writes in
+    a cell that is not an input yet ("asked on the T+7 rerun"...): those are ours, not the user's."""
     import openpyxl
     wb = openpyxl.load_workbook(path, read_only=True)
     ws = wb[TAB]
@@ -91,11 +95,11 @@ def read_inputs(path, cols, start):
     out = {}
     for row in ws.iter_rows(min_row=start, max_col=6):
         a = getattr(row[0], "value", None) if row else None
-        if not isinstance(a, str) or a.strip() not in cols:
+        if not isinstance(a, str) or a.strip() not in cols or (prior is not None and a.strip() not in prior):
             continue
         k = colnum(cols[a.strip()]) - 1
         v = getattr(row[k], "value", None) if len(row) > k else None
-        if v is not None:
+        if v is not None and not (isinstance(v, str) and v.strip() in OURS):
             out[a.strip()] = v
     wb.close()
     return out
@@ -303,10 +307,12 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
                 continue
             b, c, d = cols
             src = s.get("before_src") or {}
-            if _n(s["before"]):
-                note = (f"model-update's pre-print snapshot {src.get('path')}, cell {src.get('ref')}."
-                        if src.get("kind") == "snapshot" else f"Band 7's frozen forecast, cell {src.get('ref')}.")
-                w.typed(f"{b}{y}", s["before"], fmt, note)
+            if _n(s["before"]) and src.get("kind") == "band 7":
+                f7 = src["ref"]
+                w.formula(f"{b}{y}", f"IF(ISNUMBER({f7}),{f7},NA())", fmt, s["before"])
+            elif _n(s["before"]):
+                w.typed(f"{b}{y}", s["before"], fmt,
+                        f"model-update's pre-print snapshot {src.get('path')}, cell {src.get('ref')}.")
             else:
                 q_(f"{b}{y}")
             w.link(f"{c}{y}", s["ref"], fmt, s["now"], check=check_or_skip(f"{lab} ({s['period']})", s["now"]))
@@ -328,7 +334,7 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
         w.text(f"{c}{x}", t, b=True)
     rows13 = {}
     for lab in val["labels"]:
-        diff = lab == "IRR" or lab.endswith("reward / risk")
+        diff = lab in ("IRR", "IRR: years") or lab.endswith("reward / risk")
         fmt = PCT if lab == "IRR" else MULT if lab.endswith("reward / risk") else INT if lab == "IRR: years" else MONEY
         y = put(lab)
         bx = vb.get(lab) or {}
@@ -433,7 +439,14 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
         e3, v3 = expr(fy0 - am.TREND_YEARS)
         slope = am.trend({fy0: v0, fy0 - am.TREND_YEARS: v3}, fy0)
         pace = am.lt_pace(v0, fy0, slope, lt["target"], lt["year"])
-        y = put(f"Long-term target: latest ({ctx['fy']}, MOD)")
+        if str(ctx["fy"]).endswith("E"):
+            y = put(f"Long-term target: latest (FY {ctx['fy']}, MOD: includes forecast quarters until the year "
+                    "closes)")
+            warn.append(f"Judgment call: the long-term pace starts from FY {ctx['fy']} on MOD, which still holds "
+                        "forecast quarters until the year closes (the alternative, the last closed year, would be a "
+                        "year stale). Band 14's latest value, run rate and status move with the forecast.")
+        else:
+            y = put(f"Long-term target: latest ({ctx['fy']}, MOD)")
         LATEST = f"$B${y}"
         if e0:
             w.formula(f"B{y}", f"IFERROR({e0},NA())", fmt, v0, check=check_or_skip(w.col_a[f"A{y}"], v0))
@@ -502,8 +515,11 @@ def build(model, work, ticker, out, rebuild=False):
               "Earnings tab changed since context.py ran. Rerun context.py, then build.py.")
     warnings = list(ctx.get("warnings") or [])
     new, cols = agent_values(plan, ctx)
+    lp = os.path.join(work, "layout.json")
+    prior = set(written) if written else (set(json.load(open(lp)).get("inputs") or {}) if os.path.exists(lp)
+                                          else None)
     if tab["after_start"] is not None:
-        existing = read_inputs(model, cols, tab["after_start"])
+        existing = read_inputs(model, cols, tab["after_start"], prior)
         if written is None:
             warnings.append("There is no after_inputs_written.json (the record of what the last build wrote), so "
                             "every yellow cell that differs from the agent's suggestion is treated as yours.")
@@ -511,6 +527,9 @@ def build(model, work, ticker, out, rebuild=False):
         existing = {lab: rec["value"] for lab, rec in written.items() if rec.get("user") and lab in new}
     else:
         existing = None
+        if written and any(rec.get("user") for rec in written.values()):
+            warnings.append("Your earlier edits to bands 9-15 are in the record (after_inputs_written.json); rerun "
+                            "with --rebuild to restore them.")
     used, users = resolve_values(existing, written, new)
 
     lt = plan.get("lt_target")

@@ -181,22 +181,154 @@ def test_band_13_shows_a_question_mark_for_an_unknown_before(model, work, tmp_pa
     assert ws[f"C{y}"].value.startswith("='Valuation'!")
 
 
-def test_played_out_is_asked_only_on_the_t7_rerun(model, work, tmp_path, fixture_research):
-    """The first run cannot judge how the react call played out; the T+7 rerun asks and the answer is the user's."""
+def _edit_ctx(work, fn):
+    cp = os.path.join(work, "context.json")
+    ctx = json.load(open(cp))
+    fn(ctx)
+    json.dump(ctx, open(cp, "w"))
+
+
+def _plan(work, fn):
+    p = json.load(open(PLAN))
+    fn(p)
+    json.dump(p, open(os.path.join(work, "after_plan.json"), "w"))
+    return p
+
+
+def test_played_out_waits_for_the_drift(model, work, tmp_path):
+    """Before T+7 closes there is no drift to judge: the row says it is asked on the T+7 rerun, and is no input."""
+    _edit_ctx(work, lambda c: c.update(drift_ready=False))
     out = str(tmp_path / "o1.xlsx")
     build.build(model, work, "TEST", out)
     ws = openpyxl.load_workbook(out)["Earnings"]
     assert ws[f"B{_row(ws, build.PLAYED)}"].value == build.T7_ASK
-    ctx = _ctx(model, work, fixture_research)                 # after_plan.json exists: a rerun
+    assert build.PLAYED not in json.load(open(os.path.join(work, "layout.json")))["inputs"]
+
+
+def test_played_out_on_a_first_run_after_t7(built):
+    """A first run made after T+7 has the drift too, so it answers played-out instead of waiting for a rerun."""
+    out, _, lay = built
+    ws = openpyxl.load_workbook(out)["Earnings"]
+    ref = lay["refs"][build.PLAYED].replace("$", "")
+    assert ws[ref].value == "yes" and ws[ref].fill.fgColor.rgb.endswith("FFFF00")
+
+
+def test_t7_rerun_lands_the_agents_answer(model, work, tmp_path, fixture_research):
+    """The real flow: first run before the drift (the row holds our 'asked on the T+7 rerun' text), the copy
+    replaces the model, then the T+7 rerun. Our own placeholder text is not the user's edit, so the agent's answer
+    lands and no cell is reported as the user's. The agent may also change its own guidance call on the rerun."""
+    _edit_ctx(work, lambda c: c.update(drift_ready=False))
+    _plan(work, lambda p: p.update(played_out=None))
+    out1 = str(tmp_path / "o1.xlsx")
+    build.build(model, work, "TEST", out1)
+    _promote(work)
+    shutil.copy(out1, model)                                   # the SKILL copies the checked build over the model
+    ctx = _ctx(model, work, fixture_research)
     assert ctx["mode"] == "rerun" and ctx["drift_ready"]
-    plan = json.load(open(PLAN))
-    plan["played_out"] = {"value": "partly", "reason": "The stock held half of the move through the seventh day."}
-    json.dump(plan, open(os.path.join(work, "after_plan.json"), "w"))
-    out2 = str(tmp_path / "o2.xlsx")
-    build.build(model, work, "TEST", out2)
-    ws = openpyxl.load_workbook(out2)["Earnings"]
-    ref = json.load(open(os.path.join(work, "layout.json")))["refs"][build.PLAYED].replace("$", "")
-    assert ws[ref].value == "partly" and ws[ref].fill.fgColor.rgb.endswith("FFFF00")
+
+    def t7(p):
+        p["played_out"] = {"value": "partly", "reason": "The stock held half of the move through the seventh day."}
+        p["guidance"][0]["change"] = "raise"
+    plan = _plan(work, t7)
+    res = build.build(model, work, "TEST", str(tmp_path / "o2.xlsx"))
+    assert res["users_kept"] == []
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    ws = openpyxl.load_workbook(str(tmp_path / "o2.xlsx"))["Earnings"]
+    assert ws[lay["refs"][build.PLAYED].replace("$", "")].value == "partly"
+    assert ws[lay["refs"][build.guidance_labels(plan)[0]].replace("$", "")].value == "raise"
+
+
+def test_a_users_guidance_call_in_column_e_is_kept(model, work, tmp_path):
+    """Guidance's yellow cell is in column E, not B: a rerun must read it there and keep the user's edit."""
+    out1 = str(tmp_path / "o1.xlsx")
+    build.build(model, work, "TEST", out1)
+    _promote(work)
+    lab = "Guidance: 2027 revenue"
+    ref = json.load(open(os.path.join(work, "layout.json")))["refs"][lab].replace("$", "")
+    assert ref.startswith("E")
+    xlsx_edit_helper.set_text(out1, "Earnings", ref, "raise")
+    res = build.build(out1, work, "TEST", str(tmp_path / "o2.xlsx"))
+    assert res["users_kept"] == [lab]
+    assert openpyxl.load_workbook(str(tmp_path / "o2.xlsx"))["Earnings"][ref].value == "raise"
+
+
+def test_lt_target_below_the_latest_flips_the_status(model, work, tmp_path):
+    """A target below today's value (a leverage or cost ratio coming down) is on pace when the run rate falls to
+    it, not when it rises past it: the status formula and code's expected value both flip."""
+    _plan(work, lambda p: p["lt_target"].update(target=0.10, anchor_value=0.10))
+    out = str(tmp_path / "o.xlsx")
+    build.build(model, work, "TEST", out)
+    ws = openpyxl.load_workbook(out)["Earnings"]
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    v0 = lay["expected"][f"B{_row(ws, 'Long-term target: latest (2026, MOD)')}"]
+    slope = lay["expected"][f"B{_row(ws, 'Long-term target: trend a year (2023 to 2026)')}"]
+    assert 0.10 < v0
+    pace = am.lt_pace(v0, 2026, slope, 0.10, 2028)
+    st = _row(ws, "Long-term target: status")
+    assert lay["expected"][f"B{st}"] == pace["status"]
+    assert pace["status"] == ("on pace" if v0 + 2 * slope <= 0.10 else "behind pace")
+    assert "IF($B$" in ws[f"B{st}"].value and "<=" in ws[f"B{st}"].value
+
+
+def test_an_open_year_labels_the_latest_and_warns(model, work, tmp_path):
+    """After a Q1-Q3 print the fiscal year still holds forecast quarters: the label says so and the user hears it
+    as a judgment call."""
+    _edit_ctx(work, lambda c: c.update(fy="2026E"))
+    res = build.build(model, work, "TEST", str(tmp_path / "o.xlsx"))
+    ws = openpyxl.load_workbook(str(tmp_path / "o.xlsx"))["Earnings"]
+    _row(ws, "Long-term target: latest (FY 2026E, MOD: includes forecast quarters until the year closes)")
+    assert any(w.startswith("Judgment call: the long-term pace starts from FY 2026E") for w in res["warnings"])
+
+
+def test_estimate_before_from_band_7_is_a_same_tab_formula(model, work, tmp_path):
+    """With no model-update snapshot, this year's 'before' is band 7's frozen value: a live formula onto it, not a
+    second typed copy that could drift from the record."""
+    def fall_back(c):
+        e = c["estimates"][0]["fy"]
+        e["before_src"] = {"kind": "band 7", "ref": "$C$109"}
+    _edit_ctx(work, fall_back)
+    out = str(tmp_path / "o.xlsx")
+    build.build(model, work, "TEST", out)
+    ws = openpyxl.load_workbook(out)["Earnings"]
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    y = _row(ws, "Estimate: Revenue")
+    assert ws[f"B{y}"].value == "=IF(ISNUMBER($C$109),$C$109,NA())"
+    assert lay["kinds"][f"B{y}"] == "formula" and ws[f"B{y}"].font.color.rgb == "FF000000"
+    assert lay["expected"][f"B{y}"] == pytest.approx(ws["C109"].value)
+
+
+def test_a_shrinking_cost_reads_as_a_beat(model, work, tmp_path):
+    """Costs are stored negative: a cost that comes in smaller than frozen is good news, so its surprise is
+    positive and its result a beat (synthetic band 9 row: the fixture has no cost line)."""
+    def cost(c):
+        c["frozen"]["rows"].append({**c["frozen"]["rows"][0], "label": "INCOME STATEMENT | SG&A", "frozen": -50.0,
+                                    "actual": -48.0, "placeholder": False})
+    _edit_ctx(work, cost)
+    out = str(tmp_path / "o.xlsx")
+    build.build(model, work, "TEST", out)
+    ws = openpyxl.load_workbook(out)["Earnings"]
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    y = _row(ws, "INCOME STATEMENT | SG&A")
+    assert ws[f"E{y}"].value == f"=IFERROR((C{y}-B{y})/ABS(B{y}),NA())"
+    assert lay["expected"][f"E{y}"] == pytest.approx(0.04) and lay["expected"][f"F{y}"] == "beat"
+
+
+def test_an_empty_plan_builds(model, work, tmp_path):
+    """A quiet call: no guidance, no long-term target, no catalysts or controversies. The bands still build."""
+    _plan(work, lambda p: p.update(guidance=[], lt_target=None, catalysts=[], controversies=[]))
+    res = build.build(model, work, "TEST", str(tmp_path / "o.xlsx"))
+    assert res["changed_parts"] == []
+    ws = openpyxl.load_workbook(str(tmp_path / "o.xlsx"))["Earnings"]
+    _row(ws, "No guidance items in the plan")
+    assert not [c for c in ws["A"] if str(c.value).startswith(("Long-term target", "Catalyst", "Controversy"))]
+
+
+def test_irr_years_change_is_a_difference(built):
+    """Years are compared as years (3 -> 3 is 0), like the IRR itself, not as a percent change."""
+    out, _, _ = built
+    ws = openpyxl.load_workbook(out)["Earnings"]
+    y = _row(ws, "IRR: years")
+    assert ws[f"D{y}"].value == f"=IFERROR(C{y}-B{y},NA())"
 
 
 def test_rerun_keeps_the_users_value(model, work, tmp_path):
@@ -229,6 +361,7 @@ def test_rebuild_restores_the_users_recorded_values(model, work, tmp_path):
     assert openpyxl.load_workbook(out2)["Earnings"][lay["refs"]["React: the call"].replace("$", "")].value == "trim"
     res = build.build(model, work, "TEST", str(tmp_path / "o3.xlsx"))    # without --rebuild: the agent's value
     assert res["users_kept"] == []
+    assert any("rerun with --rebuild to restore them" in x for x in res["warnings"])
 
 
 def test_call_notes_written_after_earnings(built, work):

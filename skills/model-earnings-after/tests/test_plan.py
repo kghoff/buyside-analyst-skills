@@ -92,16 +92,19 @@ def test_guidance_catalysts_controversies_need_text():
     assert any(x.startswith("controversies") for x in probs)
 
 
-def test_rerun_needs_played_out():
+@pytest.mark.parametrize("mode", ["first", "rerun"])
+def test_played_out_needed_once_the_drift_is_in(mode):
+    """Once T+7 has closed the drift is there to judge, on the T+7 rerun or on a first run made after T+7: a
+    first run late in the season must not skip the question."""
     p = copy.deepcopy(EX)
     p["played_out"] = None
-    assert any(x.startswith("played_out") for x in plan.check(p, {**CTX, "mode": "rerun"}))
+    assert any(x.startswith("played_out") for x in plan.check(p, {**CTX, "mode": mode, "drift_ready": True}))
 
 
-@pytest.mark.parametrize("mode,ready", [("first", True), ("rerun", False)])
-def test_played_out_not_asked_before_t_plus_7(mode, ready):
+@pytest.mark.parametrize("mode", ["first", "rerun"])
+def test_played_out_not_asked_before_t_plus_7(mode):
     """Before T+7 there is no drift to judge, so asking for played_out would force a guess."""
-    assert plan.check({**EX, "played_out": None}, {**CTX, "mode": mode, "drift_ready": ready}) == []
+    assert plan.check({**EX, "played_out": None}, {**CTX, "mode": mode, "drift_ready": False}) == []
 
 
 def test_percent_target_is_one_fraction():

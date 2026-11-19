@@ -15,7 +15,8 @@ from xlsx import CT, NS_REL, colnum, esc, relpath_of, resolve
 TAB = "Earnings"
 FROZEN_RE = re.compile(r"^7\. FROZEN FORECAST: (.+?), frozen (\d{4}-\d{2}-\d{2})")   # model-earnings-before build.py
 AFTER_RE = re.compile(r"^9\. ACTUAL VS FROZEN")
-TITLE_RE = re.compile(r"^\S+ after the print: ")             # build.py's title row, just above band 9
+TITLE_RE = re.compile(r"\(model-earnings-after, \d{4}-\d{2}-\d{2}\)$")   # build.py's title row, above band 9
+TITLE_ROWS = 3                                                # how far above band 9 the title is looked for
 BAND_RE = re.compile(r"^(\d+)\. [A-Z][A-Z0-9 ,/-]{3}")        # band headers: "1. PRINT SNAPSHOT AND THE CALL"
 ROW_RE = re.compile(r'<row r="(\d+)"[^>]*?(?:/>|>.*?</row>)', re.S)
 LABELS = {  # key: (exact label or prefix, prefix?, band) -- model-earnings-before build.py INPUTS and band texts
@@ -55,8 +56,9 @@ def read(path):
     g = {k: v for k, v in full.items() if k[1] <= 3}
     a = {r: v for (r, c), v in g.items() if c == 1 and isinstance(v, str)}
     after = next((r for r, v in sorted(a.items()) if AFTER_RE.match(v)), None)
-    if after and TITLE_RE.match(a.get(after - 1, "")):
-        after -= 1                                            # the title belongs to bands 9-15: replaced with them
+    if after:                                                 # the title belongs to bands 9-15: replaced with them
+        after = next((after - k for k in range(1, TITLE_ROWS + 1)
+                      if TITLE_RE.search(str(a.get(after - k, "")).strip())), after)
     bands = _bands(a)
     refs = {}
     for k, (lab, pre, band) in LABELS.items():

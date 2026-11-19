@@ -59,7 +59,8 @@
  "controversies": ["How much of December's strength came from the competitor's recall and will it last?"],
  "headline": "Revenue beat and a first 2027 guide; margin missed on launch costs.",
  "quarter_thoughts": "A good revenue quarter with a confident tone, but the path to the margin target got harder.",
- "played_out": null,
+ "played_out": {"value": "yes",
+                "reason": "The stock held the reaction-day move through the seventh trading day, as the hold call expected."},
  "judgment_calls": ["Called tone positive from one line of the CEO's prepared remarks.",
                     "Read the competitor's recall as a read-through and a controversy, not as lasting share gain."]
 }
