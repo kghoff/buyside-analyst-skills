@@ -8,7 +8,7 @@ import datetime as dt
 from tabkit import GEN
 from xlsx import colname
 
-MNY, PX, PCT, MULT, X, BPS, SHR, DATE, TURNS = ('#,##0;(#,##0)', '$#,##0.00', '0.0%;(0.0%)', '0.0"x"', '0.00"x"',
+MNY, PX, PCT, MULT, X, BPS, SHR, DATE, TURNS = ('#,##0;(#,##0)', '$#,##0.00', '0.0%;(0.0%)', '0.0"x";(0.0"x")', '0.00"x";(0.00"x")',
                                                 '#,##0;(#,##0)', '#,##0.0', 'yyyy-mm-dd', '0.0;(0.0)')
 GOOD, BAD, AMBER = ("FFC6EFCE", "FF006100"), ("FFFFC7CE", "FF9C0006"), ("FFFFEB9C", "FF9C5700")
 BAND = "Street variance band (±)"
@@ -39,7 +39,7 @@ def lay_out(w, L, adv, used, ticker, today):
     XF = PCT if kind == "FCF yield" else MULT
     link = lambda ref, tgt, fmt: w.link(ref, tgt, fmt, None, check=False)             # noqa: E731
     f = lambda ref, fm, fmt, b=False: w.formula(ref, fm, fmt, None, b=b, check=False)  # noqa: E731
-    na = lambda ref: w.text(ref, "n/a", i=True)                                          # noqa: E731
+    na = lambda ref: w.text(ref, "n/a", i=True, align="right")                                          # noqa: E731
     head = lambda ref, t: w.text(ref, t, b=True)                                         # noqa: E731
     R = {}
 
@@ -56,7 +56,8 @@ def lay_out(w, L, adv, used, ticker, today):
     w.text("B4", "Last updated")
     w.typed("C4", (today - dt.date(1899, 12, 30)).days, DATE, "The date /model-summary last built this tab.")
 
-    head("B6", "Cap table ($M except per share)")
+    per = D.get("period")
+    head("B6", "Cap table ($M except per share" + (f"; balance sheet at {per}, the DCF bridge)" if per else ")"))
     w.text("B7", "Price (date beside it)"), link("C7", D["price"], PX), link("D7", D["date"], DATE)
     w.text("B8", "Diluted shares (M)"), link("C8", D["shares"], SHR)
     w.text("B9", "Market cap"), f("C9", "C7*C8", MNY)
@@ -95,14 +96,14 @@ def lay_out(w, L, adv, used, ticker, today):
     w.text("B33", "IRR"), link("C33", I["irr"]["ref"], PCT)
     w.text("B34", "IRR hurdle"), link("C34", V["hurdle"], PCT)
 
-    head("B36", "12-month base target")
+    head("B36", f"12-month base target ({kind} only)")
     w.text("B37", P["ntm1"]["label"]), link("C37", P["ntm1"]["ref"], MF)
     w.text("B38", P["reward_mult"]["label"]), link("C38", P["reward_mult"]["ref"], XF)
     w.text("B39", "12-month target"), link("C39", P["reward_price"]["ref"], PX)
     w.text("B40", "% return"), f("C40", "IF(C39>0,C39/$C$7-1,NA())", PCT)
     w.text("B41", "x money"), f("C41", "IF(C39>0,C39/$C$7,NA())", X)
 
-    head("B43", "12-month risk case")
+    head("B43", f"12-month risk case ({kind} only)")
     w.text("B44", P["risk_metric"]["label"]), link("C44", P["risk_metric"]["ref"], MF)
     w.text("B45", P["risk_mult"]["label"]), link("C45", P["risk_mult"]["ref"], XF)
     w.text("B46", "Risk price"), link("C46", P["risk_price"]["ref"], PX)
@@ -134,7 +135,7 @@ def lay_out(w, L, adv, used, ticker, today):
         w.text(f"E{r}", t)
     for c, y in zip(cols, yrs):
         p = Md["prev"][y]
-        w.text(f"{c}4", y + ("A" if y.isdigit() else ""), b=True)
+        w.text(f"{c}4", y + ("A" if y.isdigit() else ""), b=True, align="right")
         link(f"{c}5", m(y, rows["rev"]), MNY)
         link(f"{c}7", eb(y), MNY)
         f(f"{c}8", f"IF({c}5>0,{c}7/{c}5,NA())", PCT)
@@ -160,6 +161,7 @@ def lay_out(w, L, adv, used, ticker, today):
         elif extra == "FCF yield":
             f(f"{c}18", f"IF($C$9>0,{m(y, rows['fcf'])}/$C$9,NA())", PCT)
     last = cols[-1]
+    assert last <= "N" and len(last) == 1, f"the estimates grid ran past column N ({last}); it would hit the scenario block"
     tl = cols[0]
     w.sh.cf.append((f"{tl}13:{last}13", f"AND(ISNUMBER({tl}13),{tl}13>$C$51)", w.st.dxf(*GOOD)))
     w.sh.cf.append((f"{tl}13:{last}13", f"AND(ISNUMBER({tl}13),{tl}13<-$C$51)", w.st.dxf(*BAD)))

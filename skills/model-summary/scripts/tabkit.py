@@ -52,14 +52,15 @@ class W:
         self.sh, self.st, self.s, self.users = Sheet(), st, {}, set(users)
         self.expected, self.notes, self.inputs, self.kinds, self.fmt, self.col_a = {}, {}, {}, {}, {}, {}
 
-    def style(self, color=BLACK, fmt=GEN, b=False, i=False, fill=None, sz=11, wrap=False):
-        k = (color, fmt, b, i, fill, sz, wrap)
+    def style(self, color=BLACK, fmt=GEN, b=False, i=False, fill=None, sz=11, wrap=False, align=None):
+        k = (color, fmt, b, i, fill, sz, wrap, align)
         if k not in self.s:
-            self.s[k] = self.st.xf(color=color, fmt=fmt, b=b, i=i, fill=fill, sz=sz, align="left" if wrap else None)
+            self.s[k] = self.st.xf(color=color, fmt=fmt, b=b, i=i, fill=fill, sz=sz,
+                                   align=align or ("left" if wrap else None))
         return self.s[k]
 
-    def text(self, ref, t, color=BLACK, b=False, i=False, sz=11, wrap=False):
-        self.sh.set(ref, "s", str(t), self.style(color, GEN, b, i, None, sz, wrap))
+    def text(self, ref, t, color=BLACK, b=False, i=False, sz=11, wrap=False, align=None):
+        self.sh.set(ref, "s", str(t), self.style(color, GEN, b, i, None, sz, wrap, align))
         self.kinds.setdefault(ref, "text")
         if re.fullmatch(r"A\d+", ref):
             self.col_a[ref] = str(t)
@@ -106,7 +107,7 @@ class W:
 
 
 def move_first(pkg, name):
-    """Put tab `name` first. Shifts every sheet-scoped name (localSheetId), activeTab and firstSheet with their
+    """Put tab `name` first. Shifts every sheet-scoped name (localSheetId), activeTab with its
     sheets, so print areas and the open tab stay on the same sheets."""
     wb = pkg.text("xl/workbook.xml")
     tags = re.findall(r"<sheet\b[^>]*/>", wb)
@@ -117,7 +118,8 @@ def move_first(pkg, name):
     new_pos = {tags.index(t): k for k, t in enumerate(order)}
     wb = re.sub(r'(<definedName\b[^>]*?localSheetId=")(\d+)(")',
                 lambda m: f"{m.group(1)}{new_pos[int(m.group(2))]}{m.group(3)}", wb)
-    wb = re.sub(r'\b(activeTab|firstSheet)="(\d+)"', lambda m: f'{m.group(1)}="{new_pos[int(m.group(2))]}"', wb)
+    wb = re.sub(r'\bactiveTab="(\d+)"', lambda m: f'activeTab="{new_pos[int(m.group(1))]}"', wb)
+    wb = re.sub(r'\bfirstSheet="\d+"', 'firstSheet="0"', wb)        # the first tab shown in the tab bar: SUM
     pkg.put("xl/workbook.xml", wb)
 
 

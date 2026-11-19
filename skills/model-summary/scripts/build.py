@@ -33,9 +33,12 @@ def defaults(L):
 def read_existing(model):
     """{label: value now} for every yellow cell on the current SUM tab (None: no SUM tab)."""
     wb = openpyxl.load_workbook(model, read_only=True)
-    if TAB not in wb.sheetnames:
-        return None
-    g = links.grid(wb[TAB])
+    try:
+        if TAB not in wb.sheetnames:
+            return None
+        g = links.grid(wb[TAB])
+    finally:
+        wb.close()
     out = {}
     for (r, c), v in g.items():
         if isinstance(v, str) and v.strip() in layout.INPUT_OFFSET:
@@ -86,7 +89,7 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
     w = W(st, users)
     R = layout.lay_out(w, L, A, used, ticker, today or dt.date.today())
     w.sh.comments = w.notes
-    w.sh.widths.update({1: 2, 2: 36, 3: 14, 4: 11, 5: 30, **{k: 11 for k in range(6, 15)}, 15: 2, 16: 24,
+    w.sh.widths.update({1: 2, 2: 46, 3: 14, 4: 11, 5: 30, **{k: 11 for k in range(6, 15)}, 15: 2, 16: 24,
                         **{k: 11 for k in range(17, 22)}, 22: 2, **{k: 11 for k in range(23, 28)}})
     part = write_tab(pkg, w)
     pkg.put("xl/styles.xml", st.render())
@@ -103,6 +106,10 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
     if no_street:
         warnings.append("No Street EPS on the Multiples forward table for " + ", ".join(no_street) + ": those Street "
                         "rows show n/a.")
+    pos = L["val"].get("position")
+    if pos and str(pos["value"]).strip().lower() == "short":
+        warnings.append("Valuation is set to a short; SUM's % returns and their colours are long-side math. Read "
+                        "them inverted.")
     if "Action" in users:
         warnings.append(f"Action holds {used['Action']!r}, typed over Valuation's verdict; it no longer follows "
                         "Valuation. Clear the cell and rerun to link it again.")

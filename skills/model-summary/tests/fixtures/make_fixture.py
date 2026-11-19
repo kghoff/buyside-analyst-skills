@@ -98,7 +98,7 @@ def _mult(ws):
 
 def _val(ws):
     rows = [(3, "Overall verdict (the agent's call: Buy / Hold / Sell)", "Buy"), (5, "Price", PRICE),
-            (9, "IRR hurdle", 0.15), (10, "Buy at R/R", 2.0), (11, "Table-pound at R/R", 3.0),
+            (9, "IRR hurdle", 0.15), (10, "Buy at R/R", 2.0), (11, "Table-pound at R/R", 3.0), (14, "Position (long/short)", "long"),
             (19, "1. Which multiples and why", "Role"), (20, "P/E", "primary"), (21, "EV/EBITDA", "secondary"),
             (22, "Weights sum", 1.0), (32, "4. 12-month roll-forward and reward / risk", None),
             (34, "P/E (primary)", "Ours"), (35, "P/E: NTM EPS (Q1 26E to Q4 26E)", 2.2),

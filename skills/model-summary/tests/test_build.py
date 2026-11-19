@@ -81,3 +81,23 @@ def test_only_sum_and_workbook_parts_changed(built, fixture_model):
     assert changed_parts(fixture_model, built[0], tab_parts(Package(built[0]), "SUM")) == []
     mod = "xl/worksheets/sheet1.xml"
     assert zipfile.ZipFile(fixture_model).read(mod) == zipfile.ZipFile(built[0]).read(mod)
+
+
+def test_short_position_warns(fixture_model, tmp_path):
+    """% returns and their colours are long-side math; a short on Valuation must be flagged to the reader."""
+    import shutil
+    import build
+    m = str(tmp_path / "s.xlsx")
+    shutil.copy(fixture_model, m)
+    wb = openpyxl.load_workbook(m)          # a test copy, never a user's model
+    wb["Valuation"]["B14"] = "short"
+    wb.save(m)
+    rep = build.build(m, str(tmp_path / "w"), "TEST", str(tmp_path / "o.xlsx"), research_dir=str(tmp_path),
+                      fetch=lambda *a: (_ for _ in ()).throw(AssertionError("no Yahoo")))
+    assert any("long-side math" in w for w in rep["warnings"])
+
+
+def test_labels_and_cap_period(built):
+    ws = _wb(built)["SUM"]
+    assert ws["B36"].value == "12-month base target (P/E only)" and ws["B43"].value == "12-month risk case (P/E only)"
+    assert "balance sheet at Q4 25" in ws["B6"].value

@@ -59,3 +59,22 @@ def test_dxf_fill_and_font():
     k = st.dxf("FFC6EFCE", "FF006100")
     x = st.render()
     assert k == 0 and '<bgColor rgb="FFC6EFCE"/>' in x and '<color rgb="FF006100"/>' in x
+
+
+def test_first_sheet_is_reset_so_sum_is_visible(tmp_path):
+    """firstSheet is the first tab shown in the tab bar, not a sheet to keep on screen: it must be 0 so SUM shows."""
+    import re
+    import zipfile
+    src = _book(str(tmp_path / "a.xlsx"))
+    zin = zipfile.ZipFile(src)
+    out = str(tmp_path / "fs.xlsx")
+    with zipfile.ZipFile(out, "w") as z:
+        for n in zin.namelist():
+            d = zin.read(n)
+            if n == "xl/workbook.xml":
+                d = re.sub(rb"<workbookView\b", b'<workbookView firstSheet="2"', d, 1)
+            z.writestr(n, d)
+    res = _add_sum(out, str(tmp_path / "fs2.xlsx"))
+    xml = zipfile.ZipFile(res).read("xl/workbook.xml").decode()
+    assert "firstSheet=\"2\"" not in xml
+    assert all(int(v) == 0 for v in re.findall(r'firstSheet="(\d+)"', xml))

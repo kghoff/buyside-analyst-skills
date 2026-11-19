@@ -130,3 +130,18 @@ def test_blank_street_year_is_skipped(fixture_model, tmp_path):
     wb["Multiples"]["C34"] = None
     wb.save(m)
     assert links.collect(m)["mult"]["street"] == {"2026E": "Multiples!$B$34"}
+
+
+def test_grid_is_capped_at_five_forecast_years(fixture_model, monkeypatch):
+    """The grid must stay inside F:N, clear of the scenario block at P: 4 actual + at most 5 forecast years."""
+    from modmap import ModMap
+    real = ModMap.forecast_years
+    monkeypatch.setattr(ModMap, "forecast_years", lambda self: real(self) + ["2026E", "2027E"])
+    yrs = links.collect(fixture_model)["mod"]["years"]
+    assert len(yrs) == 9 and yrs[4:] == (real(ModMap(fixture_model)) + ["2026E"])[:5]
+
+
+def test_dcf_period_and_position(fixture_model, tmp_path):
+    L = links.collect(fixture_model)
+    assert L["dcf"]["period"] == "Q4 25"
+    assert L["val"]["position"] == {"ref": "Valuation!$B$14", "value": "long"}

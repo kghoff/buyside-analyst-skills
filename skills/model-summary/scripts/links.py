@@ -17,6 +17,8 @@ from modmap import ModMap
 NEED = {"MOD": "model-historicals", "Px Data": "model-price-history", "DCF": "model-dcf",
         "Multiples": "model-multiples", "Valuation": "model-valuation"}
 BIG = 10 ** 9
+# SUM's estimates grid is F:N (4 actual years + 5 forecast years). More would run into the scenario block at P.
+MAX_FORECAST_YEARS = 5
 
 
 def stop(what, skill):
@@ -41,6 +43,10 @@ def ref(tab, col, row):
     return f"{t}!${col}${row}"
 
 
+def b_label(rows, r):
+    return next(t for rr, t in rows if rr == r)
+
+
 def dcf(g):
     b = labels(g, 2)
     out = {}
@@ -53,6 +59,9 @@ def dcf(g):
         out[key] = ref("DCF", "C", r)
         if key == "price":
             out["date"] = ref("DCF", "D", r)
+        if key == "cash":
+            m = re.search(r"\(([^)]*)\)\s*$", b_label(b, r))
+            out["period"] = m.group(1).strip() if m else None
     return out
 
 
@@ -76,6 +85,8 @@ def valuation(g):
     if kind is None:
         stop("Valuation's primary multiple", "model-valuation")
     out["kind"] = kind
+    pr = first(a, lambda t: t.startswith("Position (long/short)"))
+    out["position"] = {"ref": V("B", pr), "value": g.get((pr, 2))} if pr else None
 
     hdr = row(lambda t: t == f"{kind} (primary)", f"{kind} (primary)")
     blk, r = {}, hdr + 1
@@ -175,7 +186,7 @@ def mod(model):
     eps = R["eps_ng"] if basis == "ng" else R["eps_gaap"]
     ebitda = [R["ebitda_ng"]] if basis == "ng" and "ebitda_ng" in R else [R["oi"], R["da"]]
     actual = [p for p in mm.order if re.fullmatch(r"\d{4}", p)][-4:]
-    years = actual + mm.forecast_years()
+    years = actual + mm.forecast_years()[:MAX_FORECAST_YEARS]
     fq = mm.forecast_quarters()[:4]
     if len(fq) < 4:
         stop("four forecast quarters in MOD", "model-forecast")
