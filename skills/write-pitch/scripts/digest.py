@@ -10,9 +10,10 @@ Per tab, in workbook order: Text, Notes, Numbers, Bulk blocks.
   and numbers gets one line per type. In such a block a column with more than 200 text cells gets one line too (count,
   distinct, rows, first, last, up to 30 distinct values). Every other cell, in the block or outside, is still listed,
   including stray text in a bulk column (only its header, the first text, is folded into the summary line).
-- Numbers, ordinary tab: one line per row, `r12 (<row label>): B <header>=1.2, C <header>=0.3`; the cell is the column
-  letter plus the row. Row label = first text in columns A-C of that row. Column header = the nearest text above the
-  cell in the same column within its block (omitted when there is none).
+- Numbers, ordinary tab: one line per row, `r12 (<row label>): B=1.2, C=0.3`; the cell is the column letter plus the
+  row. Row label = first text in columns A-C of that row. Column header = the nearest text above the cell in the same
+  column within its block; a `headers:` legend line above the lines maps each column to its header and the header's
+  own cell, `Z=Close (Z4)` (one entry per distinct header; columns with no header are left out).
 - Numbers, MOD tab (the model's main sheet; period headers in row 2 from column D, labels in column B): one table per
   section (column A name) with a `columns: 2025=H, ...` line above it, the period headers once as the table header
   (repeated every 40 rows) and one row per labelled row `| r12 label | v | ... |`; the periods are the annual
@@ -205,14 +206,15 @@ def digest_sheet(ws):
                         continue
                 if not is_num(v):
                     d["text"][f"{L(c)}{r}"] = str(v)
-                    heads[c] = str(v)
+                    heads[c] = (str(v), f"{L(c)}{r}")
                     if is_mod and c == 1:
                         section = str(v)
                 elif is_mod:
                     if label and r != 2 and c in keep:
                         cells.append({"col": L(c), "header": mod_heads[c], "value": fmt(v)})
                 else:
-                    cells.append({"col": L(c), "header": heads.get(c, ""), "value": fmt(v)})
+                    h, hc = heads.get(c, ("", ""))
+                    cells.append({"col": L(c), "header": h, "header_cell": hc, "value": fmt(v)})
             if cells:
                 d["numbers"].append({"section": section, "row": r, "label": label, "cells": cells})
     d["errors"] = error_runs(errs)
@@ -246,9 +248,14 @@ def mod_tables(d):
 
 
 def number_lines(d):
-    out = []
+    legend = {}
     for n in d["numbers"]:
-        cells = ", ".join(f"{c['col']}{' ' + c['header'] if c['header'] else ''}={c['value']}" for c in n["cells"])
+        for c in n["cells"]:
+            if c["header"]:
+                legend.setdefault((c["col"], c["header"], c["header_cell"]), None)
+    out = ["headers: " + ", ".join(f"{c}={h} ({hc})" for c, h, hc in legend)] if legend else []
+    for n in d["numbers"]:
+        cells = ", ".join(f"{c['col']}={c['value']}" for c in n["cells"])
         label = " (" + n["label"] + ")" if n["label"] else ""
         out.append(f"r{n['row']}{label}: {cells}")
     return out

@@ -47,7 +47,7 @@ def test_block_under_80_percent_numeric_is_listed(tmp_path):
     for i in range(1, 301):
         ws.cell(i, 1, f"item {i}" if i % 2 else i)           # half text: a table, not a series
     t = run_digest(wb, tmp_path)
-    assert "A5: item 5" in t and "r2: A item 1=2" in t and "Bulk blocks\n(none)" in t
+    assert "A5: item 5" in t and "r2: A=2" in t and "A=item 1 (A1)" in t and "Bulk blocks\n(none)" in t
 
 
 def test_mod_over_200_rows_is_never_summarized(tmp_path):
@@ -147,7 +147,7 @@ def test_error_cells_are_not_headers_and_collapse_to_a_range_line(tmp_path):
     ws["B6"], ws["B7"] = 0.15, 0.16
     ws["C3"] = "#DIV/0!"
     t = run_digest(wb, tmp_path)
-    assert "r6: B NTM EPS=0.15" in t and "#N/A=" not in t
+    assert "headers: B=NTM EPS (B1)" in t and "r6: B=0.15" in t and "#N/A (B" not in t
     assert "errors: B2:B5 #N/A (4 cells), C3 #DIV/0! (1 cell)" in t and "B3: #N/A" not in t
 
 
