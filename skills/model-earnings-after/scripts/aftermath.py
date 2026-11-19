@@ -11,6 +11,14 @@ def _n(v):
     return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
+def xround(v, dp):
+    """Excel's ROUND(v, dp): half away from zero (Python's round() rounds half to even)."""
+    if not _n(v):
+        return None
+    from decimal import ROUND_HALF_UP, Decimal
+    return float(Decimal(repr(v)).quantize(Decimal(1).scaleb(-dp), rounding=ROUND_HALF_UP))
+
+
 def growth(now, then):
     """now / then - 1 over a positive base (growth off a loss or a zero reads backwards)."""
     return now / then - 1 if _n(now) and _n(then) and then > 0 else None

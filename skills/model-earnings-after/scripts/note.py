@@ -13,7 +13,7 @@ If the PDF cannot be made (WeasyPrint missing, say), the Markdown still stands a
 "pdf_skipped" with the reason; exit 0, and the SKILL tells the user.
 
 usage: python3 note.py --work W --ticker T --out-dir "<research_dir>/<T>/Earnings Reviews" --values RECALCULATED.xlsx
-       [--date YYYY-MM-DD]"""
+       [--date YYYY-MM-DD]   (default: context.json "today", the run's date, not the system date)"""
 import argparse
 import datetime as dt
 import json
@@ -286,7 +286,8 @@ def write_md(work, ticker, out_dir, date, values):
         L.append(f"- {lab}: {t.v(lab)}")
     fades = t.labels("Fade: ")
     if fades:
-        L += ["", "If the stock gives back the move (13.7):", "", "| Price change | Price | 3-year IRR |",
+        irr = t.v("Fade table: if the stock gives back the move (section 13.7)", "D")   # "N-year IRR" from the tab
+        L += ["", "If the stock gives back the move (13.7):", "", f"| Price change | Price | {irr} |",
               "|---|---|---|"]
         L += [f"| {t.v(lab, 'B')} | {t.v(lab, 'C')} | {t.v(lab, 'D')} |" for lab in fades]
     L += ["", f"### 4.7 {WRAP[6]}", ""] + _vtable(t, [lab for lab in val if lab.startswith("Blended")]) + [""]
@@ -379,8 +380,9 @@ def main():
     ap.add_argument("--ticker", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--values", required=True, help="verify.py's recalculated copy")
-    ap.add_argument("--date", default=dt.date.today().isoformat())
+    ap.add_argument("--date", help="the note's date; default: context.json 'today'")
     a = ap.parse_args()
+    a.date = a.date or json.load(open(os.path.join(a.work, "context.json")))["today"]
     md = write_md(a.work, a.ticker.upper(), a.out_dir, a.date, a.values)
     pdf, why = render(md, md[:-3] + ".pdf", f"{a.ticker.upper()} after-print note · {a.date}")
     print(json.dumps({"md": md, "pdf": pdf, "pdf_skipped": why}, indent=1))

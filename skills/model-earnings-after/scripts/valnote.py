@@ -32,16 +32,26 @@ def latest_before(research_root, ticker, release_day):
 
 def _num(t):
     """'$1,234.5' / '-$5.00' / '11.2%' / '0.7x' / '3' -> float (% as a fraction); anything else None."""
+    got = _num_dp(t)
+    return got[0] if got else None
+
+
+def _num_dp(t):
+    """(value, dp) or None: dp is the decimals the note printed, in the value's own units: '0.7x' -> 1, '$107.76'
+    -> 2, '3' -> 0, '21.8%' -> 3 (1 decimal in percent is 3 as a fraction). Band 13 compares the tab's value
+    rounded to dp, so a value the note rounded does not show as a change."""
     t = t.strip().replace(",", "")
     m = re.fullmatch(r"(-?)\$?(-?\d+(?:\.\d+)?)(%|x)?", t)
     if not m:
         return None
     v = float(m.group(2)) * (-1 if m.group(1) else 1)
-    return v / 100 if m.group(3) == "%" else v
+    dp = len(m.group(2).split(".")[1]) if "." in m.group(2) else 0
+    return (round(v / 100, dp + 2), dp + 2) if m.group(3) == "%" else (v, dp)    # 11.2% -> 0.112, not 0.11199...
 
 
 def parse(path):
-    """{values: {label: {value, line}}, multiples: [names in role order], problem: None or why, path}."""
+    """{values: {label: {value, line, dp}}, multiples: [names in role order], problem: None or why, path}. dp is
+    the decimals the note printed the value to (_num_dp); None for an n/a."""
     lines = open(path, encoding="utf-8").read().splitlines()
     if not all(any(ln.startswith(h) for ln in lines) for h in RELIED_ON[:3]):
         return {"values": {}, "multiples": [], "problem": "layout not recognised (headings missing)", "path": path}
@@ -52,20 +62,20 @@ def parse(path):
         m = ROW.match(ln)
         if m and sec == "1" and m.group(2).strip() in ROLES:
             mults.append(m.group(1).strip())
-        if m and sec in ("2", "3") and (v := _num(m.group(2))) is not None:
+        if m and sec in ("2", "3") and (vd := _num_dp(m.group(2))) is not None:
             lab = m.group(1).strip()
-            vals.setdefault(lab, {"value": v, "line": i})
+            vals.setdefault(lab, {"value": vd[0], "line": i, "dp": vd[1]})
             if HORIZON_RE.match(lab):
-                vals.setdefault(HORIZON, {"value": v, "line": i, "label": lab})
+                vals.setdefault(HORIZON, {"value": vd[0], "line": i, "dp": vd[1], "label": lab})
         if sec == "2" and ln.lstrip("- ").startswith("**Blended**"):
             b = BLENDED.search(ln)
             if not b:
                 problem = f"the Blended line (line {i}) is not in the expected layout"
                 continue
             rw, rk, rr = b.groups()
-            vals["Blended reward price"] = {"value": float(rw.replace(",", "")), "line": i}
-            vals["Blended risk price"] = {"value": float(rk.replace(",", "")), "line": i}
-            vals["Blended reward / risk"] = {"value": _num(rr), "line": i}     # n/a or #N/A -> None
+            for lab, t in (("Blended reward price", rw), ("Blended risk price", rk), ("Blended reward / risk", rr)):
+                vd = _num_dp(t)                                                 # n/a or #N/A -> None
+                vals[lab] = {"value": vd[0] if vd else None, "line": i, "dp": vd[1] if vd else None}
     return {"values": vals, "multiples": mults, "problem": problem if vals else "layout not recognised (no values)",
             "path": path}
 

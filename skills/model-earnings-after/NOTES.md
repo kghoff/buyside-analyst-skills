@@ -23,8 +23,14 @@ Why things are the way they are. Read before changing scripts.
   changed to freeze valuation): the latest `<date> <T> Valuation Note.md` dated before the release. A layout the
   parser does not recognise gives `?`, never a guess; valnote.RELIED_ON lists every heading and label the parser
   needs, and a drift test checks model-valuation's note.py and build.py still write them. The after side links to the
-  Valuation tab, and counts as fresh only if a note is dated on or after the reaction day (the tab's title carries no
-  date); otherwise the report says /model-valuation has not been rerun since the print.
+  Valuation tab, and counts as fresh only if a note is dated on or after the release day (the tab's title carries no
+  date); otherwise the report says /model-valuation has not been rerun since the print. The release day, not the
+  reaction day: after an after-close release the user's /model-valuation run that evening is dated the release day
+  and already knows the print.
+- **Before values compare at the note's precision.** The note rounds (reward / risk 0.7x for the tab's 0.672, IRR
+  11.2% for 0.1121); valnote.parse records each value's printed decimals (`dp`: 0.7x → 1, $107.76 → 2, 21.8% → 3
+  as a fraction) and band 13's change is `ROUND(C,dp)-B` (or `ROUND(C,dp)/B-1`), aftermath.xround computing the same.
+  Otherwise a value that did not move shows a spurious change. The target-change row reads that change cell.
 - **Signed surprise.** Costs are stored negative in MOD, so surprise = (actual − frozen) / |frozen| reads a smaller
   cost as a beat without a special case per line.
 - **σ from the 252 returns before the reaction day** (the reaction day's own return excluded: the move must not
@@ -44,11 +50,35 @@ Why things are the way they are. Read before changing scripts.
   (`_model_work/update/<Q>/values.json`): band 7 froze only the quarter and its fiscal year.
 - **Consensus is read from the preview's variance grid** (Earnings band 6 or the Consensus tab's variance block), the
   numbers as typed before the print. A /model-consensus rerun after the print can change that block; the note says so.
+- **Run mode.** `rerun` means bands 9-15 were built for this quarter: the Earnings tab holds them under a title (or
+  band 9 header) naming the quarter, or call_notes_written.json (renamed in Step 9 together with
+  after_inputs_written.json, and keyed by quarter, which after_inputs_written.json is not) holds it. An
+  after_plan.json alone does not count: a run stopped at Step 7 leaves one, and "rerun" turns on the assignment's
+  T+7 section (copy the previous plan).
 - **Anchors.** Quotes need at least 4 words (short ones match anywhere), are refused straight after a negation (a
   quote that drops the "not" reverses the company's words), and must be found on the line cited. SFOT, call notes and
   guidance may cite only the call's own documents (the transcript, the release, the preview note: plan._call_docs),
   so the call summary cannot drift into older filings or broker views. Every figure in free text must be printed in context.md or on the item's own
-  quoted line, as written; otherwise the agent made it up.
+  quoted line, as written; otherwise the agent made it up. Free text includes what is typed into the model as the
+  company's words: each call note's text and each guidance item's before and now. A guidance "before" was said
+  earlier, so it may cite an optional before_anchor + before_quote (any file under the research root, quote checked)
+  and take its figures from that line; with no before_anchor, from the previous Call Notes columns (context history).
+- **UNVERIFIED by name.** anchors.py --unverified writes each failing problem's name (the longest name check() can
+  print that the problem starts with: a topic such as "Driver: units" holds a colon). build.marked matches a name to
+  a cell when it equals the cell's key or starts with key + "." or "[" (sfot.tone.reason → the SFOT tone row,
+  guidance[0].now → that guidance row, call_notes.Tone[1] → the Tone cell on Call Notes; react.reason marks the call
+  and pattern rows, which share it; lt_target and lt_target.year mark both target rows). headline and
+  quarter_thoughts have no cell; the note lists every name.
+- **Anchor failures build, marked UNVERIFIED** (as model-earnings-before does): after 2 rounds, the cells whose
+  anchors still fail are built red and the note lists them; only plan.py failures stop the run. This deviates from
+  the spec's error table (which stopped on anchors too): a wrap with one doubtful quote, flagged, is more useful the
+  morning after the print than no wrap.
+- **The note's name** is `<T> <Q> after-print note <date>.md` in Earnings Reviews, not the spec's
+  `<date> <T> After-Print Note.md`: it matches the preview note's `<T> <Q> earnings preview <date>.md`, so a
+  quarter's preview and wrap sort together. The date is context.json `today` (the run's date), not the system clock.
+- **The wrap on the Earnings tab lasts until the next preview.** Any /model-earnings-before run after /model-update
+  targets the next quarter and clears bands 9-15 without asking (it reports `after_cleared`); the after-print note
+  and the Call Notes tab keep the wrap. Only a same-quarter preview rerun asks first (below).
 - **The long-term target is a fraction equal to anchor_value** (20% → 0.20, in MOD's units), so the pace math and
   the check against the printed line use one number.
 - **Same-quarter preview rerun.** A /model-earnings-before rerun for the quarter already reviewed can shift the rows

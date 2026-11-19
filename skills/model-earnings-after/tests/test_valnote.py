@@ -40,6 +40,17 @@ def test_parse_reads_every_label_with_its_line(fixture_research):
     assert set(valnote.labels(got["multiples"])) <= set(got["values"])
 
 
+def test_parse_records_the_printed_precision(fixture_research):
+    """The note rounds what the tab holds; band 13 compares at the note's precision, so each value carries the
+    decimals it was printed to, in its own units (a percent's one decimal is three as a fraction)."""
+    got = valnote.parse(os.path.join(fixture_research, mf.VALNOTE))["values"]
+    assert {k: got[k]["dp"] for k in ("P/E: reward / risk", "Blended reward / risk", "P/E: reward price",
+                                      "Blended reward price", "IRR", "IRR: years")} == \
+        {"P/E: reward / risk": 1, "Blended reward / risk": 1, "P/E: reward price": 2, "Blended reward price": 2,
+         "IRR": 3, "IRR: years": 0}
+    assert got["IRR"]["value"] == 0.112                       # exactly the printed 11.2%, not 0.11199...
+
+
 def test_unknown_layout_gives_nothing_not_a_guess(tmp_path):
     """A note in some other layout must not be mined for numbers that look right: band 13 shows '?' instead."""
     p = tmp_path / "2026-01-01 X Valuation Note.md"

@@ -180,7 +180,8 @@ def _research(root):
     put(RELEASE, ["# TEST reports fourth quarter 2026 results", "",
                   "Fourth quarter revenue grew 14% to $140.4 million.",
                   "The company expects 2027 revenue of $640 million to $650 million."])
-    put(PREVIEW, ["# TEST 2026 Q4 earnings preview", "", "Stance: hold."])
+    put(PREVIEW, ["# TEST 2026 Q4 earnings preview", "", "Stance: hold.",
+                  "Guidance trail: the company has not yet guided 2027 revenue."])
     v = {k: b for k, (b, _) in VALUATION.items()}
     now = v["IRR: price now"]
     rw, rk = v["Blended reward price"] / now - 1, 1 - v["Blended risk price"] / now

@@ -126,6 +126,8 @@ def _guidance(p, docs, out):
         if g.get("change") not in GUIDE:
             out.append(f"guidance[{i}].change must be one of {', '.join(GUIDE)}")
         _quoted(f"guidance[{i}]", g, out, docs)
+        if g.get("before_anchor") is not None:          # optional: where 'before' was said (any file under R)
+            _quoted(f"guidance[{i}].before", {"anchor": g["before_anchor"], "quote": g.get("before_quote")}, out)
 
 
 def _lt(p, ctx, out):

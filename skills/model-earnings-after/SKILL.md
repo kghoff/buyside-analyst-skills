@@ -79,7 +79,9 @@ closes only).
 `python3 -I "$SK/context.py" --model "$M" --work "$W" --ticker <T>`. It recalculates a copy of the model in
 LibreOffice into `$W/values/` (a minute or two), then writes `$W/context.json` and `$W/context.md`: actual against
 frozen, the move, estimates before (model-update's pre-print snapshot) and now, valuation before and after, the IRR
-now and the fade table, the Call Notes history. It prints the quarter, `mode` (`first` or `rerun`), `drift_ready`,
+now and the fade table, the Call Notes history. It prints the quarter, `mode` (`rerun` when bands 9-15 were
+already built for this quarter: on the tab, or in the Call Notes record after a preview rerun cleared them; a plan
+left by a run that stopped at Step 7 does not count; otherwise `first`), `drift_ready`,
 the move (with `drift_due`, the T+7 date), the documents found and the warnings. It stops, naming the skill to run,
 when a tab it needs is missing or Px Data stops short of the reaction day; then delete the copy it made
 (`rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"`) and pass the message on.
@@ -95,16 +97,18 @@ answers "played out?" and changes the react call only if the drift changes it.
 ## Step 7: Check (at most 2 rounds back to the agent)
 ```bash
 python3 -I "$SK/plan.py" --plan "$W/after_plan.json" --context "$W/context.json"
-python3 -I "$SK/anchors.py" --plan "$W/after_plan.json" --context "$W/context.json" --research "$RD/<T>"
+python3 -I "$SK/anchors.py" --plan "$W/after_plan.json" --context "$W/context.json" --research "$RD/<T>" \
+  --unverified "$W/unverified.json"
 ```
 (anchors.py reads the recalculated copy from context.json `values`; run it only on a plan that passed plan.py.) Each
 prints one problem per line (or `plan OK` / `anchors OK`) and exits 1 on any. Problems → SendMessage them all to the
 same agent; run both again. After round 2:
 - plan.py problems stop the run: show the user the problems in plain English and do not build. The model stays
   untouched. Delete the copies of the model Step 5 made (keep none): `rm -rf "$W/out.xlsx" "$W/values" "$W/values_out"`.
-- anchors.py problems: write the names still failing (the text before the first ":" of each problem, e.g.
-  `sfot.tone`, `checkpoint`) as a JSON list to `$W/unverified.json`; the build marks them
-  UNVERIFIED in red and the note lists them. Otherwise make sure no old one is left: `rm -f "$W/unverified.json"`.
+- anchors.py problems: build anyway. The last anchors.py run has written the names still failing (e.g.
+  `sfot.tone.reason`, `guidance[0].now`, `call_notes.Tone[0]`) to `$W/unverified.json`; the build marks their cells
+  UNVERIFIED in red (a name marks the cell it names and the cells below it: `sfot.tone.reason` marks the SFOT tone
+  row) and the note lists them. When every anchor holds, anchors.py deletes that file, so no old name is left.
 
 ## Step 8: Build and verify
 ```bash
@@ -136,8 +140,11 @@ On a stop, delete every copy of the model the run made: `rm -rf "$W/out.xlsx" "$
 python3 -I "$SK/note.py" --work "$W" --ticker <T> --out-dir "$RD/<T>/Earnings Reviews" --values "<verify's recalculated>"
 rm -rf "$W/values_out"
 ```
-It writes `<T> <Q> after-print note <date>.md` and `.pdf` and prints their paths; if `"pdf"` is null, tell the user
-the PDF was skipped and why (`pdf_skipped`). Delete `$W/values_out` after it, whether or not it worked: keep no copy
+It writes `<T> <Q> after-print note <date>.md` and `.pdf` in `Earnings Reviews` and prints their paths (the date is
+context.json `today`, the run's date, unless `--date` is given). The name deviates from the spec's
+`<date> <T> After-Print Note.md` on purpose: it matches the preview note's `<T> <Q> earnings preview <date>.md`, so
+a quarter's preview and wrap sort together. If `"pdf"` is null, tell the user the PDF was skipped and why
+(`pdf_skipped`). Delete `$W/values_out` after it, whether or not it worked: keep no copy
 of the model.
 
 Then tell the user, in plain English:
@@ -148,16 +155,22 @@ Then tell the user, in plain English:
 - SFOT: surprise, fundamentals, outlook, tone, each with its reason.
 - The move: day and idio move in daily sigmas, against the expected (band 2's up / down cases) and the implied move;
   gap at the open and open to close (or `?` because Yahoo failed); the run-up; the drift if in.
-- Estimates and valuation before → after (price, each multiple's target, blended target, R/R, 3-year IRR), or `?`
-  and why (no Valuation Note before the print; no fresh /model-valuation since it).
+- Estimates and valuation before → after (price, each multiple's target, blended target, R/R, the IRR), or `?`
+  and why (no Valuation Note before the print; no /model-valuation note dated on or after the release day). The
+  "before" is the note as printed (0.7x, 11.2%), so the change compares the tab's value rounded the same way: a
+  value that did not move shows no change.
 - The IRR at today's price on the after target, and the fade table.
 - Guidance before and now, and the long-term target pace (the pace needed against the ratable path), if any.
 - The checkpoint, the react call and the reaction pattern, what would prove it wrong; "played out?" when it was asked.
-- Every judgment call (the plan's `judgment_calls`, each yellow cell's reason), the UNVERIFIED names, the cells the
+- Every judgment call (the plan's `judgment_calls`, each yellow cell's reason), the UNVERIFIED names (from
+  `$W/unverified.json`) and which cells they marked red, the cells the
   user had changed (`users_kept`, `call_notes_users_kept`) and that they were kept, and every warning.
 - The note's path, and a reminder to open the model in Excel, where it recalculates.
 - When `drift_ready` is false: "Rerun /model-earnings-after <T> on or after <drift_due> for the drift." (`drift_due`
   is the reaction day + 7 trading days from Step 5's output; holidays are not counted, so a day later may be needed.)
+- That the wrap on the Earnings tab lasts until the next preview: any /model-earnings-before run after /model-update
+  targets the next quarter and clears bands 9-15 without asking (it reports `after_cleared`). The after-print note
+  and the Call Notes tab keep the wrap.
 
 ## --rebuild: after a preview rerun for the same quarter
 A /model-earnings-before rerun for the quarter already reviewed can shift the rows bands 9-15 point at, so it stops

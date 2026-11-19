@@ -6,7 +6,7 @@ import re
 
 import openpyxl
 
-from tabkit import W, _move_after
+from tabkit import BLACK, RED, W, _move_after
 from xlsx import CT, XML_BAD, comments_parts
 
 TAB = "Call Notes"
@@ -142,9 +142,10 @@ def written(grid, quarter, users=(), earlier=None):
     return {**{q: r for q, r in (earlier or {}).items() if q != quarter}, quarter: mine}
 
 
-def lay_out(st, grid, notes, ticker):
-    """The tab's cells (a W). Each current-quarter cell holding the agent's text gets a note with its anchors; every
-    other cell keeps the note it had (grid["notes"])."""
+def lay_out(st, grid, notes, ticker, unverified=()):
+    """The tab's cells (a W). Each current-quarter cell holding the agent's text gets a note with its anchors (red
+    text and a note starting "UNVERIFIED:" for a topic in unverified, whose quote or figures failed the check);
+    every other cell keeps the note it had (grid["notes"])."""
     w = W(st)
     w.text("A1", f"{ticker} call notes (model-earnings-after): one column per quarter, newest first", b=True, sz=14)
     w.text("A2", "Each column is one earnings call, newest at B; read a row across to see how the story shifted. "
@@ -166,12 +167,14 @@ def lay_out(st, grid, notes, ticker):
             v = clean(grid["cells"].get((q, t), ""))
             ref = f"{c}{FIRST_TOPIC_ROW + j}"
             pts = notes.get(t) or []
-            if q == cur and pts and v == text(pts):
-                w.notes[ref] = anchors(pts)
+            ours = q == cur and pts and v == text(pts)
+            bad = ours and t in unverified
+            if ours:
+                w.notes[ref] = clean(("UNVERIFIED: " if bad else "") + anchors(pts))
             elif (q, t) in grid.get("notes", {}):
                 w.notes[ref] = clean(grid["notes"][(q, t)])
             if v != "":
-                w.text(ref, v, wrap=True)
+                w.text(ref, v, color=RED if bad else BLACK, wrap=True)
     for j, t in enumerate(grid["topics"]):
         w.text(f"A{FIRST_TOPIC_ROW + j}", clean(t), wrap=True)
     w.sh.widths = {1: 28, **{k + 2: 60 for k in range(max(1, len(grid["order"])))}}
@@ -188,12 +191,12 @@ def _free_block(pkg):
     return max(blocks | {0}) + 1
 
 
-def write(pkg, st, grid, notes, ticker):
+def write(pkg, st, grid, notes, ticker, unverified=()):
     """Replace the tab whole (with its comments and VML), right after the Earnings tab. Returns the sheet part.
     The caller renders st into xl/styles.xml and saves pkg."""
     if TAB in [s[0] for s in pkg.sheets()]:
         pkg.remove_sheet(TAB)
-    w = lay_out(st, grid, notes, ticker)
+    w = lay_out(st, grid, notes, ticker, unverified)
     part = pkg.add_sheet(TAB, "")
     _move_after(pkg, TAB, AFTER)        # put back after Earnings every run, even if the user moved it (none: last)
     lrid = None

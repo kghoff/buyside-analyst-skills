@@ -319,8 +319,9 @@ def consensus(model, values, quarter):
 
 # ---------------------------------------------------------------- valuation, docs, house
 def _fresh_note(root, ticker, day):
-    """The newest '<date> <T> Valuation Note.md' dated on or after day (model-valuation writes one every run; its
-    tab title carries no date)."""
+    """The newest '<date> <T> Valuation Note.md' dated on or after day, the release day (model-valuation writes one
+    every run; its tab title carries no date). The release day, not the reaction day: after an after-close release
+    the evening's /model-valuation run is dated the release day and already knows the print."""
     d = os.path.join(root, "Valuation")
     got = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else [])
                  if (m := valnote.NOTE_RE.match(f)) and m.group(2) == ticker and m.group(1) >= day)
@@ -341,9 +342,9 @@ def valuation(root, ticker, release_day, reaction_day, values, warnings):
     if aft is None:
         warnings.append("The model has no Valuation tab: band 13's 'after' column shows '?'. Run /model-valuation.")
     else:
-        aft["fresh_note"] = _fresh_note(root, ticker, reaction_day)
+        aft["fresh_note"] = _fresh_note(root, ticker, release_day)
         if not aft["fresh_note"]:
-            warnings.append(f"The Valuation tab may predate the print: no Valuation Note since {reaction_day}; "
+            warnings.append(f"The Valuation tab may predate the print: no Valuation Note since {release_day}; "
                             "rerun /model-valuation, then this step.")
     mults = list((before or {}).get("multiples") or [])          # note order, then any the tab adds
     for lab in (aft or {}).get("cells", {}):
@@ -443,6 +444,18 @@ def quarter_only(model):
     return {"quarter": q, "quarter_e": qe, "reaction_day": rx["reaction_day"].isoformat()}
 
 
+def run_mode(tab, q, work):
+    """'rerun' when bands 9-15 were built for this quarter: the Earnings tab holds them under a title (or band 9
+    header) naming q, or the written record call_notes_written.json (renamed in Step 9 with after_inputs_written.json,
+    once the checked copy replaced the model; keyed by quarter) holds q, as after a preview rerun's --clear-after.
+    An after_plan.json alone does not count: a run stopped at Step 7 leaves one behind."""
+    a = tab.get("after_start")
+    if a is not None and re.search(rf": {re.escape(q)}(\s|\(|$)", str((tab.get("labels") or {}).get(a, ""))):
+        return "rerun"
+    p = os.path.join(work, "call_notes_written.json")
+    return "rerun" if os.path.exists(p) and q in (json.load(open(p)) or {}) else "first"
+
+
 def run(model, work, ticker, values=None, research=None, forecast_plan=None, today=None):
     os.makedirs(work, exist_ok=True)
     today = today or dt.date.today().isoformat()
@@ -488,8 +501,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
     ir = irr_now(val["after"], lc["close"], close_ref)
     ir["price_date"] = lc["date"].isoformat()
     fade = am.fade_table(lc["close"], ir["later"], ir["years"]) if ir["value"] is not None else []
-    ap = os.path.join(work, "after_plan.json")
-    mode = "rerun" if os.path.exists(ap) and json.load(open(ap)).get("quarter") == q else "first"
+    mode = run_mode(tab, q, work)
     ctx = {"ticker": ticker, "today": today, "values": os.path.abspath(values), "research": root,
            "quarter": q, "quarter_e": qe, "fy": mm.fy_of(q), "mode": mode, "drift_ready": mv["drift"] is not None,
            "frozen": {"quarter": tab["frozen"]["quarter"], "date": tab["frozen"]["date"], "fy": tab["frozen"]["fy"],

@@ -21,9 +21,11 @@ Paths are relative to R. Note the line numbers of everything you will cite.
 - call_notes: one key per topic in context.json `topics`, exactly those, each a list of at most 3 points
   {text, anchor, quote}. [] when the call said nothing on that topic. Q&A themes: the 5 "Q&A theme" topics, one
   theme each.
-- guidance: a list of items {item, before, now, change, anchor, quote}; item names what is guided (e.g. "2027
-  revenue"); before and now are non-empty text ("none given" when there was none); change is one of
-  raise / hold / cut / initiate / withdrawn / none.
+- guidance: a list of items {item, before, now, change, anchor, quote}, plus optional before_anchor and
+  before_quote; item names what is guided (e.g. "2027 revenue"); before and now are non-empty text ("none given"
+  when there was none); change is one of raise / hold / cut / initiate / withdrawn / none. before_anchor
+  (file.md:N, any file under R: the last call, the preview's guidance trail) and before_quote (4+ words from that
+  line) say where "before" was said; give both or neither.
 - lt_target: null, or {metric, num, den, target, year, anchor, anchor_value, quote}. num and den (den null for a
   level, not a ratio) are MOD keys from context.json `mod_keys`; year a whole number printed on the cited line.
   target must equal anchor_value, in MOD's units: a percent is a fraction, so "20%" -> target 0.20 and anchor_value
@@ -49,11 +51,14 @@ Paths are relative to R. Note the line numbers of everything you will cite.
   differ), never a paraphrase, and never cut so that it drops a "not", "no", "never" or "unlikely" just before it.
 - SFOT, call notes and guidance cite only this print's documents: context.json `docs.transcript`, `docs.release`
   or `docs.preview`. lt_target may cite any file under R (an investor-day transcript or deck).
-- Numbers in free text (every reason, react's wrong_if and watch, headline, quarter_thoughts, played_out): copy
-  each figure from context.md or from that item's own cited line, and name where it comes from ("the 4.0% beat on
-  revenue against the frozen forecast"). Write figures as digits, not words. Never type a number no source prints.
+- Numbers in free text (every reason, react's wrong_if and watch, headline, quarter_thoughts, played_out, each
+  call note's text, each guidance item's before and now): copy each figure from context.md or from that item's own
+  cited line, and name where it comes from ("the 4.0% beat on revenue against the frozen forecast"). A guidance
+  "before" may also take its figures from its before_anchor's line or, with no before_anchor, from the previous
+  Call Notes columns (context.md "Call Notes history"). Write figures as digits, not words. Never type a number no
+  source prints.
 
-## T+7 rerun (context.json mode "rerun" and drift_ready true)
+## T+7 rerun (context.json mode "rerun", meaning bands 9-15 were built for this quarter, and drift_ready true)
 Copy the previous W/after_plan.json, fill played_out, and change react only if the drift changes the call; say so
 in judgment_calls either way.
 
@@ -63,7 +68,8 @@ W/after_plan.json in exactly this shape:
  "sfot": {"surprise": {"value": "...", "reason": "...", "anchor": "file.md:N", "quote": "..."}, "fundamentals": {},
           "outlook": {}, "tone": {}},
  "call_notes": {"<topic>": [{"text": "...", "anchor": "file.md:N", "quote": "..."}]},
- "guidance": [{"item": "...", "before": "...", "now": "...", "change": "...", "anchor": "file.md:N", "quote": "..."}],
+ "guidance": [{"item": "...", "before": "...", "now": "...", "change": "...", "anchor": "file.md:N", "quote": "...",
+               "before_anchor": "file.md:N (optional)", "before_quote": "... (with before_anchor)"}],
  "lt_target": {"metric": "...", "num": "<mod key>", "den": "<mod key>", "target": 0.0, "year": 2028,
                "anchor": "file.md:N", "anchor_value": 0.0, "quote": "..."},
  "checkpoint": {"value": "...", "reason": "..."},

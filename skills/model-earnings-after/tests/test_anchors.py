@@ -136,3 +136,68 @@ def test_cli_reads_research_root_and_context_md(work, tmp_path):
     json.dump(bad, open(pp, "w"))
     r = subprocess.run(cmd, capture_output=True, text=True)
     assert r.returncode == 1 and "the number 9.9" in r.stdout
+
+
+def test_guidance_and_call_note_figures_need_a_source(fixture_research, md):
+    """Guidance before / now and the call-note text are typed into the model (band 14, the Call Notes tab) as the
+    company's numbers: a figure no source prints would reach the PM as guidance the company never gave."""
+    p = copy.deepcopy(EX)
+    p["guidance"][0]["before"] = "$999 million"
+    p["guidance"][0]["now"] = "$777-788 million"
+    p["call_notes"]["Capital allocation"][0]["text"] = "Bought back $555 million, up 31%."
+    probs = _check(p, fixture_research, md)
+    assert any(x.startswith("guidance[0].before:") and "999" in x for x in probs)
+    assert any(x.startswith("guidance[0].now:") and "777" in x for x in probs)
+    assert any(x.startswith("guidance[0].now:") and "788" in x for x in probs)
+    cn = [x for x in probs if x.startswith("call_notes.Capital allocation[0].text:")]
+    assert any("555" in x for x in cn) and any("31" in x for x in cn)
+
+
+def test_sourced_guidance_and_call_note_figures_pass(fixture_research, md, tmp_path):
+    """The same fields pass when the figure is printed: 'now' and the note on the call's own line; 'before' on the
+    line its before_anchor cites (any file under the research root, quote checked), or in the previous Call Notes
+    columns when there is no before_anchor."""
+    import shutil
+    root = str(tmp_path / "TEST")
+    shutil.copytree(fixture_research, root)
+    open(os.path.join(root, "Earnings Calls", "_md", "2026 Q3 TEST call.md"), "w").write(
+        "# Q3 call\n\nJane Doe, CEO: We now see 2026 revenue of $540 million to $550 million.\n")
+    p = copy.deepcopy(EX)
+    p["guidance"][0].update(before="$540-550 million", now="$640-650 million",
+                            before_anchor="Earnings Calls/_md/2026 Q3 TEST call.md:3",
+                            before_quote="We now see 2026 revenue of $540 million")
+    p["call_notes"]["Capital allocation"][0]["text"] = "Bought back $50 million of stock."
+    assert _check(p, root, md) == []
+    bad = copy.deepcopy(p)
+    bad["guidance"][0]["before_quote"] = "We now see 2026 revenue of $999 million"
+    assert any(x.startswith("guidance[0].before:") for x in _check(bad, root, md))
+    p["guidance"][0].pop("before_anchor")
+    p["guidance"][0].pop("before_quote")
+    assert any(x.startswith("guidance[0].before:") and "540" in x for x in _check(p, root, md))
+    hist = {"history": [{"quarter": "Q3 26", "cells": {"Guidance (near-term)": "2026 revenue $540-550 million"}}]}
+    assert anchors.check(p, None, root, hist, md) == []
+
+
+def test_failing_names_keep_a_topic_with_a_colon(fixture_research, md):
+    """unverified.json holds names the build matches to cells; 'Driver: units' holds a colon, so the name is the
+    longest one check() can print that the problem starts with, not the text before the first colon."""
+    p = copy.deepcopy(EX)
+    p["call_notes"]["Driver: units"] = [{"text": "Units up 99%.", "anchor": f"{CALL}:9",
+                                        "quote": "Units should grow faster than revenue"}]
+    probs = _check(p, fixture_research, md)
+    assert anchors.failing(p, probs) == ["call_notes.Driver: units[0].text"]
+
+
+def test_cli_writes_and_clears_unverified(work, tmp_path):
+    """SKILL.md passes --unverified on every anchors.py run: failing names land in the file the build reads, and
+    a plan that now holds leaves no stale file behind to mark cells red."""
+    pp, up = str(tmp_path / "p.json"), str(tmp_path / "unverified.json")
+    s = os.path.join(HERE, "..", "scripts", "anchors.py")
+    cmd = [sys.executable, "-I", s, "--plan", pp, "--context", os.path.join(work, "context.json"), "--unverified", up]
+    bad = copy.deepcopy(EX)
+    bad["react"]["watch"] = "the drift to the seventh day and 42 other things"
+    json.dump(bad, open(pp, "w"))
+    assert subprocess.run(cmd, capture_output=True).returncode == 1
+    assert json.load(open(up)) == ["react.watch"]
+    json.dump(EX, open(pp, "w"))
+    assert subprocess.run(cmd, capture_output=True).returncode == 0 and not os.path.exists(up)

@@ -138,6 +138,19 @@ def test_call_items_cite_the_call_documents():
     assert plan.check(p, CTX) == []
 
 
+def test_guidance_before_anchor_is_optional_but_quoted():
+    """'Before' was said on an earlier call or in the preview: any file under R may be cited, but a cited line with
+    no quote cannot be checked, so a before_anchor needs a before_quote of 4+ words."""
+    p = copy.deepcopy(EX)
+    p["guidance"][0].pop("before_anchor")
+    p["guidance"][0].pop("before_quote")
+    assert plan.check(p, CTX) == []
+    p["guidance"][0]["before_anchor"] = "Earnings Calls/_md/2026 Q3 TEST call.md:4"
+    assert any(x.startswith("guidance[0].before") for x in plan.check(p, CTX))
+    p["guidance"][0]["before_quote"] = "We now see 2026 revenue of $540 million"
+    assert plan.check(p, CTX) == []
+
+
 def test_surprise_names_its_comparison():
     """'Revenue was strong' is not a surprise; a surprise is against a number (frozen forecast, consensus...)."""
     p = copy.deepcopy(EX)

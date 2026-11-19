@@ -180,6 +180,29 @@ def test_pdf_null_with_the_reason_when_render_is_missing(fake, tmp_path, monkeyp
     assert r["pdf"] is None and "render.py is not at" in r["pdf_skipped"] and os.path.exists(r["md"])
 
 
+def test_note_dated_by_the_runs_today_not_the_system_clock(fake, tmp_path, monkeypatch, capsys):
+    """The note's name and cover carry the run's date (context.json 'today', the date the numbers are as of), so a
+    note written past midnight or replayed later is not misdated."""
+    w, vals = fake
+    monkeypatch.setattr(note, "RENDER", str(tmp_path / "nowhere" / "render.py"))
+    monkeypatch.setattr(sys, "argv", ["note.py", "--work", w, "--ticker", "TEST", "--out-dir", str(tmp_path / "o"),
+                                      "--values", vals])
+    note.main()
+    r = json.loads(capsys.readouterr().out)
+    assert os.path.basename(r["md"]) == "TEST Q4 26 after-print note 2027-02-28.md"
+
+
+def test_fast_fade_header_from_the_tab(fake, tmp_path):
+    """The note's fade table names the IRR horizon the tab shows, never a hard-coded 3 years."""
+    w, vals = fake
+    wb = openpyxl.load_workbook(vals)
+    ws = wb["Earnings"]
+    y = next(c.row for c in ws["A"] if c.value == "Fade table: if the stock gives back the move (section 13.7)")
+    ws[f"D{y}"] = "5-year IRR"
+    wb.save(vals)
+    assert "| Price change | Price | 5-year IRR |" in _md(w, vals, tmp_path)
+
+
 @pytest.mark.slow
 def test_sections_and_wrap_items(recalc_run, tmp_path):
     md = _md(recalc_run["work"], recalc_run["verify"]["recalculated"], tmp_path)

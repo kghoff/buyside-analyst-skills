@@ -328,7 +328,111 @@ def test_irr_years_change_is_a_difference(built):
     out, _, _ = built
     ws = openpyxl.load_workbook(out)["Earnings"]
     y = _row(ws, "IRR: years")
-    assert ws[f"D{y}"].value == f"=IFERROR(C{y}-B{y},NA())"
+    assert ws[f"D{y}"].value == f"=IFERROR(ROUND(C{y},0)-B{y},NA())"
+
+
+def test_valuation_change_at_the_notes_precision(model, work, tmp_path):
+    """The note prints 0.7x for a tab's 0.672 and 11.2% for 0.1121: a value that did not move must show a change of
+    exactly 0, or band 13 reports a re-rating that never happened. A real move still shows."""
+    def same(c):
+        cells = c["valuation"]["after"]["cells"]
+        cells["Blended reward / risk"]["value"] = 0.672           # note: 0.7x (dp 1)
+        cells["IRR"]["value"] = 0.1121                            # note: 11.2% (dp 3 as a fraction)
+        cells["P/E: reward price"]["value"] = 107.7623            # note: $107.76 (dp 2)
+        cells["P/E: reward / risk"]["value"] = 0.75               # note: 0.7x; 0.75 rounds to 0.8: a real move
+    _edit_ctx(work, same)
+    before = json.load(open(os.path.join(work, "context.json")))["valuation"]["before"]["values"]
+    assert (before["Blended reward / risk"]["dp"], before["IRR"]["dp"], before["P/E: reward price"]["dp"]) == (1, 3, 2)
+    out = str(tmp_path / "o.xlsx")
+    build.build(model, work, "TEST", out)
+    lay = json.load(open(os.path.join(work, "layout.json")))
+    ws = openpyxl.load_workbook(out)["Earnings"]
+    for lab in ("Blended reward / risk", "IRR", "P/E: reward price"):
+        y = _row(ws, lab)
+        assert "ROUND(C" in ws[f"D{y}"].value and lay["expected"][f"D{y}"] == 0, lab
+    assert lay["expected"][f"D{_row(ws, 'P/E: reward / risk')}"] == pytest.approx(0.1)
+    hdr = [c for c in ws["B"] if c.value == "Before (as printed in the note)"]
+    assert len(hdr) == 1
+
+
+def test_fade_header_names_the_valuation_tabs_irr_years(model, work, tmp_path):
+    """The fade table's IRR runs over the Valuation tab's horizon: a 5-year tab must not be labelled 3-year."""
+    _edit_ctx(work, lambda c: c["valuation"]["after"]["cells"]["IRR: years"].update(value=5))
+    out = str(tmp_path / "o.xlsx")
+    build.build(model, work, "TEST", out)
+    ws = openpyxl.load_workbook(out)["Earnings"]
+    y = _row(ws, "Fade table: if the stock gives back the move (section 13.7)")
+    assert ws[f"D{y}"].value == "5-year IRR"
+
+
+def _broken(plan):
+    """Every check anchors.py makes fails once: each quote misquoted, each free-text field given a figure no
+    source prints, the long-term target and year off their line, every topic given a bad point."""
+    bad = "777 widgets were sold on the moon"
+    for x in plan["sfot"].values():
+        x.update(quote="We sold widgets on the moon", reason=f"{bad} and so on.")
+    plan["call_notes"] = {t: [{"text": bad, "anchor": f"{mf.TRANSCRIPT}:3", "quote": "We sold widgets on the moon"}]
+                          for t in plan["call_notes"]}
+    plan["guidance"][0].update(quote="We sold widgets on the moon", before=bad, now=bad,
+                               before_quote="We sold widgets on the moon")
+    plan["lt_target"].update(target=0.25, anchor_value=0.25, year=2031)
+    plan["checkpoint"]["reason"] = bad
+    plan["react"].update(reason=bad, wrong_if=bad, watch=bad)
+    plan["played_out"]["reason"] = bad
+    plan["headline"] = plan["quarter_thoughts"] = bad
+
+
+def test_every_unverified_name_marks_its_cells(model, work, tmp_path, fixture_research):
+    """A claim whose anchor failed after two rounds still builds, but the user must see which cells to distrust:
+    every name anchors.py can print, written to unverified.json, marks exactly its own cell(s) red, and no other."""
+    import anchors
+    p = _plan(work, _broken)
+    md = open(os.path.join(work, "context.md")).read()
+    ctx = json.load(open(os.path.join(work, "context.json")))
+    names = anchors.failing(p, anchors.check(p, None, fixture_research, ctx, md))
+    assert set(names) == anchors.names(p) - {"plan"}          # the broken plan makes every name fail
+    glab = build.guidance_labels(p)[0]
+    lt = ("Long-term target: Operating margin", "Long-term target: year")
+    react = dict((k, lab) for k, lab in build.REACT)
+
+    def want(n):
+        if n.startswith("sfot."):
+            return {f"SFOT: {n.split('.')[1]}"}
+        if n.startswith("call_notes."):
+            return {("cn", n[len("call_notes."):n.rindex("[")])}
+        if n.startswith("guidance[0]"):
+            return {glab}
+        if n.startswith("lt_target"):
+            return set(lt)
+        if n == "react.reason":
+            return {react["call"], react["pattern"]}
+        if n.startswith("react."):
+            return {react[n.split(".")[1]]}
+        return {"checkpoint.reason": {build.CHECKPOINT}, "played_out.reason": {build.PLAYED},
+                "headline": set(), "quarter_thoughts": set()}[n]     # headline, thoughts: the note lists them
+
+    for n in names:
+        json.dump([n], open(os.path.join(work, "unverified.json"), "w"))
+        out = str(tmp_path / "o.xlsx")
+        build.build(model, work, "TEST", out)
+        lay = json.load(open(os.path.join(work, "layout.json")))
+        wb = openpyxl.load_workbook(out)
+        ws, cn = wb["Earnings"], wb["Call Notes"]
+        got = set()
+        for lab, ref in lay["refs"].items():
+            y = int(re.sub(r"\D", "", ref))
+            d = ws[f"D{y}"]
+            if isinstance(d.value, str) and d.value.startswith("UNVERIFIED:"):
+                assert d.font.color.rgb == build.RED, (n, lab)
+                got.add(lab)
+                for c in ("B", "C", "E"):            # the typed or yellow cells' notes say so too
+                    if ws[f"{c}{y}"].comment is not None:
+                        assert ws[f"{c}{y}"].comment.text.startswith("UNVERIFIED:"), (n, lab, c)
+        for row in cn.iter_rows(min_row=8, max_col=2):
+            if row[1].comment is not None and row[1].comment.text.startswith("UNVERIFIED:"):
+                assert row[1].font.color.rgb == build.RED
+                got.add(("cn", row[0].value))
+        assert got == want(n), n
 
 
 def test_rerun_keeps_the_users_value(model, work, tmp_path):

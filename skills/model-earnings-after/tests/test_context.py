@@ -173,6 +173,19 @@ def test_valuation_fresh_only_with_a_note_since_the_print(ctx, model, fixture_re
     assert c["valuation"]["before"]["path"] == mf.VALNOTE        # the after-print note is never the 'before'
 
 
+def test_valuation_note_on_the_release_day_is_fresh(model, fixture_research, work, tmp_path):
+    """An after-close release: the user reruns /model-valuation that evening, and its note is dated the release day,
+    a day before the reaction day. It already knows the print, so the after side is fresh."""
+    root = str(tmp_path / "TEST")
+    shutil.copytree(fixture_research, root)
+    name = f"{mf.RELEASE_DAY} TEST Valuation Note.md"
+    open(os.path.join(root, "Valuation", name), "w").write("x")
+    c = _run(model, root, work)
+    assert c["valuation"]["after"]["fresh_note"] == f"Valuation/{name}"
+    assert not any("may predate the print" in w for w in c["warnings"])
+    assert c["valuation"]["before"]["path"] == mf.VALNOTE        # dated the release day: not 'before' either
+
+
 def test_multiples_union_note_then_tab(model, fixture_research, work):
     """A multiple the after tab adds is compared too (before '?'), after the note's own, in that order."""
     def add(wb):
@@ -281,6 +294,8 @@ def test_docs_mode_and_house(ctx, model, fixture_research, work):
     assert "INCOME STATEMENT | Revenue" in ctx["mod_keys"]
     assert os.path.exists(os.path.join(work, "context.md")) and os.path.exists(os.path.join(work, "context.json"))
     json.dump({"quarter": "Q4 26"}, open(os.path.join(work, "after_plan.json"), "w"))
+    # a run stopped at Step 7 leaves a plan but built nothing: still a first run (no T+7 copy-the-plan section)
+    assert _run(model, fixture_research, work)["mode"] == "first"
 
     def band9(wb):
         ws = wb["Earnings"]
@@ -288,6 +303,26 @@ def test_docs_mode_and_house(ctx, model, fixture_research, work):
     _edit(model, band9)
     c = _run(model, fixture_research, work)
     assert c["mode"] == "rerun" and c["house"]["in_line"] == 0.02
+
+
+def test_mode_is_rerun_only_when_this_quarter_was_built(model, fixture_research, work):
+    """'rerun' turns on the assignment's T+7 section (copy the previous plan): it must mean bands 9-15 were built
+    for this quarter, not that a plan file exists. Bands built for another quarter, or a record of another quarter,
+    are a first run; the record of this quarter (bands cleared by a preview rerun) is a rerun."""
+    json.dump({"quarter": "Q4 26"}, open(os.path.join(work, "after_plan.json"), "w"))     # a leftover plan
+    _edit(model, lambda wb: wb["Earnings"].__setitem__("A131", "9. ACTUAL VS FROZEN: Q3 26"))
+    assert _run(model, fixture_research, work)["mode"] == "first"
+    rec = os.path.join(work, "call_notes_written.json")
+    json.dump({"Q3 26": {"Tone": "x"}}, open(rec, "w"))
+    _edit(model, lambda wb: wb["Earnings"].__setitem__("A131", None))
+    assert _run(model, fixture_research, work)["mode"] == "first"
+    json.dump({"Q3 26": {"Tone": "x"}, "Q4 26": {"Tone": "y"}}, open(rec, "w"))
+    assert _run(model, fixture_research, work)["mode"] == "rerun"
+    os.remove(rec)
+    _edit(model, lambda wb: wb["Earnings"].__setitem__(
+        "A130", "TEST after the print: Q4 26 (model-earnings-after, 2027-02-28)"))
+    _edit(model, lambda wb: wb["Earnings"].__setitem__("A131", "9. ACTUAL VS FROZEN: Q4 26"))
+    assert _run(model, fixture_research, work)["mode"] == "rerun"
 
 
 def test_stop_when_actuals_missing(model, fixture_research, tmp_path):

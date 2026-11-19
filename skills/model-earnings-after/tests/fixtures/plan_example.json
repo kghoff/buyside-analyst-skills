@@ -43,7 +43,9 @@
  "guidance": [
   {"item": "2027 revenue", "before": "none given before this call", "now": "$640-650 million",
    "change": "initiate", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:4",
-   "quote": "For 2027 we expect revenue of $640 million to $650 million."}
+   "quote": "For 2027 we expect revenue of $640 million to $650 million.",
+   "before_anchor": "Earnings Previews/TEST Q4 26 earnings preview 2026-11-18.md:4",
+   "before_quote": "the company has not yet guided 2027 revenue"}
  ],
  "lt_target": {"metric": "Operating margin", "num": "INCOME STATEMENT | Operating Income",
                "den": "INCOME STATEMENT | Revenue", "target": 0.20, "year": 2028,

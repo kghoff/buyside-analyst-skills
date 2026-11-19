@@ -58,6 +58,16 @@ def _uniq(label, seen):
     return out
 
 
+def marked(unverified, *keys):
+    """The UNVERIFIED names (W/unverified.json, anchors.failing's) that mark a cell with these keys: a name marks it
+    when it equals a key or sits below one (key + "." or key + "["): sfot.tone.reason marks sfot.tone, guidance[0].now
+    marks guidance[0], call_notes.Tone[1] marks call_notes.Tone."""
+    return sorted({u for u in unverified for k in keys if u == k or u.startswith((k + ".", k + "["))})
+
+
+UNV = "UNVERIFIED: "
+
+
 def guidance_labels(plan):
     seen = set()
     return [_uniq(f"Guidance: {g.get('item')}", seen) for g in plan.get("guidance") or []]
@@ -155,17 +165,24 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
         r += 1
         return r - 1
 
-    def inp(label, fmt, x, ukey, col="B", reason=None):
+    def inp(label, fmt, x, ukeys, col="B", reason=None):
         if label in seen:
             raise SystemExit(f"{SKILL}: the input label {label!r} appears twice in column A (a bug in build.py).")
         rr = put(label)
-        note = (f"You typed {used[label]}. " if label in users else "") + _note(x)
+        bad = marked(unverified, *ukeys)
+        note = (UNV if bad else "") + (f"You typed {used[label]}. " if label in users else "") + _note(x)
         w.input_(f"{col}{rr}", label, used[label], fmt, note)
-        bad = ukey in unverified
         why = reason if reason is not None else str(x.get("reason", ""))
-        w.text(f"D{rr}", ("UNVERIFIED: " if bad else "") + why, color=RED if bad else BLACK)
+        w.text(f"D{rr}", (UNV if bad else "") + why, color=RED if bad else BLACK)
         R[label] = f"${col}${rr}"
         return rr
+
+    def unv_row(rr, keys):
+        """A typed (not input) row whose anchor failed: say so in red in column D. Returns the note prefix."""
+        bad = marked(unverified, *keys)
+        if bad:
+            w.text(f"D{rr}", f"{UNV}the anchor did not hold after two rounds ({', '.join(bad)}).", color=RED)
+        return UNV if bad else ""
 
     def q_(ref):
         w.text(ref, "?", i=True)
@@ -192,7 +209,7 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
     band(f"9. ACTUAL VS FROZEN: {q} against the forecast frozen {fz['date']} (section 13.6)")
     inp(IN_LINE_LABEL, PCT, {"value": HOUSE["in_line"], "anchor": "house",
                              "reason": "House default: within this of the frozen line is 'in line'. Change it and "
-                                       "column F follows."}, "house.in_line")
+                                       "column F follows."}, ("house.in_line",))
     BAND = R[IN_LINE_LABEL]
     band_v = used[IN_LINE_LABEL]
     if not _n(band_v):
@@ -229,7 +246,7 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
     band("10. SFOT (section 13.6: surprise, fundamentals, outlook, tone)")
     for k in SFOT:
         x = plan["sfot"][k]
-        inp(f"SFOT: {k}", GEN, x, f"sfot.{k}", reason=f"{x.get('reason', '')} ({x.get('anchor')})")
+        inp(f"SFOT: {k}", GEN, x, (f"sfot.{k}",), reason=f"{x.get('reason', '')} ({x.get('anchor')})")
 
     # 11. the move
     r += 1
@@ -330,7 +347,7 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
     src = before.get("path") or "no Valuation Note before the print"
     band(f"13. VALUATION (before: {src}; after: the Valuation tab)")
     x = put("Valuation line")
-    for c, t in zip("BCD", ("Before", "After", "Change")):
+    for c, t in zip("BCD", ("Before (as printed in the note)", "After", "Change")):
         w.text(f"{c}{x}", t, b=True)
     rows13 = {}
     for lab in val["labels"]:
@@ -351,11 +368,16 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
             q_(f"C{y}")
         rows13[lab] = (y, _n(bv), bool(ax and ax.get("ref")), bv, av if _n(av) else None)
         if _n(bv) and ax and ax.get("ref"):
+            # the note rounds (0.7x for a tab's 0.672): compare the after value at the note's own precision, so a
+            # value that did not move shows no change
+            dp = bx.get("dp")
+            c_, ar = (f"ROUND(C{y},{dp})", am.xround(av, dp)) if isinstance(dp, int) else (f"C{y}", av)
             if diff:
-                f_, want, dfmt = f"IFERROR(C{y}-B{y},NA())", (av - bv if _n(av) else None), fmt
+                f_, want, dfmt = f"IFERROR({c_}-B{y},NA())", (ar - bv if _n(ar) else None), fmt
             else:
-                f_, want, dfmt = f"IFERROR(C{y}/B{y}-1,NA())", (av / bv - 1 if _n(av) and bv else None), PCT
+                f_, want, dfmt = f"IFERROR({c_}/B{y}-1,NA())", (ar / bv - 1 if _n(ar) and bv else None), PCT
             w.formula(f"D{y}", f_, dfmt, want, check=_n(av))
+            rows13[lab] += (want,)
         else:
             q_(f"D{y}")
     lc = ctx["latest_close"]
@@ -375,15 +397,15 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
         q_(f"B{x}")
     x = put("Target change minus the day's move (positive = the stock under-reacted; section 13.6)")
     tg = rows13.get(TARGET)
-    if tg and tg[1] and tg[2]:
-        tc = tg[4] / tg[3] - 1 if tg[4] is not None and tg[3] else None
-        w.formula(f"B{x}", f"IFERROR(($C${tg[0]}/$B${tg[0]}-1)-{DAY},NA())", PCT, am.gap(tc, mv["day"]),
+    if tg and tg[1] and tg[2]:                    # the target's change cell (D), at the note's precision
+        w.formula(f"B{x}", f"IFERROR($D${tg[0]}-{DAY},NA())", PCT, am.gap(tg[5], mv["day"]),
                   check=tg[4] is not None and mv["day"] is not None)
     else:
         q_(f"B{x}")
     x = put("Fade table: if the stock gives back the move (section 13.7)")
     if fade_ok and ctx["fade"]:
-        for c, t in zip("BCD", ("Price change", "Price", "3-year IRR")):
+        n = yr[4]
+        for c, t in zip("BCD", ("Price change", "Price", f"{n:g}-year IRR" if _n(n) else "IRR")):
             w.text(f"{c}{x}", t, b=True)
         ok = hz[4] is not None and yr[4] is not None and lc["value"] is not None
         for fd in ctx["fade"]:
@@ -407,9 +429,12 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
         put("No guidance items in the plan")
     for i, (lab, g) in enumerate(zip(gl, plan.get("guidance") or [])):
         y = inp(lab, GEN, {"value": g["change"], "anchor": g.get("anchor"), "reason": g.get("quote", "")},
-                f"guidance[{i}]", col="E", reason=f"\"{g.get('quote', '')}\" ({g.get('anchor')})")
-        w.typed_text(f"B{y}", g["before"], f"{g.get('anchor')}: before this call.")
-        w.typed_text(f"C{y}", g["now"], f"{g.get('anchor')}: \"{g.get('quote', '')}\"")
+                (f"guidance[{i}]",), col="E", reason=f"\"{g.get('quote', '')}\" ({g.get('anchor')})")
+        un = UNV if marked(unverified, f"guidance[{i}]") else ""
+        bsrc = f"{g['before_anchor']}: \"{g.get('before_quote', '')}\"" if g.get("before_anchor") else \
+            f"{g.get('anchor')}: before this call."
+        w.typed_text(f"B{y}", g["before"], un + bsrc)
+        w.typed_text(f"C{y}", g["now"], f"{un}{g.get('anchor')}: \"{g.get('quote', '')}\"")
     lt = plan.get("lt_target")
     if lt:
         fy0 = int(str(ctx["fy"])[:4])
@@ -417,11 +442,12 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
         fmt = PCT if ratio else MILL
         per = ctx["mod_periods"]
         rows, vals = mod
+        src = f"{lt.get('anchor')}: \"{lt.get('quote', '')}\""
         y = put(f"Long-term target: {lt.get('metric')}")
-        w.typed(f"B{y}", lt["target"], fmt, f"{lt.get('anchor')}: \"{lt.get('quote', '')}\"")
+        w.typed(f"B{y}", lt["target"], fmt, unv_row(y, ("lt_target",)) + src)
         T = f"$B${y}"
         y = put("Long-term target: year")
-        w.typed(f"B{y}", lt["year"], INT, f"{lt.get('anchor')}: \"{lt.get('quote', '')}\"")
+        w.typed(f"B{y}", lt["year"], INT, unv_row(y, ("lt_target",)) + src)
         Y = f"$B${y}"
 
         def expr(yy):
@@ -471,7 +497,7 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
         w.formula(f"B{y}", f'IF(AND(ISNUMBER({RUN}),ISNUMBER({T}),ISNUMBER({LATEST})),IF({T}>={LATEST},'
                            f'IF({RUN}>={T},"on pace","behind pace"),IF({RUN}<={T},"on pace","behind pace")),"?")',
                   GEN, pace["status"], check=ok)
-    inp(CHECKPOINT, GEN, plan["checkpoint"], "checkpoint")
+    inp(CHECKPOINT, GEN, plan["checkpoint"], ("checkpoint",))
 
     # 15. react
     r += 1
@@ -480,9 +506,10 @@ def lay_out(w, ctx, plan, used, users, unverified, ticker, mod):
     for k, lab in REACT:
         reason = rc.get("reason", "") if k in ("call", "pattern") else \
             "The agent's; yours to change." if k == "wrong_if" else "The agent's; the T+7 rerun checks it."
-        inp(lab, GEN, {"value": rc[k], "reason": reason}, "react", reason=reason)
+        keys = (f"react.{k}", "react.reason") if k in ("call", "pattern") else (f"react.{k}",)   # one shared reason
+        inp(lab, GEN, {"value": rc[k], "reason": reason}, keys, reason=reason)
     if played_asked(ctx):
-        inp(PLAYED, GEN, plan.get("played_out") or {}, "played_out")
+        inp(PLAYED, GEN, plan.get("played_out") or {}, ("played_out",))
     else:
         w.text(f"B{put(PLAYED)}", T7_ASK, i=True)
     for c in plan.get("catalysts") or []:
@@ -556,7 +583,8 @@ def build(model, work, ticker, out, rebuild=False):
     head = {"date": ctx["move"]["release_day"], "file": ctx["docs"]["transcript"]}
     grid, cn_users = callnotes.merge(old_cn, ctx["quarter"], head, plan.get("call_notes") or {}, ctx["topics"],
                                      cn_written)
-    callnotes.write(pkg, st, grid, plan.get("call_notes") or {}, ticker)
+    cn_bad = {t for t in grid["topics"] if marked(unverified, f"call_notes.{t}")}
+    callnotes.write(pkg, st, grid, plan.get("call_notes") or {}, ticker, cn_bad)
     if old_cn["dropped"]:
         warnings.append("Call Notes text outside the quarter columns and topic rows was dropped by the rebuild: "
                         + "; ".join(f"{d['ref']} {d['text']!r}" for d in old_cn["dropped"]) + ".")

@@ -14,10 +14,15 @@ check(plan, values_path, research_root, context, context_md="") returns plain-En
 - a quote: at least 4 words, found on the cited line ignoring case, spacing, curly quotes and dash styles, and not
   straight after a negation (not / no / never / unlikely / ...n't within the 3 words before it): a quote that drops
   the "not" reverses the company's words.
-- free text (every reason, the react fields, headline, quarter_thoughts): each figure must be printed in context.md
-  or on the item's own cited line, as written (8% matches 8.0%; no x100 conversion); otherwise the agent made it up.
+- free text (every reason, the react fields, headline, quarter_thoughts, each call note's text, each guidance item's
+  before and now): each figure must be printed in context.md or on the item's own cited line, as written (8% matches
+  8.0%; no x100 conversion); otherwise the agent made it up. A guidance 'before' may also take its figures from the
+  line its optional before_anchor cites (its before_quote is checked like any quote) or, with no before_anchor, from
+  the previous Call Notes columns (context.json history).
 
-usage: anchors.py --plan P --context C [--values V] [--research R | --research-dir D]   (prints the problems; exit 1 if any)
+usage: anchors.py --plan P --context C [--values V] [--research R | --research-dir D] [--unverified W/unverified.json]
+(prints the problems; exit 1 if any. With --unverified, writes the failing names, e.g. sfot.tone.reason or
+call_notes.Tone[0], as a JSON list there, or deletes that file when every anchor holds.)
 (--values defaults to context.json "values"; the research root to context.json "research"; context.md is read from
 beside context.json.)"""
 import argparse
@@ -64,20 +69,28 @@ def _items(plan, key):
     return v if isinstance(v, dict) else {}
 
 
+def _guidance(plan):
+    g = plan.get("guidance")
+    return [(i, x) for i, x in enumerate(g if isinstance(g, list) else []) if isinstance(x, dict)]
+
+
+def _call_notes(plan):
+    return [(t, i, x) for t, lst in _items(plan, "call_notes").items()
+            for i, x in enumerate(lst if isinstance(lst, list) else []) if isinstance(x, dict)]
+
+
 def _quotes(plan):
     """(name, anchor, quote) for every quoted line: SFOT, the call notes, guidance and the long-term target. An SFOT
     row anchored 'none' (the call was silent on it; plan.py checks the rule) has no quote to check."""
     for k, x in _items(plan, "sfot").items():
         if isinstance(x, dict) and x.get("anchor") != "none":
             yield f"sfot.{k}", x.get("anchor"), x.get("quote")
-    for t, lst in _items(plan, "call_notes").items():
-        for i, x in enumerate(lst if isinstance(lst, list) else []):
-            if isinstance(x, dict):
-                yield f"call_notes.{t}[{i}]", x.get("anchor"), x.get("quote")
-    g = plan.get("guidance")
-    for i, x in enumerate(g if isinstance(g, list) else []):
-        if isinstance(x, dict):
-            yield f"guidance[{i}]", x.get("anchor"), x.get("quote")
+    for t, i, x in _call_notes(plan):
+        yield f"call_notes.{t}[{i}]", x.get("anchor"), x.get("quote")
+    for i, x in _guidance(plan):
+        yield f"guidance[{i}]", x.get("anchor"), x.get("quote")
+        if x.get("before_anchor") is not None:         # where 'before' was said: any file under the research root
+            yield f"guidance[{i}].before", x.get("before_anchor"), x.get("before_quote")
     lt = plan.get("lt_target")
     if isinstance(lt, dict):
         yield "lt_target", lt.get("anchor"), lt.get("quote")
@@ -142,30 +155,64 @@ def _printed(f, seen):
     return any(_close(abs(s), f, d) for s in seen)
 
 
-def _free_text(plan):
-    """(name, text, anchor or None) for every free-text field whose figures must come from a source."""
+def _free_text(plan, history=""):
+    """(name, text, [anchors], extra text) for every free-text field whose figures must come from a source: context.md,
+    the item's own quoted line(s) or the extra text. Guidance 'before' may also use the line its before_anchor cites
+    or, without one, the previous Call Notes columns (context.json history)."""
     for k, x in _items(plan, "sfot").items():
         if isinstance(x, dict):
-            yield f"sfot.{k}.reason", x.get("reason"), x.get("anchor")
-    yield "checkpoint.reason", _items(plan, "checkpoint").get("reason"), None
+            yield f"sfot.{k}.reason", x.get("reason"), [x.get("anchor")], ""
+    for t, i, x in _call_notes(plan):
+        yield f"call_notes.{t}[{i}].text", x.get("text"), [x.get("anchor")], ""
+    for i, x in _guidance(plan):
+        ba = x.get("before_anchor")
+        yield f"guidance[{i}].before", x.get("before"), [x.get("anchor"), ba], "" if ba is not None else history
+        yield f"guidance[{i}].now", x.get("now"), [x.get("anchor")], ""
+    yield "checkpoint.reason", _items(plan, "checkpoint").get("reason"), [], ""
     for k in ("reason", "wrong_if", "watch"):
-        yield f"react.{k}", _items(plan, "react").get(k), None
-    yield "played_out.reason", _items(plan, "played_out").get("reason"), None
+        yield f"react.{k}", _items(plan, "react").get(k), [], ""
+    yield "played_out.reason", _items(plan, "played_out").get("reason"), [], ""
     for k in ("headline", "quarter_thoughts"):
-        yield k, plan.get(k), None
+        yield k, plan.get(k), [], ""
 
 
-def _numbers(plan, root, context_md):
+def _history(context):
+    """The previous Call Notes columns' text (context.json history), where a guidance 'before' may come from."""
+    return " ".join(str(v) for h in (context or {}).get("history") or [] if isinstance(h, dict)
+                    for v in (h.get("cells") or {}).values())
+
+
+def _numbers(plan, root, context_md, history=""):
     out, md = [], _figures(context_md or "")
-    for name, text, a in _free_text(plan):
+    for name, text, anchors_, extra in _free_text(plan, history):
         if not isinstance(text, str):
             continue
-        line = _read_line(name, a, root)[0] if a and LINE.match(str(a)) else None
-        seen = md + (_figures(line) if line else [])
+        lines = [_read_line(name, a, root)[0] for a in anchors_ if a and LINE.match(str(a))]
+        seen = md + _figures(" ".join(x for x in lines if x)) + _figures(extra)
         for raw in FIG.findall(text):
             if not _printed(float(raw.replace(",", "")), seen):
                 out.append(f"{name}: the number {raw} isn't in context.md or the quoted line; copy it from there")
     return out
+
+
+def names(plan):
+    """Every problem name check() can print for this plan, so a problem's name is the longest one it starts with
+    (a topic such as 'Driver: units' holds a colon, so 'the text before the first colon' is not enough)."""
+    out = {"plan"} | {n for n, _ in _walk(plan if isinstance(plan, dict) else {})}
+    if isinstance(plan, dict):
+        out |= {n for n, _, _ in _quotes(plan)} | {n for n, *_ in _free_text(plan)}
+    return out
+
+
+def failing(plan, problems):
+    """The names of the plan's parts that still fail (unverified.json): each problem's longest matching name."""
+    ns = sorted(names(plan), key=len, reverse=True)
+    got = []
+    for p in problems:
+        n = next((n for n in ns if p.startswith(n + ":")), p.split(":", 1)[0])
+        if n not in got:
+            got.append(n)
+    return got
 
 
 class _Cells:
@@ -257,7 +304,7 @@ def check(plan, values_path, research_root, context, context_md=""):
         p = _quote(name, a, q, research_root)
         if p:
             out.append(p)
-    return out + _numbers(plan, research_root, context_md)
+    return out + _numbers(plan, research_root, context_md, _history(context))
 
 
 def main(argv=None):
@@ -267,6 +314,8 @@ def main(argv=None):
     ap.add_argument("--context", required=True)
     ap.add_argument("--research", help="the ticker's research folder (<research_dir>/<TICKER>); default: from settings")
     ap.add_argument("--research-dir", help="the parent research_dir, used with the ticker when --research is not given")
+    ap.add_argument("--unverified", help="write the failing names here as a JSON list (unverified.json), or delete "
+                                         "the file when every anchor holds")
     a = ap.parse_args(argv)
     ctx = json.load(open(a.context))
     root = a.research or ctx.get("research")
@@ -281,7 +330,12 @@ def main(argv=None):
     if not os.path.isfile(md):
         print(f"no context.md beside {a.context}: rerun context.py", file=sys.stderr)
         return 2
-    probs = check(json.load(open(a.plan)), a.values or ctx.get("values"), root, ctx, open(md).read())
+    plan = json.load(open(a.plan))
+    probs = check(plan, a.values or ctx.get("values"), root, ctx, open(md).read())
+    if a.unverified and probs:
+        json.dump(failing(plan, probs), open(a.unverified, "w"), indent=1)
+    elif a.unverified and os.path.exists(a.unverified):
+        os.remove(a.unverified)
     print("\n".join(probs) if probs else "anchors OK")
     return 1 if probs else 0
 
