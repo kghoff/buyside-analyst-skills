@@ -21,6 +21,7 @@ plugin `buyside`. Explain everything in plain English.
 | 12 | model-short | short check: FEV scorecard, short type and bucket, verdict, IRR wedge, risk case, print move, crowding, borrow, VaR sizing (Short Check tab) + short note |
 | 13 | model-earnings-before | earnings preview: call and stance by rule, print R/R and implied PSUC, set-up, model checks, base rates, implied move, guidance trail, variance grid, frozen forecast (Earnings tab) + preview note |
 | 14 | model-update | the reported quarter into MOD from the release (8-K Ex. 99.1), old forecast held in orange placeholders until the 10-Q, the 10-Q gaps on a rerun, restatements on approval, new guidance for Filings Charts, and a thesis-aware targeted forecast roll the user approves; rerun each print |
+| 15 | model-summary | SUM tab, the first sheet: the PM's one-page view. Cap table with 3M ADV, NTM FCF yield, 3-year target and IRR, 12-month base and risk on the primary multiple, internal estimates vs Street with Expected Delta and multiples per year, the probability tree, multiple ranges, the tactical R/R ladder. Every number links to its home tab; empty yellow boxes for write-pitch; conditional formatting on returns, IRR, R/R and Street variance |
 | – | model-industry | optional: industry P&L and peer comparison tabs |
 | – | model-consensus | optional: broker ratings, targets, estimates, rating history, consensus snapshots; rerun each print |
 
