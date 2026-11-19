@@ -3,7 +3,13 @@
 usage: python3 preflight.py --ticker XYZ [--model PATH] [--research DIR]
 Prints JSON {"status": "ok"|"stop", "model", "research", "pitch_dir", "work", "mode": "first"|"rerun",
 "optional_missing", "missing": [{"what", "fix"}], "stale": null|{...}, "warnings"} and exits 0. Read-only."""
-import argparse, datetime, glob, json, os, re, sys
+import argparse
+import datetime
+import glob
+import json
+import os
+import re
+import sys
 
 import openpyxl
 
@@ -27,6 +33,20 @@ def newest_actual_quarter(heads):
     return q[-1] if q else None
 
 
+def _day(v):
+    """Copied from model-earnings-after/scripts/rates.py _day()."""
+    if isinstance(v, datetime.datetime):
+        return v.date()
+    if isinstance(v, datetime.date):
+        return v
+    if isinstance(v, str):
+        try:
+            return datetime.date.fromisoformat(v[:10])
+        except ValueError:
+            return None
+    return None
+
+
 def release(ws, period):
     """Px Events' full-results release date for a period ('Q3 26'). Copied in minimum from
     model-earnings-after/scripts/rates.py release() and _header()."""
@@ -36,8 +56,8 @@ def release(ws, period):
         if "Period" in cells and "Full-results release date" in cells:
             cp, cd = cells.index("Period"), cells.index("Full-results release date")
             for r in rows[i + 1:]:
-                if str(r[cp] or "").strip().rstrip("E") == period and isinstance(r[cd], (datetime.date, datetime.datetime)):
-                    return r[cd].date() if isinstance(r[cd], datetime.datetime) else r[cd]
+                if str(r[cp] or "").strip().rstrip("E") == period and _day(r[cd]):
+                    return _day(r[cd])
     return None
 
 
@@ -74,6 +94,13 @@ def check(ticker, model, research):
         out["status"] = "stop"
         return out
     wb = openpyxl.load_workbook(model, read_only=True)
+    try:
+        return _check_open(wb, out, research, model)
+    finally:
+        wb.close()
+
+
+def _check_open(wb, out, research, model):
     tabs = wb.sheetnames
     for t, fix in REQUIRED.items():
         if t not in tabs:
@@ -88,7 +115,6 @@ def check(ticker, model, research):
     out["optional_missing"] = [t for t in OPTIONAL_TABS if t not in tabs]
     out["optional_missing"] += [f"{d} note" for d in OPTIONAL_NOTES if not newest(os.path.join(research, d, "*.md"))]
     out["stale"] = freshness(wb, heads, research, model, out["warnings"])
-    wb.close()
     if out["missing"] or out["stale"]:
         out["status"] = "stop"
     return out
@@ -100,11 +126,15 @@ def freshness(wb, heads, research, model, warnings):
     if not rel:
         warnings.append("freshness not checked: no release date for the newest actual quarter in Px Events")
         return None
-    note = newest(os.path.join(research, "Valuation", "*Valuation Note.md"))
-    nd = note_date(note)
+    dated = [(note_date(p), p) for p in glob.glob(os.path.join(research, "Valuation", "*Valuation Note.md"))]
+    dated = [x for x in dated if x[0]]
+    nd, note = max(dated) if dated else (None, None)
     work = os.path.join(os.path.dirname(model), "_model_work", "model-summary")
     mt = [os.path.getmtime(p) for p in glob.glob(os.path.join(work, "*"))]
     summ = datetime.datetime.fromtimestamp(max(mt)).date() if mt else None
+    if not nd and not summ:
+        warnings.append("freshness not checked: no dated Valuation note and no model-summary work files")
+        return None
     if (nd and rel > nd) or (summ and rel > summ):
         return {"quarter": q, "release": rel.isoformat(), "valuation_note": os.path.basename(note) if note else None,
                 "fix": "rerun /model-valuation, then /model-summary"}

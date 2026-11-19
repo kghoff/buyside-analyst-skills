@@ -1,12 +1,18 @@
-import openpyxl, json, subprocess, sys, pathlib, datetime
-from conftest import FIX
+import datetime
+import json
+import os
+import pathlib
+import subprocess
+import sys
+
+import openpyxl
 PF = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "preflight.py"
 
 def mk(tmp, tabs, files):
     wb = openpyxl.Workbook(); wb.remove(wb.active)
     for t in tabs:
         ws = wb.create_sheet(t)
-        if t == "MOD": ws["C2"], ws["D2"] = "FY 25", "FY 26E"
+        if t == "MOD": ws["D2"], ws["E2"] = "2025", "2026E"
     m = tmp / "XYZ_model.xlsx"; wb.save(m)
     for f in files:
         p = tmp / "R" / f; p.parent.mkdir(parents=True, exist_ok=True); p.write_text("# x\n")
@@ -41,14 +47,14 @@ def test_long_version_report_alone_is_not_present(tmp_path):
 
 def test_mod_without_forecast_names_forecast(tmp_path):
     m = mk(tmp_path, ALL, REQ)
-    wb = openpyxl.load_workbook(m); wb["MOD"]["D2"] = "FY 26"; wb.save(m)
+    wb = openpyxl.load_workbook(m); wb["MOD"]["E2"] = "2026"; wb.save(m)
     j = run(m, tmp_path / "R")
     assert j["status"] == "stop" and any("/model-forecast" in x["fix"] for x in j["missing"])
 
 def fresh(tmp, note_date):
     m = mk(tmp, ALL + ["Px Events"], REQ + [f"Valuation/{note_date} XYZ Valuation Note.md"])
     wb = openpyxl.load_workbook(m)
-    wb["MOD"]["E2"], wb["MOD"]["F2"] = "Q3 26", "Q4 26E"
+    wb["MOD"]["D2"], wb["MOD"]["E2"], wb["MOD"]["F2"] = "Q3 26", "Q4 26E", "2026E"
     ws = wb["Px Events"]
     ws["A3"], ws["B3"] = "Period", "Full-results release date"
     ws["A4"], ws["B4"] = "Q3 26", datetime.datetime(2026, 11, 5)
@@ -67,3 +73,18 @@ def test_note_after_release_is_fresh(tmp_path):
 def test_unjudgeable_freshness_warns_not_stops(tmp_path):
     j = run(mk(tmp_path, ALL, REQ), tmp_path / "R")
     assert j["status"] == "ok" and j["stale"] is None and j["warnings"]
+
+def test_summary_work_older_than_release_is_stale_even_with_fresh_note(tmp_path):
+    m = fresh(tmp_path, "2026-11-08")
+    f = tmp_path / "_model_work" / "model-summary" / "build.json"
+    f.parent.mkdir(parents=True); f.write_text("{}")
+    old = datetime.datetime(2026, 11, 2).timestamp()
+    os.utime(f, (old, old))
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "stop" and j["stale"]["quarter"] == "Q3 26"
+
+def test_newest_note_by_date_decides(tmp_path):
+    m = fresh(tmp_path, "2026-11-01")
+    (tmp_path / "R" / "Valuation" / "2026-11-08 XYZ Valuation Note.md").write_text("# x\n")
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "ok" and j["stale"] is None
