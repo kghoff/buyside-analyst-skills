@@ -94,7 +94,13 @@ any. Problems → SendMessage them all to the same agent; run both again. After 
 python3 -I "$SK/build.py" --model "$M" --work "$W" --ticker <T> --out "$W/out.xlsx" $V
 python3 -I "$SK/verify.py" --out "$W/out.xlsx" --work "$W"
 ```
-Add `--refreeze` only if the user asks to freeze the forecast again for the same quarter. build.py never touches `M`,
+Add `--refreeze` only if the user asks to freeze the forecast again for the same quarter. If the tab already holds
+/model-earnings-after's wrap (bands 9-15) for this same quarter, build.py stops (the rebuild would clear it): **ask
+the user** (AskUserQuestion) "Rebuild the preview and clear the after-print wrap (restore it with
+/model-earnings-after <T> --rebuild), or stop?" Rebuild → rerun build.py with `--clear-after`, and tell the user to run
+`/model-earnings-after <T> --rebuild` afterwards; stop → stop. A preview for a new quarter clears last quarter's
+wrap without asking; when the JSON says `after_cleared` true, tell the user (the wrap lives on in the after-print note
+and the Call Notes tab, which build.py never touches). build.py never touches `M`,
 and stops if any part of the workbook other than the Earnings tab (and the Consensus tab when it fills it, plus the
 workbook, styles and content-type parts it must update) changed. It prints JSON; keep for the report: `stance_rule`
 and `stance_used`, `users_kept`, `variance` (where the grid went, and any `skipped` or `dropped` rows), `frozen`

@@ -42,6 +42,10 @@ Why things are the way they are. Read before changing scripts.
   takes a number or text.
 - The frozen forecast is re-frozen only for a new quarter (or --refreeze), so a rerun the day before the print keeps
   the pre-print view model-earnings-after compares against.
+- The tab is rebuilt whole, so a rerun drops model-earnings-after's bands 9-15. For the same quarter that wrap is
+  still live work, so build.py stops unless given --clear-after (model-earnings-after --rebuild puts it back from its
+  saved plan); for a new quarter the wrap is history and goes without asking, since it lives on in the after-print
+  note and the Call Notes tab (a separate tab the rebuild never touches).
 - lay_out runs twice: the rule (band 1) and the set-up row read rows below them and the thresholds (band 8); pass 1
   finds every row, pass 2 writes the formulas. The layout never depends on the refs; build.py checks the passes agree.
 - Formulas nest IF(ISNUMBER(x), test, FALSE) instead of AND(ISNUMBER(x), test): AND evaluates every argument, so an

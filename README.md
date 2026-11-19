@@ -48,6 +48,7 @@ report.
 | 12 | model-short | Checks whether there's a short, and what kind | model-valuation | Short Check tab: FEV scorecard with code and agent ticks, short type and alpha bucket, verdict against a fixed rule, subpar-algorithm IRR wedge, risk case and R/R, print move, short interest, borrow drag, VaR max position; short note |
 | 13 | model-earnings-before | Prepares for the next print | model-valuation (model-consensus if done) | Earnings tab: the call and a stance by a fixed rule, print risk / reward and implied PSUC, set-up and blow-up flags, model checks on the quarter (stacks, seasonality, hockey stick), base rates and implied move, guidance trail, variance grid (fills the Consensus table, asking first if you typed in it), frozen forecast; preview note |
 | 14 | model-update | Rolls the reported quarter into the model | the print (model-earnings-before before it) | The quarter's actuals in MOD from the earnings release, each matched to its row, tied out and noted; lines the release doesn't print keep the old forecast in orange placeholders until the 10-Q rerun fills them; restated history only on your yes; new guidance recorded for Filings Charts; a targeted forecast roll after a thesis read, which you approve as a was-to-now table; ends with the list of skills to rerun |
+| 15 | model-earnings-after | Wraps the print | the call and model-update (then the reruns it lists) | Earnings tab bands 9-15: actual vs the frozen forecast, SFOT, the move in sigmas against the expected and implied move, estimates and valuation before and after, IRR at today's price, guidance and long-term target pace, the thesis checkpoint and a react call; Call Notes tab (quarters side by side, near-verbatim lines with file:line); after-print note in Earnings Reviews; rerun at T+7 for the drift |
 | – | model-industry | Builds the industry view (optional) | the model; research-filings | Industry P&L and Industry Comparison tabs from public peers |
 | – | model-consensus | Tracks the Street (optional) | the model; research-street | Broker ratings, targets, estimates, rating history, consensus snapshots |
 
@@ -87,7 +88,8 @@ Commands are `/buyside:<skill> TICKER`, e.g. `/buyside:collect-documents DXCM`.
 
 1. Python packages: `pip install -r requirements.txt`
 2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus`,
-   `skills/model-short`, `skills/model-price-history` and `skills/model-multiples` in the installed plugin folder (`/plugin` shows where it is).
+   `skills/model-short`, `skills/model-price-history`, `skills/model-multiples`, `skills/model-earnings-before` and
+   `skills/model-earnings-after` in the installed plugin folder (`/plugin` shows where it is).
 3. LibreOffice (recalculates and renders the workbooks): `brew install --cask libreoffice`
 4. PDF, OCR and report tools: `brew install poppler tesseract pango` (pango is needed by WeasyPrint)
 5. Google Chrome, used to save web pages as PDFs.
@@ -123,6 +125,9 @@ One ticker through the chain. Each skill tells you what it decided when it finis
 | 10 | `/buyside:model-multiples TICKER` | How you get peer and market data (free or paid); which comps to use |
 | 11 | `/buyside:model-valuation TICKER` | Nothing. The agent's choices are yellow cells you own; change any and a rerun keeps it. |
 | 12 | `/buyside:model-short TICKER` | Your prime broker's borrow rate if you know it. The agent's choices are yellow cells you own. |
+| 13 | `/buyside:model-earnings-before TICKER` | Only if you typed in the Consensus variance table (overwrite it?), or a same-quarter rerun would clear the after-print wrap |
+| 14 | `/buyside:model-update TICKER` | Restated history (update it?); your approval of the forecast roll |
+| 15 | `/buyside:model-earnings-after TICKER` | Only if the call transcript isn't posted yet (save it yourself or stop). Rerun at T+7 for the drift. |
 | opt | `/buyside:model-industry TICKER` | Which peers to include |
 | opt | `/buyside:model-consensus TICKER` | Nothing; rerun after each earnings print |
 
@@ -140,7 +145,6 @@ Every skill asks you to close the model in Excel if it is open.
 
 ## Roadmap
 
-- `model-update`: roll the model forward after each earnings print.
 - `write-pitch-deck`: turn the model and research into a pitch deck.
 - `write-thesis`: write the investment thesis.
 

@@ -1,0 +1,1 @@
+{"name": "model-earnings-after", "private": true, "type": "module", "dependencies": {"yahoo-finance2": "3.13.2"}}

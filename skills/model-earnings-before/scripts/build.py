@@ -53,6 +53,7 @@ CHECK_HEADS = ["% yoy", "% yoy, quarter before", "2-year stack", "2-year stack, 
                "Hockey stick?"]
 CHECK_KEYS = ["yoy", "yoy_prev", "st2", "st2_prev", "st3", "qoq", "qoq_avg", "margin", "margin_avg", "incr"]
 FROZEN_RE = re.compile(r"^7\. FROZEN FORECAST: (.+?), frozen (\d{4}-\d{2}-\d{2})")
+AFTER_RE = re.compile(r"^9\. ACTUAL VS FROZEN")                # model-earnings-after's first band (bands 9-15)
 
 
 def tab_part(path):
@@ -107,6 +108,21 @@ def read_frozen(path):
         rows.append({"label": g[(r, 1)], "q": g.get((r, 2)), "fy": g.get((r, 3))})
         r += 1
     return {"quarter": m.group(1), "date": m.group(2), "rows": rows}
+
+
+def _has_after(path):
+    """True when column A of the tab holds model-earnings-after's band 9 (the after-print wrap, bands 9-15)."""
+    import openpyxl
+    if not path or not os.path.exists(path):
+        return False
+    wb = openpyxl.load_workbook(path, read_only=True)
+    try:
+        if TAB not in wb.sheetnames:
+            return False
+        return any(isinstance(v, str) and AFTER_RE.match(v.strip())
+                   for (v,) in wb[TAB].iter_rows(min_col=1, max_col=1, values_only=True))
+    finally:
+        wb.close()
 
 
 def _note(x, extra=""):
@@ -530,7 +546,7 @@ def write_tab(pkg, w):
     return part
 
 
-def build(model, work, ticker, out, variance="earnings", force_variance=False, refreeze=False):
+def build(model, work, ticker, out, variance="earnings", force_variance=False, refreeze=False, clear_after=False):
     if os.path.abspath(out) == os.path.abspath(model):
         raise SystemExit("model-earnings-before: --out must be a copy, not the model itself.")
     ctx = json.load(open(os.path.join(work, "context.json")))
@@ -554,6 +570,11 @@ def build(model, work, ticker, out, variance="earnings", force_variance=False, r
     calc = _math(ctx, used, existing_v)
 
     old = read_frozen(model)
+    after = _has_after(model)                                   # the rebuild drops bands 9-15 with the old tab
+    if after and old and old["quarter"] == ctx["quarter"] and not clear_after:
+        raise SystemExit("model-earnings-before: the Earnings tab holds the after-print wrap (bands 9-15) for "
+                         f"{ctx['quarter']}. Rebuilding the preview clears it. Rerun with --clear-after, then run "
+                         f"/model-earnings-after {ticker} --rebuild to put it back (same answers, your edits kept).")
     if old and old["quarter"] == ctx["quarter"] and not refreeze:
         frozen = {**old, "fy": ctx["fy"], "kept": True}
     else:
@@ -620,7 +641,8 @@ def build(model, work, ticker, out, variance="earnings", force_variance=False, r
         os.remove(vnext)
     return {"tab": TAB, "users_kept": sorted(users), "changed_parts": bad, "stance_rule": calc["rule"],
             "stance_used": used[LABEL["stance"]], "variance": var,
-            "frozen": {k: frozen[k] for k in ("quarter", "date", "kept")}, "warnings": warnings}
+            "frozen": {k: frozen[k] for k in ("quarter", "date", "kept")}, "after_cleared": after,
+            "warnings": warnings}
 
 
 def main():
@@ -632,8 +654,10 @@ def main():
     ap.add_argument("--variance", choices=["consensus", "earnings"], required=True)
     ap.add_argument("--force-variance", action="store_true")
     ap.add_argument("--refreeze", action="store_true")
+    ap.add_argument("--clear-after", action="store_true")
     a = ap.parse_args()
-    print(json.dumps(build(a.model, a.work, a.ticker.upper(), a.out, a.variance, a.force_variance, a.refreeze),
+    print(json.dumps(build(a.model, a.work, a.ticker.upper(), a.out, a.variance, a.force_variance, a.refreeze,
+                           a.clear_after),
                      indent=1, default=str))
 
 
