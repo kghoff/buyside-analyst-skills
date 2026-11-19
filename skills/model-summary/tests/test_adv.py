@@ -56,3 +56,34 @@ def test_everything_fails_stops_and_names_the_file(fixture_model, tmp_path):
     os.makedirs(work)
     with pytest.raises(SystemExit, match="test_us_d.csv"):
         adv.adv(fixture_model, None, str(tmp_path), "TEST", work, fetch=lambda w, t: False)
+
+
+def test_yahoo_missing_node_is_a_failed_route_not_a_crash(monkeypatch, tmp_path):
+    def nope(*a, **k):
+        raise FileNotFoundError("node")
+    monkeypatch.setattr(adv.subprocess, "run", nope)
+    assert adv.yahoo(str(tmp_path), "TEST") is False
+
+
+def test_hand_csv_is_never_overwritten_by_the_download(fixture_model, tmp_path):
+    work = str(tmp_path / "w")
+    _csv(os.path.join(work, "test_us_d.csv"), vol=lambda k: 5_000_000)
+    r = adv.adv(fixture_model, None, str(tmp_path), "TEST", work,
+                fetch=lambda w, t: (_csv(os.path.join(w, "test_us_d.csv"), last_day=7), True)[1])
+    assert r["route"] == "work_csv" and abs(r["value"] - 5.0) < 1e-9
+    assert open(os.path.join(work, "test_us_d.csv")).read().count("5000000") == 70
+
+
+def test_zero_or_garbage_volume_rows_are_not_counted(tmp_path):
+    p = str(tmp_path / "x.csv")
+    _csv(p, n=70)
+    with open(p, "a") as f:
+        f.write("2026-11-15,1,1,1,50,abc\n2026-11-16,1,1,1,50,0.0\n2026-11-17,1,1,1,50,-5\n")
+    assert adv.from_csv(p)["last"] == "2026-11-14"
+
+
+def test_failure_message_says_why_each_file_failed(fixture_model, tmp_path):
+    _csv(str(tmp_path / "TEST" / "Price Data" / "test_us_d.csv"), n=30)
+    work = str(tmp_path / "w")
+    with pytest.raises(SystemExit, match="63"):
+        adv.adv(fixture_model, None, str(tmp_path), "TEST", work, fetch=lambda w, t: False)
