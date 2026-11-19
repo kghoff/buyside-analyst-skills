@@ -18,7 +18,7 @@ from openpyxl.utils import get_column_letter
 HERE = os.path.dirname(os.path.abspath(__file__))
 EB = os.path.abspath(os.path.join(HERE, "..", "..", "..", "model-earnings-before"))
 EBFX = os.path.join(EB, "tests", "fixtures")
-TICKER, Q, QE, FY = "TEST", "Q4 26", "Q4 26E", "2026"
+TICKER, Q, QE, FY, FYE = "TEST", "Q4 26", "Q4 26E", "2026", "2026E"   # MOD headers are strings there
 TODAY_BEFORE = "2026-11-18"                       # the day model-earnings-before froze the quarter
 RELEASE_DAY, REACTION_DAY = dt.date(2027, 2, 10), dt.date(2027, 2, 11)
 DAY_MOVE, SPY_MOVE, IDIO = 0.08, 0.005, 0.075     # idio = move - beta (1.0) x SPY
@@ -90,12 +90,23 @@ def _update_work(model_dir, model_path):
            if getattr(c, "value", None) is not None}
     wb.close()
     json.dump({"MOD": mod}, open(os.path.join(qw, "values.json"), "w"), default=str)
-    col = next(k[:-1] for k, v in mod.items() if v == QE and k[:-1].isalpha() and k[-1] == "2" and len(k) <= 4)
-    unit_row = next(int(k[1:]) for k, v in mod.items() if k.startswith("B") and k[1:].isdigit() and v == "Units")
-    ref = f"{col}{unit_row}"
-    json.dump({"quarter": Q, "column": col, "fy_column": None, "awaiting": [],
+    col, fy_col = _head_col(mod, QE), _head_col(mod, FYE)
+    units = [k for k, v in mod.items() if k.startswith("B") and k[1:].isdigit() and v == "Units"]
+    if not units:
+        raise RuntimeError("model-earnings-before's fixture MOD has no 'Units' row in column B")
+    ref = f"{col}{units[0][1:]}"
+    json.dump({"quarter": Q, "column": col, "fy_column": fy_col, "awaiting": [], "typed_subtotals": [],
+               "release_values": [],
                "placeholders": [{"ref": ref, "key": PLACEHOLDER_KEY, "kind": "10-Q", "value": mod[ref]}]},
               open(os.path.join(qw, "state.json"), "w"))
+
+
+def _head_col(mod, head):
+    """The column letter whose MOD row-2 header is `head`, from a {ref: value} dict."""
+    cols = [k[:-1] for k, v in mod.items() if v == head and k[:-1].isalpha() and k[-1] == "2" and len(k) <= 4]
+    if not cols:
+        raise RuntimeError(f"model-earnings-before's fixture MOD has no {head!r} header in row 2")
+    return cols[0]
 
 
 def _trading_days(start, end):
@@ -112,12 +123,25 @@ def _print(path):
     an after-print Valuation tab."""
     wb = openpyxl.load_workbook(path)
     mod = wb["MOD"]
-    col = next(c.column for c in mod[2] if c.value == QE)
+    heads = {c.value: c.column for c in mod[2] if c.value is not None}
+    for h in (QE, FYE):
+        if h not in heads:
+            raise RuntimeError(f"model-earnings-before's fixture MOD has no {h!r} header in row 2")
+    col, fy_col = heads[QE], heads[FYE]
     mod.cell(2, col, Q)
+    mod.cell(2, fy_col, FY)                        # model-update rolls the FY column on a Q4 print
+    changed = set()
     for r in range(3, mod.max_row + 1):
         key = MOD_KEYS.get(mod.cell(r, 2).value)
-        if key and isinstance(mod.cell(r, col).value, (int, float)):
-            mod.cell(r, col, mod.cell(r, col).value * ACTUAL_X[key])
+        old, fy = mod.cell(r, col).value, mod.cell(r, fy_col).value
+        if key and isinstance(old, (int, float)) and isinstance(fy, (int, float)):
+            new = old * ACTUAL_X[key]
+            mod.cell(r, col, new)
+            mod.cell(r, fy_col, fy + new - old)
+            changed.add(key)
+    if "rev" not in changed:
+        raise RuntimeError("Q4 26 revenue was not changed (not a number in model-earnings-before's fixture?): "
+                           "the actuals would equal the freeze")
     px = wb["Px Data"]
     last = max(r for r in range(5, px.max_row + 1) if px.cell(r, 1).value)
     d0, p, s = px.cell(last, 1).value, px.cell(last, 2).value, px.cell(last, 3).value
