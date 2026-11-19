@@ -219,7 +219,7 @@ Tell the user, in plain English:
    suggested for /model-forecast (tell the user to make them AFTER the 10-Q rerun: a row inserted or moved before
    it makes the rerun stop, because state.json names the waiting cells by row), and that the forecast write-up (`$MWF/forecast_writeup.md`) predates the roll.
 5. Rerun, in order: /model-price-history, /model-consensus, /model-dcf, /model-multiples, /model-valuation,
-   /model-short (if short), model-earnings-after (once it exists), /model-earnings-before about two weeks before the
+   /model-short (if short), /model-earnings-after, /model-earnings-before about two weeks before the
    next print.
 
 ## 10-Q rerun
