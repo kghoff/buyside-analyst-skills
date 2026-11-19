@@ -8,12 +8,11 @@ usage: python3 build_deck.py --plan pitch_plan.json --template assets/pitch_temp
   Text placeholders get the plan's text with every {key} replaced by its `shown` (fill.py); the builder only sets
   paragraph levels, the template styles them. Area placeholders are frames: their position is read, a native table or
   chart is drawn there and the placeholder is deleted. Placeholders a slide does not use are deleted.
-- Model data is read from the recalculated copy by label or header, never by address: SUM's cap table ("Cap table"
-  block) and estimates grid ("Internal estimates" block); Px Data's "Date" and "<T> close" columns with Px Events'
-  "Full-results release date" column (setup chart); Multiples' "WEEKLY DATA" block ("Week", "P/E", "S&P 500 P/E",
-  "Core-peer median P/E"; valuation chart); Valuation's "Reward / risk ladder" block ("Entry", "Reward", "Risk",
-  "R/R"; risk_reward ladder and chart). A tab or label that is missing puts a text note in that area and prints a
-  "WARNING:" line; the build goes on.
+- Model data is read from the recalculated copy by label or header, never by address (model_reads.py): SUM's cap
+  table and estimates grid (summary), Px Data closes with Px Events release dates (setup chart), Multiples' weekly
+  P/E history against the S&P 500 and core peers, GAAP with GAAP (valuation chart, titled with its basis), and
+  Valuation's "4c. Reward / risk ladder" block (risk_reward ladder and chart). A tab or label that is missing puts a
+  text note in that area and prints a "WARNING:" line; the build goes on.
 - Pictures: {"png": <file in --tabs>} or {"pdf": <file under --research>, "page": n, "crop": [x0, y0, x1, y1]}, fitted
   inside the placeholder keeping the aspect ratio.
 - Speaker notes = the slide's notes plus one "UNVERIFIED: <problem>" line per --unverified item ({"key"|"quote",
@@ -49,6 +48,15 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with pyt
 from common import THEME  # noqa: E402
 from common import load  # noqa: E402
 from fill import fill  # noqa: E402
+from model_reads import Values  # noqa: E402
+from model_reads import cap_table  # noqa: E402
+from model_reads import estimates_grid  # noqa: E402
+from model_reads import ladder  # noqa: E402
+from model_reads import num  # noqa: E402
+from model_reads import pe_history  # noqa: E402
+from model_reads import price_history  # noqa: E402
+from model_reads import show  # noqa: E402
+from model_reads import text_sign  # noqa: E402
 
 FONT = THEME["font"]
 SETUP_YEARS = 3          # the set-up chart shows the last three years of daily closes, as weekly closes
@@ -66,86 +74,8 @@ def rgb(key):
     return RGBColor.from_string(THEME[key])
 
 
-# ------------------------------------------------------------------ values copy: read by label or header
-def num(v):
-    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
-
-
-def as_date(v):
-    if isinstance(v, dt.datetime):
-        return v.date()
-    if isinstance(v, dt.date):
-        return v
-    n = num(v)
-    return dt.date(1899, 12, 30) + dt.timedelta(days=int(n)) if n and n > 1000 else None
-
-
 def serial(d):
     return (d - dt.date(1899, 12, 30)).days
-
-
-class Values:
-    """The recalculated copy, each tab read once into a grid of rows (0-based lists)."""
-
-    def __init__(self, path):
-        import openpyxl
-        self.wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        self.grids = {}
-
-    def grid(self, name):
-        if name not in self.grids:
-            names = {n.lower(): n for n in self.wb.sheetnames}
-            real = names.get(name.lower())
-            self.grids[name] = ([list(r) for r in self.wb[real].iter_rows(values_only=True)] if real else None)
-        return self.grids[name]
-
-
-def cell(g, r, c):
-    return g[r][c] if 0 <= r < len(g) and 0 <= c < len(g[r]) else None
-
-
-def text_of(v):
-    return v.strip() if isinstance(v, str) else ""
-
-
-def find(g, pred, rows=None):
-    """(row, col) of the first cell, row by row, whose text passes pred."""
-    for r in rows if rows is not None else range(len(g)):
-        for c, v in enumerate(g[r] if r < len(g) else []):
-            if pred(text_of(v)):
-                return r, c
-    return None
-
-
-def column_after(g, r0, c):
-    """Cells of column c below row r0 until the first empty one: [(row, value)]."""
-    out, r = [], r0 + 1
-    while cell(g, r, c) not in (None, ""):
-        out.append((r, cell(g, r, c)))
-        r += 1
-    return out
-
-
-# ------------------------------------------------------------------ formats for model values
-def show(v, kind):
-    n = num(v)
-    if n is None:
-        return "n/a" if v not in (None, "") else ""
-    return {"px": f"${n:,.2f}", "mn": f"{n:,.0f}", "eps": f"{n:,.2f}", "x": f"{n:,.1f}x", "bps": f"{n:+,.0f}",
-            "pct": f"{n:.1%}", "spct": f"{n:+.1%}"}[kind]
-
-
-def sign_colour(v):
-    n = num(v)
-    return None if n is None or n == 0 else ("good" if n > 0 else "bad")
-
-
-def text_sign(t):
-    """good / bad from a shown string's sign ('+31%' good, '-15%' or '(15%)' bad); None if unsigned."""
-    t = t.strip()
-    if t[:1] in "-(−–":
-        return "bad"
-    return "good" if t[:1] == "+" else None
 
 
 # ------------------------------------------------------------------ drawing helpers
@@ -293,7 +223,7 @@ def inside(root, rel):
 class Ctx:
     def __init__(self, plan, values, research, tabs, unverified, tmp):
         self.plan, self.v, self.research, self.tabs, self.tmp = plan, values, research, tabs, tmp
-        self.n, self.unverified, self.crops = plan["numbers"], unverified, {}
+        self.n, self.unverified, self.crops, self.extra_keys = plan["numbers"], unverified, {}, []
         self.T = plan.get("ticker", "")
 
     def f(self, t):
@@ -337,117 +267,6 @@ def put_picture(ctx, slide, ph, img, where):
 
 
 # ------------------------------------------------------------------ core slides that read the model
-CAP_ROWS = (  # (shown label, SUM label, exact?, after this SUM label, format, plan key fallback)
-    ("Price", "Price", False, None, "px", "price"), ("Market cap ($M)", "Market cap", False, None, "mn", None),
-    ("Enterprise value ($M)", "Enterprise value", False, None, "mn", None),
-    ("3M ADV ($M)", "3M ADV ($M)", True, None, "mn", None), ("Buy price", "Buy price", True, None, "px", "buy_price"),
-    ("No-brainer price", "No-brainer price", True, None, "px", "nobrainer_price"),
-    ("3-year target", "3-year target price", True, None, "px", "target_3y"),
-    ("3-year IRR", "IRR", True, "3-year target price", "pct", "irr_3y"),
-    ("12-month base target", "12-month target", True, None, "px", None),
-    ("12-month base return", "% return", True, "12-month target", "spct", "base_ret"),
-    ("12-month risk price", "Risk price", True, None, "px", None),
-    ("12-month risk return", "% return", True, "Risk price", "spct", "risk_ret"),
-    ("Blended reward / risk", "Blended reward / risk", True, None, "x", None))
-GRID_ROWS = (("Revenue", True), ("Street revenue", True), ("Revenue delta", False), ("EPS (", False),
-             ("Street EPS", True), ("Expected Delta", False), ("P/E", True), ("Street P/E", True), ("EV/EBITDA", True))
-
-
-def cap_table(ctx):
-    """[(label, shown, colour)] from SUM's cap table column, or None."""
-    g = ctx.v.grid("SUM")
-    at = g and find(g, lambda t: t.startswith("Cap table"))
-    if not at:
-        return None
-    r0, c = at
-    labels = [(r, text_of(cell(g, r, c))) for r in range(r0 + 1, len(g))]
-    out = []
-    for shown, lab, exact, after, kind, key in CAP_ROWS:
-        start = next((r for r, t in labels if t == after), None) if after else r0
-        if start is None:
-            continue
-        hit = next((r for r, t in labels if r > start and (t == lab if exact else t.startswith(lab))), None)
-        v = cell(g, hit, c + 1) if hit is not None else None
-        if num(v) is None and key in ctx.n:            # an action price write-pitch fills later: the plan's number
-            v_shown, col = ctx.n[key]["shown"], text_sign(ctx.n[key]["shown"]) if kind == "spct" else None
-        elif hit is None:
-            continue
-        else:
-            v_shown, col = show(v, kind), sign_colour(v) if kind == "spct" else None
-        out.append((shown, v_shown, col))
-    return out
-
-
-def grid_kind(lab):
-    low = lab.lower()
-    if "bps" in low:
-        return "bps"
-    if "delta" in low:
-        return "spct"
-    if "p/e" in low or "ev/" in low:
-        return "x"
-    if "eps" in low:
-        return "eps"
-    return "pct" if "%" in low or "margin" in low or "yield" in low else "mn"
-
-
-def estimates_grid(ctx):
-    """(header, rows, colours) of SUM's internal-estimates grid, chosen rows only, or None."""
-    g = ctx.v.grid("SUM")
-    at = g and find(g, lambda t: t.startswith("Internal estimates"))
-    if not at:
-        return None
-    r0, c0 = at
-    yc = [c for c in range(c0 + 1, len(g[r0 + 1]) if r0 + 1 < len(g) else 0) if text_of(cell(g, r0 + 1, c))]
-    lab = column_after(g, r0 + 1, c0)
-    rows, colours = [], {}
-    for want, exact in GRID_ROWS:
-        hit = next(((r, text_of(t)) for r, t in lab if (text_of(t) == want if exact else text_of(t).startswith(want))),
-                   None)
-        if not hit:
-            continue
-        r, t = hit
-        kind = grid_kind(t)
-        if kind in ("spct", "bps"):
-            for j, c in enumerate(yc, 1):
-                if sign_colour(cell(g, r, c)):
-                    colours[(len(rows), j)] = sign_colour(cell(g, r, c))
-        rows.append([t] + [show(cell(g, r, c), kind) for c in yc])
-    if not rows:
-        return None
-    return [text_of(cell(g, r0 + 1, c0)) or "$M except per share"] + [text_of(cell(g, r0 + 1, c)) for c in yc], rows, colours
-
-
-def price_history(ctx):
-    """(dates, closes, release dates) from Px Data and Px Events, or None."""
-    g = ctx.v.grid("Px Data")
-    hd = g and find(g, lambda t: t == "Date", range(min(15, len(g))))
-    if not hd:
-        return None
-    r0, dc = hd
-    heads = [text_of(v) for v in g[r0]]
-    want = f"{ctx.T} close"
-    cc = heads.index(want) if want in heads else next(
-        (j for j, h in enumerate(heads) if h.endswith(" close") and not h.startswith("SPY")), None)
-    if cc is None:
-        return None
-    pts = []
-    for row in g[r0 + 1:]:
-        d, p = as_date(cell([row], 0, dc)), num(cell([row], 0, cc))
-        if d and p is not None:
-            pts.append((d, p))
-    if not pts:
-        return None
-    rel = []
-    e = ctx.v.grid("Px Events")
-    at = e and find(e, lambda t: t == "Full-results release date", range(min(15, len(e))))
-    if at:
-        rel = [d for d in (as_date(v) for _, v in column_after(e, *at)) if d]
-    else:
-        warn("Px Events release dates not found; the set-up chart has no release markers")
-    return pts, rel
-
-
 def weekly(pts):
     """Last point of each ISO week."""
     out = {}
@@ -483,12 +302,14 @@ def xy_chart(slide, fr, xs, series, yfmt):
 def setup_chart(ctx, slide, ph, s):
     fr = frame(ph)
     drop(ph)
-    data = price_history(ctx)
+    data = price_history(ctx.v.grid("Px Data"), ctx.v.grid("Px Events"), ctx.T)
     if not data:
         warn("Px Data price history not found (no 'Date' / '<T> close' header); set-up chart left as a note")
         return note_box(slide, fr, "Px Data price history not found")
     pts, rel = data
-    pts.sort()
+    if rel is None:
+        warn("Px Events release dates not found; the set-up chart has no release markers")
+        rel = []
     d0 = pts[-1][0] - dt.timedelta(days=round(365.25 * SETUP_YEARS))
     pts = [x for x in pts if x[0] >= d0]
     line = weekly(pts) if len(pts) > WEEKLY_OVER else pts
@@ -524,79 +345,39 @@ def setup_chart(ctx, slide, ph, s):
     return ch
 
 
-def pe_history(ctx):
-    """(weeks, {header: [value or None]}) for P/E and the S&P / core-peer lines from Multiples' weekly block, or None."""
-    g = ctx.v.grid("Multiples")
-    at = g and find(g, lambda t: t == "WEEKLY DATA")
-    if not at or at[0] + 1 >= len(g):
-        return None
-    hr = at[0] + 1
-    heads = [text_of(v) for v in g[hr]]
-    if "Week" not in heads or "P/E" not in heads:
-        return None
-    wc, weeks, out = heads.index("Week"), [], {}
-    rows = []
-    for row in g[hr + 1:]:
-        d = as_date(cell([row], 0, wc))
-        if not d:
-            break
-        weeks.append(d)
-        rows.append(row)
-    for h in ("P/E", "S&P 500 P/E", "Core-peer median P/E"):
-        if h in heads:
-            ys = [num(cell([r], 0, heads.index(h))) for r in rows]
-            ys = [y if y is not None and y > 0 else None for y in ys]     # #N/A and negative P/E are gaps
-            if any(ys):
-                out[h] = ys
-    return (weeks, out) if out.get("P/E") else None
-
-
 def valuation_chart(ctx, slide, ph):
     fr = frame(ph)
     drop(ph)
-    data = pe_history(ctx)
+    data = pe_history(ctx.v.grid("Multiples"))
     if not data:
         warn("Multiples P/E history not found (no 'WEEKLY DATA' block with 'Week' and 'P/E'); chart left as a note")
         return note_box(slide, fr, "Multiples P/E history not found")
-    weeks, cols = data
-    med = statistics.median(y for y in cols["P/E"] if y is not None)
-    order = [("P/E", f"{ctx.T} P/E", "navy", None), ("median", f"{ctx.T} median {med:.1f}x", "grey", "dash"),
+    weeks, cols, basis = data
+    med = statistics.median(y for y in cols["pe"] if y is not None)
+    order = [("pe", f"{ctx.T} P/E", "navy", None), ("median", f"{ctx.T} median {med:.1f}x", "grey", "dash"),
              ("S&P 500 P/E", "S&P 500 P/E", "amber", None), ("Core-peer median P/E", "Core-peer median P/E", "good", None)]
     order = [o for o in order if o[0] == "median" or o[0] in cols]
     series = [(name, [med] * len(weeks) if key == "median" else cols[key]) for key, name, _, _ in order]
     ch, ser = xy_chart(slide, fr, weeks, series, '0"x"')
+    ch.has_title = True
+    ch.chart_title.text_frame.text = f"{ctx.T} P/E history ({basis})"
+    runs_font(ch.chart_title.text_frame.paragraphs[0], 10, bold=True, colour="navy")
     for sr, (_, _, colour, dash) in zip(ser, order):
         line_series(sr, colour, 1.25 if dash else 1.75, MSO_LINE_DASH_STYLE.DASH if dash else None)
     return ch
 
 
 
-def ladder(ctx):
-    """[(step, entry, reward, risk, rr)] from Valuation's reward / risk ladder block, or None."""
-    g = ctx.v.grid("Valuation")
-    at = g and find(g, lambda t: "reward / risk ladder" in t.lower())
-    if not at:
-        return None
-    r0, c0 = at
-    heads = [text_of(v) for v in g[r0]]
-    if not all(h in heads for h in ("Entry", "Reward", "Risk", "R/R")):
-        return None
-    cols = [heads.index(h) for h in ("Entry", "Reward", "Risk", "R/R")]
-    out, r = [], r0 + 1
-    while num(cell(g, r, c0)) is not None:
-        out.append([num(cell(g, r, c0))] + [cell(g, r, c) for c in cols])
-        r += 1
-    return out or None
-
-
 def risk_reward(ctx, slide, ph, s):
     cases = s.get("cases") or []
+    if not cases:
+        warn("risk_reward slide: the plan gives no cases")
     rows = [[ctx.f(c.get(k, "")) for k in ("name", "eps", "pe", "ret", "prob")] for c in cases]
     colours = {(i, 3): text_sign(r[3]) for i, r in enumerate(rows) if text_sign(r[3])}
     table(slide, frame(ph[12]), ["Case", "EPS", "P/E", "12-mo return", "Probability"], rows, [1.3, 1, 1, 1.3, 1.2],
           colours=colours)
     drop(ph[12])
-    lad = ladder(ctx)
+    lad = ladder(ctx.v.grid("Valuation"))
     fr13, fr14 = frame(ph[13]), frame(ph[14])
     drop(ph[13]), drop(ph[14])
     if not lad:
@@ -689,14 +470,15 @@ def fill_slide(ctx, slide, s, i):
     if t == "title":
         put_picture(ctx, slide, body[12], s["image"], where) if s.get("image") else drop(body[12])
     elif t == "summary":
-        cap = cap_table(ctx)
+        cap, used_keys = cap_table(ctx.v.grid("SUM"), ctx.n) or (None, [])
+        ctx.extra_keys = used_keys                       # plan numbers shown in place of SUM cells: UNVERIFIED scan
         if cap:
             table(slide, frame(body[12]), ["Cap table", ""], [[a, b] for a, b, _ in cap], [2.4, 1.6], size=10,
                   colours={(k, 1): c for k, (_, _, c) in enumerate(cap) if c}, row_h=0.26)
         else:
             warn("SUM cap table not found (no 'Cap table' block)")
             note_box(slide, frame(body[12]), "SUM cap table not found")
-        grid = estimates_grid(ctx)
+        grid = estimates_grid(ctx.v.grid("SUM"))
         if grid:
             hd, rows, cl = grid
             table(slide, frame(body[13]), hd, rows, [2.6] + [1] * (len(hd) - 1), size=9, colours=cl, row_h=0.26)
@@ -762,18 +544,21 @@ def fill_slide(ctx, slide, s, i):
     elif t == "checklist":
         rows = [[ctx.f(it.get("q")), ctx.f(it.get("a"))] for it in s.get("items", [])]
         fr = frame(body[12])
-        table(slide, fr, ["Question", "Answer"], rows, [10.3, fr[2] / 914400 - 10.3], size=11, row_h=0.32)
+        fw = fr[2] / 914400
+        qw = min(10.3, fw * 0.82)                        # question column 10.3in, unless the frame is narrower
+        table(slide, fr, ["Question", "Answer"], rows, [qw, fw - qw], size=11, row_h=0.32)
         drop(body[12])
     for p in list(slide.placeholders):                    # anything still empty: leave no "Click to add" box
         if p.placeholder_format.idx not in used or (p.has_text_frame and not p.text_frame.text.strip()
                                                      and p.placeholder_format.idx >= 10):
             drop(p)
     slide.notes_slide.notes_text_frame.text = notes(ctx, s)
+    ctx.extra_keys = []
 
 
 def notes(ctx, s):
     out = [ctx.f(s.get("notes", ""))]
-    blob = json.dumps(s)
+    blob = json.dumps(s) + "".join("{" + k + "}" for k in ctx.extra_keys)
     for u in ctx.unverified:
         if (u.get("key") and "{" + u["key"] + "}" in blob) or (u.get("quote") and u["quote"] in s.get("quotes", [])):
             out.append(f"UNVERIFIED: {u.get('problem', '')}")
@@ -803,10 +588,14 @@ def main(argv=None):
         raise SystemExit("--out-long and --out-core must be different files")
     plan = load(a.plan)
     unv = load(a.unverified) if a.unverified else []
-    with tempfile.TemporaryDirectory() as tmp:
-        ctx = Ctx(plan, Values(a.values), a.research, a.tabs, unv, tmp)
-        print("wrote", build(ctx, a.template, plan["slides"], a.out_long))
-        print("wrote", build(ctx, a.template, plan["slides"][:10], a.out_core))
+    values = Values(a.values)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx = Ctx(plan, values, a.research, a.tabs, unv, tmp)
+            print("wrote", build(ctx, a.template, plan["slides"], a.out_long))
+            print("wrote", build(ctx, a.template, plan["slides"][:10], a.out_core))
+    finally:
+        values.close()
 
 
 if __name__ == "__main__":

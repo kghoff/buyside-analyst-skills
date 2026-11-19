@@ -91,6 +91,7 @@ def _ladder(ws):
 
 def _weekly(ws):
     ws["A1"] = "XYZ multiples: where the stock trades against its history, the market and its peers"
+    ws["A2"] = "Trailing (TTM) multiples as known on each date: a quarter counts from the day after its release."
     ws["A40"] = "WEEKLY DATA"
     heads = ["Week", "Price", "EPS", None, "P/E", "S&P 500 P/E", "PEER close", "PEER P/E", "Core-peer median P/E"]
     for j, h in enumerate(heads):

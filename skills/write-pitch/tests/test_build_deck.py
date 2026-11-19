@@ -69,7 +69,8 @@ def decks(tmp_path_factory, model_values):
     tmp = tmp_path_factory.mktemp("deck")
     unv = tmp / "unverified.json"
     unv.write_text(json.dumps([{"key": "eps_27_street", "rule": "A1", "problem": "eps_27_street 3.05 is not SUM!K12"},
-                               {"quote": "q1", "rule": "A4", "problem": "q1 is not on line 214"}]))
+                               {"quote": "q1", "rule": "A4", "problem": "q1 is not on line 214"},
+                               {"key": "buy_price", "rule": "A3", "problem": "buy_price calc is off"}]))
     long, core, out = run(tmp, model_values, with_pictures(), "--unverified", str(unv))
     return long, core, out
 
@@ -133,6 +134,22 @@ def test_unverified_only_in_notes_of_slides_using_it(decks):
         assert ("UNVERIFIED: q1" in notes) == ("q1" in plan_s.get("quotes", []))
         assert "UNVERIFIED" not in face_text(s)
     assert any("UNVERIFIED" in s.notes_slide.notes_text_frame.text for s in long.slides)
+
+
+def test_summary_notes_flag_plan_numbers_shown_in_place_of_sum(decks):
+    # SUM's buy price is empty in the fixture, so the cap table shows the plan's buy_price: its UNVERIFIED line
+    # belongs on the summary slide even though the summary's own text never names {buy_price}
+    long, _, _ = decks
+    s = of_type(long, BASE, "summary")
+    assert "{buy_price}" not in json.dumps(BASE["slides"][1])
+    assert "UNVERIFIED: buy_price" in s.notes_slide.notes_text_frame.text
+    assert "$69.44" in cells(s)
+
+
+def test_valuation_chart_names_its_basis(decks):
+    long, _, _ = decks
+    ch = charts(of_type(long, BASE, "valuation"))[0]
+    assert ch.has_title and "P/E history (TTM)" in ch.chart_title.text_frame.text
 
 
 def test_pictures_fit_inside_their_frame(decks):
