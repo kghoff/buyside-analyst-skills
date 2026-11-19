@@ -51,6 +51,7 @@ report.
 | 14 | model-update | Rolls the reported quarter into the model | the print (model-earnings-before before it) | The quarter's actuals in MOD from the earnings release, each matched to its row, tied out and noted; lines the release doesn't print keep the old forecast in orange placeholders until the 10-Q rerun fills them; restated history only on your yes; new guidance recorded for Filings Charts; a targeted forecast roll after a thesis read, which you approve as a was-to-now table; ends with the list of skills to rerun |
 | 15 | model-earnings-after | Wraps the print | the call and model-update (then the reruns it lists) | Earnings tab bands 9-15: actual vs the frozen forecast, SFOT, the move in sigmas against the expected and implied move, estimates and valuation before and after, IRR at today's price, guidance and long-term target pace, the thesis checkpoint and a react call; Call Notes tab (quarters side by side, near-verbatim lines with file:line); after-print note in Earnings Reviews; rerun at T+7 for the drift |
 | 16 | model-summary | The PM's one-page SUM tab, first in the workbook | model-valuation (rerun each print) | SUM tab, the first sheet: the PM's one-page view. Cap table with 3M ADV, NTM FCF yield, 3-year target and IRR, 12-month base and risk on the primary multiple, internal estimates vs Street on the Street's own basis (GAAP or non-GAAP by evidence, margins in bps) with Expected Delta and multiples per year, the probability tree, multiple ranges, the tactical R/R ladder. Every number links to its home tab; empty yellow boxes for write-pitch; conditional formatting on returns, IRR, R/R and Street variance |
+| 17 | write-pitch | Writes the pitch | model-summary | A long deck, a core deck (slides 1-10), a 2-page pitch sheet and a Markdown copy in `Pitch/`: one Opus analyst reads everything and makes the call, a PM agent attacks it; fills SUM's write-pitch boxes; anything unverified goes to speaker notes and the report |
 | – | model-industry | Builds the industry view (optional) | the model; research-filings | Industry P&L and Industry Comparison tabs from public peers |
 | – | model-consensus | Tracks the Street (optional) | the model; research-street | Broker ratings, targets, estimates, rating history, consensus snapshots |
 
@@ -61,7 +62,7 @@ report.
 | `collect-` | Raw material: documents on disk |
 | `model-` | Additions to the Excel model |
 | `research-` | A written research report (PDF) |
-| `write-` | A deliverable such as a pitch deck (roadmap) |
+| `write-` | A deliverable such as a pitch deck |
 
 ## Design principles
 
@@ -132,6 +133,7 @@ One ticker through the chain. Each skill tells you what it decided when it finis
 | 14 | `/buyside:model-update TICKER` | Restated history (update it?); your approval of the forecast roll |
 | 15 | `/buyside:model-earnings-after TICKER` | Only if the call transcript isn't posted yet (save it yourself or stop). Rerun at T+7 for the drift. |
 | 16 | `/buyside:model-summary TICKER` | Nothing. The yellow cells (Street EPS basis, the bands, the write-pitch boxes) are yours; a rerun keeps them. |
+| 17 | `/buyside:write-pitch TICKER` | Your notes or primary research for the pitch; at the end, the list of unverified items to review |
 | opt | `/buyside:model-industry TICKER` | Which peers to include |
 | opt | `/buyside:model-consensus TICKER` | Nothing; rerun after each earnings print |
 
@@ -149,8 +151,6 @@ Every skill asks you to close the model in Excel if it is open.
 
 ## Roadmap
 
-- `write-pitch-deck`: turn the model and research into a pitch deck.
-- `write-thesis`: write the investment thesis.
 - Margin consensus in `model-consensus`, for companies the Street follows on margins. model-summary picks up any new
   Street metric through its mapping table.
 

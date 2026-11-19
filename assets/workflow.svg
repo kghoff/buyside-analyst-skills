@@ -94,11 +94,14 @@
   <!-- 7 Summarize -->
   <rect class="panel" x="620" y="420" width="260" height="300" rx="10"/>
   <circle class="num" cx="648" cy="452" r="14"/><text class="numt" x="648" y="457">7</text>
-  <text class="head" x="672" y="458">Summarize</text>
+  <text class="head" x="672" y="458">Summarize and pitch</text>
   <rect class="pill" x="640" y="496" width="220" height="40" rx="20"/><text class="skill" x="750" y="521">model-summary</text>
-  <text class="out" x="640" y="658">SUM tab: the PM's one-page</text>
-  <text class="out" x="640" y="676">view, first in the workbook.</text>
-  <text class="out" x="640" y="694">Rerun 6 and 7 each print.</text>
+  <rect class="pill" x="640" y="556" width="220" height="40" rx="20"/><text class="skill" x="750" y="581">write-pitch</text>
+  <path class="flow" d="M750 536 V554" marker-end="url(#a)"/>
+  <text class="out" x="640" y="640">SUM tab, then the pitch: long</text>
+  <text class="out" x="640" y="658">and core decks, 2-page sheet.</text>
+  <text class="out" x="640" y="676">Rerun 6 and 7 each print;</text>
+  <text class="out" x="640" y="694">pitch when you are ready.</text>
 
   <!-- between stages, row 2 -->
   <path class="flow" d="M1050 402 V410 H230 V494" marker-end="url(#a)"/>
