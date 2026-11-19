@@ -20,6 +20,7 @@ plugin `buyside`. Explain everything in plain English.
 | 11 | model-valuation | what it's worth and whether the setup is worth owning: the agent's Buy / Hold / Sell verdict, 1-3 multiples with reasons, 12-month R/R per multiple and blended, R/R ladder, 3-year IRR and the 3 R's, DCF bear / base / bull from an agent-run reverse DCF, probability tree, valuation note (Valuation tab) |
 | 12 | model-short | short check: FEV scorecard, short type and bucket, verdict, IRR wedge, risk case, print move, crowding, borrow, VaR sizing (Short Check tab) + short note |
 | 13 | model-earnings-before | earnings preview: call and stance by rule, print R/R and implied PSUC, set-up, model checks, base rates, implied move, guidance trail, variance grid, frozen forecast (Earnings tab) + preview note |
+| 14 | model-update | the reported quarter into MOD from the release (8-K Ex. 99.1), old forecast held in orange placeholders until the 10-Q, the 10-Q gaps on a rerun, restatements on approval, new guidance for Filings Charts, and a thesis-aware targeted forecast roll the user approves; rerun each print |
 | – | model-industry | optional: industry P&L and peer comparison tabs |
 | – | model-consensus | optional: broker ratings, targets, estimates, rating history, consensus snapshots; rerun each print |
 
