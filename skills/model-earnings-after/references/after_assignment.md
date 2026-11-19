@@ -27,8 +27,9 @@ Paths are relative to R. Note the line numbers of everything you will cite.
 - react: call, pattern, reason (>= 12 words: does the move fit what the print justified?), wrong_if and watch
   (>= 5 words each).
   - call: add (buy more), hold, trim (sell some), press (add to a short or a winning trade), exit (sell all).
-  - pattern, from the brief section 9, exactly one of: "hedge-fund dump that bounces", "short squeeze that rolls
-    over", "under-reaction", "conservative-guide panic", "sustainable deceleration", "weird reaction", "none".
+  - pattern, from the brief section 9, exactly one of:
+    "hedge-fund dump that bounces", "short squeeze that rolls over", "under-reaction",
+    "conservative-guide panic", "sustainable deceleration", "weird reaction", "none".
 - catalysts: a list of {text, when} (text required; when may be "" if no date is known).
 - controversies: a list of strings, what management still has to clarify.
 - headline (>= 8 words) and quarter_thoughts (>= 8 words): the wrap's first lines.
