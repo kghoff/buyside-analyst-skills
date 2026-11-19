@@ -14,7 +14,8 @@ import plan
 HERE = os.path.dirname(__file__)
 EX = json.load(open(os.path.join(HERE, "fixtures", "plan_example.json")))
 CTX = {"quarter": "Q4 26", "mode": "first", "drift_ready": True, "topics": list(EX["call_notes"]),
-       "mod_keys": ["INCOME STATEMENT | Revenue", "INCOME STATEMENT | Operating Income"]}
+       "mod_keys": ["INCOME STATEMENT | Revenue", "INCOME STATEMENT | Operating Income"],
+       "docs": {"transcript": mf.TRANSCRIPT, "release": mf.RELEASE, "preview": mf.PREVIEW}}
 
 
 def test_example_passes():
@@ -101,3 +102,78 @@ def test_rerun_needs_played_out():
 def test_played_out_not_asked_before_t_plus_7(mode, ready):
     """Before T+7 there is no drift to judge, so asking for played_out would force a guess."""
     assert plan.check({**EX, "played_out": None}, {**CTX, "mode": mode, "drift_ready": ready}) == []
+
+
+def test_percent_target_is_one_fraction():
+    """The pace math compares the target with Operating Income / Revenue, a fraction: a 20 typed for 20% would read
+    as 2,000%, and a target that differs from the number printed in the source is not the company's target."""
+    for tgt, av in ((20, 20), (0.20, 20), (0.25, 0.20)):
+        p = copy.deepcopy(EX)
+        p["lt_target"]["target"], p["lt_target"]["anchor_value"] = tgt, av
+        assert any(x.startswith("lt_target") for x in plan.check(p, CTX)), (tgt, av)
+    p = copy.deepcopy(EX)
+    p["lt_target"]["year"] = True                           # a bool is not a year
+    assert any(x.startswith("lt_target") for x in plan.check(p, CTX))
+
+
+def test_quotes_need_four_words():
+    p = copy.deepcopy(EX)
+    p["call_notes"]["Tone"][0]["quote"] = "feel better"
+    assert any(x.startswith("call_notes.Tone[0]") and "4 words" in x for x in plan.check(p, CTX))
+
+
+def test_call_items_cite_the_call_documents():
+    """SFOT, call notes and guidance summarize this print: a broker note or an old call is not what was said."""
+    p = copy.deepcopy(EX)
+    p["sfot"]["tone"]["anchor"] = "Sellside Research/_md/broker.md:4"
+    p["guidance"][0]["anchor"] = "Earnings Calls/_md/2026 Q3 TEST call.md:4"
+    probs = plan.check(p, CTX)
+    assert any(x.startswith("sfot.tone") and "call's own documents" in x for x in probs)
+    assert any(x.startswith("guidance[0]") and "call's own documents" in x for x in probs)
+    p = copy.deepcopy(EX)
+    p["lt_target"]["anchor"] = "Investor Day/_md/2025 investor day.md:12"     # any file under R is fine here
+    assert plan.check(p, CTX) == []
+
+
+def test_surprise_names_its_comparison():
+    """'Revenue was strong' is not a surprise; a surprise is against a number (frozen forecast, consensus...)."""
+    p = copy.deepcopy(EX)
+    p["sfot"]["surprise"]["reason"] = "Revenue was strong across every region and every product this quarter."
+    assert any(x.startswith("sfot.surprise") and "versus what" in x for x in plan.check(p, CTX))
+
+
+def test_silent_sfot_row_is_allowed():
+    """A call that never mentions tone or outlook gets a neutral row saying so, not a forced quote."""
+    p = copy.deepcopy(EX)
+    p["sfot"]["outlook"] = {"value": "neutral", "anchor": "none",
+                            "reason": "The call and the release were silent on guidance for the coming year."}
+    assert plan.check(p, CTX) == []
+    p["sfot"]["outlook"]["value"] = "positive"
+    assert any(x.startswith("sfot.outlook") for x in plan.check(p, CTX))
+
+
+def test_counts_and_guidance_text():
+    p = copy.deepcopy(EX)
+    p["call_notes"]["Tone"] = p["call_notes"]["Tone"] * 4
+    p["guidance"][0]["now"] = ""
+    probs = plan.check(p, CTX)
+    assert any("at most 3 points" in x for x in probs) and any(x.startswith("guidance[0].now") for x in probs)
+
+
+def test_malformed_plan_is_listed_not_crashed():
+    """The agent fixes what plan.py lists; a crash tells it nothing."""
+    assert plan.check("not a plan", CTX)[0].startswith("plan:")
+    p = copy.deepcopy(EX)
+    p["sfot"] = "all positive"
+    p["call_notes"]["Tone"] = ["a string"]
+    p["call_notes"]["Capital allocation"] = "buybacks"
+    p["guidance"] = [None]
+    p["lt_target"] = "20%"
+    p["checkpoint"] = "green"
+    p["react"] = None
+    p["catalysts"] = None
+    p["controversies"] = [3]
+    probs = plan.check(p, CTX)
+    for k in ("sfot", "call_notes.Tone[0]", "call_notes.Capital allocation", "guidance[0]", "lt_target",
+              "checkpoint", "react.call", "catalysts", "controversies"):
+        assert any(x.startswith(k) for x in probs), k

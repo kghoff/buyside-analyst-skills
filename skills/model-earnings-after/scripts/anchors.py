@@ -1,18 +1,25 @@
-"""(Copied from model-earnings-before, Nov 2026; keep _cell, _line, _quote and the number rules in sync. _walk and _quotes are model-earnings-after's.) Every anchored number and quote in after_plan.json checked against the cell or research line it cites.
+"""(Copied from model-earnings-before, Nov 2026; keep _cell, _line and the number rules in sync. _walk, _quotes,
+_quote's normalising and negation check, and the free-text number check are model-earnings-after's.) Every anchored
+number and quote in after_plan.json checked against the research line it cites. Run it only on a plan that passed
+plan.py (that is where shapes, enums and the call-documents-only rule are checked); a malformed plan still gets
+problems here, never a crash.
 
-check(plan, values_path, research_root, context) returns plain-English problems; [] means every anchor holds.
-- a cell (Sheet!$A$1): the recalculated model's value must match anchor_value, allowing the rounding anchor_value
-  shows (a stated 81.8 matches 81.755; decimals are counted as written, so 30.0 matches 29.96 but not 29.6); text
-  must be equal.
+check(plan, values_path, research_root, context, context_md="") returns plain-English problems; [] = every anchor holds.
 - a research line (<path>.md:N, relative to <research_dir>/<TICKER>/ and inside it): line N must print the number,
   as is, as a percent (x100 when followed by %) or in bps (x10,000 when the line says bps). "20-25%" prints 20% and
   25% (a hyphen between digits is a range); a number glued to letters before it (Q2, FY25, x2) is not a figure.
-- house: the value must be the house default (context["house"]) unless a reason of >= 12 words says why not.
-(model-valuation's ntm:<metric> forward-sum anchor is left out: plan.py allows only cell and line anchors here.)
-- judgment: not checked here (plan.py checks where it is allowed).
+  The long-term target's anchor_value and its year must both be printed on its line.
+- a cell (Sheet!$A$1): the recalculated model's value must match anchor_value, allowing the rounding anchor_value
+  shows; text must be equal. (No after-print field cites a cell today; kept in sync with the sibling.)
+- a quote: at least 4 words, found on the cited line ignoring case, spacing, curly quotes and dash styles, and not
+  straight after a negation (not / no / never / unlikely / ...n't within the 3 words before it): a quote that drops
+  the "not" reverses the company's words.
+- free text (every reason, the react fields, headline, quarter_thoughts): each figure must be printed in context.md
+  or on the item's own cited line, as written (8% matches 8.0%; no x100 conversion); otherwise the agent made it up.
 
 usage: anchors.py --plan P --context C [--values V] [--research R | --research-dir D]   (prints the problems; exit 1 if any)
-(--values defaults to context.json "values"; the research root to context.json "research".)"""
+(--values defaults to context.json "values"; the research root to context.json "research"; context.md is read from
+beside context.json.)"""
 import argparse
 import decimal
 import json
@@ -45,41 +52,120 @@ def _close(seen, claimed, d=None):
 
 
 def _walk(plan):
-    """(name, anchored dict) for every anchored number: only the long-term target the agent typed."""
+    """(name, anchored dict) for every anchored number: the long-term target and its year."""
     lt = plan.get("lt_target")
-    if lt:
+    if isinstance(lt, dict):
         yield "lt_target", {"anchor": lt.get("anchor"), "anchor_value": lt.get("anchor_value")}
+        yield "lt_target.year", {"anchor": lt.get("anchor"), "anchor_value": lt.get("year")}
+
+
+def _items(plan, key):
+    v = plan.get(key)
+    return v if isinstance(v, dict) else {}
 
 
 def _quotes(plan):
-    """(name, anchor, quote) for every quoted line: SFOT, the call notes, guidance and the long-term target."""
-    for k, x in (plan.get("sfot") or {}).items():
-        yield f"sfot.{k}", x.get("anchor"), x.get("quote")
-    for t, lst in (plan.get("call_notes") or {}).items():
-        for i, x in enumerate(lst or []):
-            yield f"call_notes.{t}[{i}]", x.get("anchor"), x.get("quote")
-    for i, g in enumerate(plan.get("guidance") or []):
-        yield f"guidance[{i}]", g.get("anchor"), g.get("quote")
+    """(name, anchor, quote) for every quoted line: SFOT, the call notes, guidance and the long-term target. An SFOT
+    row anchored 'none' (the call was silent on it; plan.py checks the rule) has no quote to check."""
+    for k, x in _items(plan, "sfot").items():
+        if isinstance(x, dict) and x.get("anchor") != "none":
+            yield f"sfot.{k}", x.get("anchor"), x.get("quote")
+    for t, lst in _items(plan, "call_notes").items():
+        for i, x in enumerate(lst if isinstance(lst, list) else []):
+            if isinstance(x, dict):
+                yield f"call_notes.{t}[{i}]", x.get("anchor"), x.get("quote")
+    g = plan.get("guidance")
+    for i, x in enumerate(g if isinstance(g, list) else []):
+        if isinstance(x, dict):
+            yield f"guidance[{i}]", x.get("anchor"), x.get("quote")
     lt = plan.get("lt_target")
-    if lt:
+    if isinstance(lt, dict):
         yield "lt_target", lt.get("anchor"), lt.get("quote")
 
 
-def _quote(name, a, quote, root):
+QUOTE_WORDS = 4
+NEGATION = re.compile(r"^(not|no|never|unlikely|cannot|.+n't)$")
+_SUBS = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2013": "-", "\u2014": "-", "\u00a0": " "}
+
+
+def _flat(s):
+    """Lower case, one space, straight quotes and apostrophes, plain hyphens: how a quote and its line compare."""
+    s = str(s).lower()
+    for a, b in _SUBS.items():
+        s = s.replace(a, b)
+    return " ".join(s.split())
+
+
+def _read_line(name, a, root):
+    """(line text, None) or (None, problem) for a file.md:N anchor inside root."""
     m = LINE.match(str(a))
     if not m:
-        return f"{name}: a quote needs a file.md:line anchor, got {a!r}"
+        return None, f"{name}: a quote needs a file.md:line anchor, got {a!r}"
     path = os.path.join(root, m["path"])
     if os.path.isabs(m["path"]) or not os.path.realpath(path).startswith(os.path.realpath(root) + os.sep):
-        return f"{name}: {a}: cite a file inside {root}"
+        return None, f"{name}: {a}: cite a file inside {root}"
     if not os.path.isfile(path):
-        return f"{name}: {a}: no such file under {root}"
+        return None, f"{name}: {a}: no such file under {root}"
     lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
     n = int(m["n"])
     if not 1 <= n <= len(lines):
-        return f"{name}: {a}: the file has {len(lines)} lines"
-    flat = lambda s: " ".join(str(s).lower().split())   # noqa: E731
-    return None if flat(quote) in flat(lines[n - 1]) else f"{name}: {a} reads {lines[n - 1].strip()[:120]!r}, not {quote!r}"
+        return None, f"{name}: {a}: the file has {len(lines)} lines"
+    return lines[n - 1], None
+
+
+def _quote(name, a, quote, root):
+    if not isinstance(quote, str) or len(quote.split()) < QUOTE_WORDS:
+        return f"{name}: the quote needs at least {QUOTE_WORDS} words, got {quote!r}"
+    line, p = _read_line(name, a, root)
+    if p:
+        return p
+    q, t = _flat(quote), _flat(line)
+    at = [i for i in range(len(t)) if t.startswith(q, i)]
+    if not at:
+        return f"{name}: {a} reads {line.strip()[:120]!r}, not {quote!r}"
+    if all(any(NEGATION.match(w.strip(".,;:!?\"'()")) for w in t[:i].split()[-3:]) for i in at):
+        return f"{name}: {a}: the quote drops a negation: the line reads {line.strip()[:120]!r}"
+    return None
+
+
+FIG = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
+
+
+def _figures(text):
+    return [float(x.replace(",", "")) for x in FIG.findall(str(text))]
+
+
+def _printed(f, seen):
+    """f (as written, its decimals giving the rounding: 8 matches 8.0, 7.5 does not match 7.6) is one of seen.
+    No x100 here: context.md prints percents as percents, and a fraction path would let 9.9% match a 0.1%."""
+    d = _decimals(f)
+    return any(_close(abs(s), f, d) for s in seen)
+
+
+def _free_text(plan):
+    """(name, text, anchor or None) for every free-text field whose figures must come from a source."""
+    for k, x in _items(plan, "sfot").items():
+        if isinstance(x, dict):
+            yield f"sfot.{k}.reason", x.get("reason"), x.get("anchor")
+    yield "checkpoint.reason", _items(plan, "checkpoint").get("reason"), None
+    for k in ("reason", "wrong_if", "watch"):
+        yield f"react.{k}", _items(plan, "react").get(k), None
+    yield "played_out.reason", _items(plan, "played_out").get("reason"), None
+    for k in ("headline", "quarter_thoughts"):
+        yield k, plan.get(k), None
+
+
+def _numbers(plan, root, context_md):
+    out, md = [], _figures(context_md or "")
+    for name, text, a in _free_text(plan):
+        if not isinstance(text, str):
+            continue
+        line = _read_line(name, a, root)[0] if a and LINE.match(str(a)) else None
+        seen = md + (_figures(line) if line else [])
+        for raw in FIG.findall(text):
+            if not _printed(float(raw.replace(",", "")), seen):
+                out.append(f"{name}: the number {raw} isn't in context.md or the quoted line; copy it from there")
+    return out
 
 
 class _Cells:
@@ -138,8 +224,11 @@ def _line(name, a, m, claimed, root):
     return f"{name}: {a} reads {text.strip()[:120]!r}, which does not print {claimed:g}"
 
 
-def check(plan, values_path, research_root, context):
-    """Plain-English problems with the plan's anchors; [] means every anchored number is where it says."""
+def check(plan, values_path, research_root, context, context_md=""):
+    """Plain-English problems with the plan's anchors; [] means every anchored number and quote is where it says.
+    context_md is context.md's text, the only other place a figure in free text may come from."""
+    if not isinstance(plan, dict):
+        return [f"plan: must be a JSON object, got {type(plan).__name__}"]
     house = (context or {}).get("house") or {}
     cells, out = _Cells(values_path), []
     for name, x in _walk(plan):
@@ -168,7 +257,7 @@ def check(plan, values_path, research_root, context):
         p = _quote(name, a, q, research_root)
         if p:
             out.append(p)
-    return out
+    return out + _numbers(plan, research_root, context_md)
 
 
 def main(argv=None):
@@ -188,7 +277,11 @@ def main(argv=None):
             import settings
             rd = settings.research_dir()
         root = os.path.join(rd, ctx["ticker"])
-    probs = check(json.load(open(a.plan)), a.values or ctx.get("values"), root, ctx)
+    md = os.path.join(os.path.dirname(os.path.abspath(a.context)), "context.md")
+    if not os.path.isfile(md):
+        print(f"no context.md beside {a.context}: rerun context.py", file=sys.stderr)
+        return 2
+    probs = check(json.load(open(a.plan)), a.values or ctx.get("values"), root, ctx, open(md).read())
     print("\n".join(probs) if probs else "anchors OK")
     return 1 if probs else 0
 

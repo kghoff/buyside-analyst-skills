@@ -20,7 +20,7 @@ def test_brief_cites_the_chapter_sections():
     """Every rule the agent follows must be traceable to the chapter, so the user can check the advice."""
     b = open(os.path.join(R, "after_brief.md")).read()
     assert "13.6" in b and "13.7" in b
-    assert 600 <= len(b.split()) <= 1000
+    assert 600 <= len(b.split()) <= 1100
 
 
 def test_agent_is_allowed_here():

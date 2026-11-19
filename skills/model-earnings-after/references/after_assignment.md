@@ -15,14 +15,21 @@ Paths are relative to R. Note the line numbers of everything you will cite.
 
 ## Decide
 - sfot: surprise, fundamentals, outlook, tone. Each: value positive / neutral / negative, a reason of >= 8 words,
-  an anchor file.md:N and a quote.
-- call_notes: one key per topic in context.json `topics`, exactly those, each a list of 0-3 points
-  {text, anchor, quote}. [] when the call said nothing on that topic. Q&A themes: up to 5, one per theme key.
+  an anchor file.md:N and a quote. The surprise reason must answer "versus what number?" and say so with one of the
+  words frozen, forecast, consensus, expected, implied or preview. If the call and the release were silent on a
+  row, give value "neutral", anchor "none", no quote, and a reason (>= 8 words) containing the word "silent".
+- call_notes: one key per topic in context.json `topics`, exactly those, each a list of at most 3 points
+  {text, anchor, quote}. [] when the call said nothing on that topic. Q&A themes: the 5 "Q&A theme" topics, one
+  theme each.
 - guidance: a list of items {item, before, now, change, anchor, quote}; item names what is guided (e.g. "2027
-  revenue"); change is one of raise / hold / cut / initiate / withdrawn / none.
-- lt_target: null, or {metric, num, den, target, year, anchor, anchor_value, quote}. num and den (den may be null
-  for a level, not a ratio) are MOD keys from context.json `mod_keys`; year a whole number. A ratio target is a
-  fraction: 20% -> target 0.20 and anchor_value 0.20 (the anchor line prints "20%"; a number before % is read x100).
+  revenue"); before and now are non-empty text ("none given" when there was none); change is one of
+  raise / hold / cut / initiate / withdrawn / none.
+- lt_target: null, or {metric, num, den, target, year, anchor, anchor_value, quote}. num and den (den null for a
+  level, not a ratio) are MOD keys from context.json `mod_keys`; year a whole number printed on the cited line.
+  target must equal anchor_value, in MOD's units: a percent is a fraction, so "20%" -> target 0.20 and anchor_value
+  0.20 (a number before % on the line is read x100). A ratio target must lie between 0 and 1.5. Use null for a
+  target that is not one number in MOD's units ("$1.5 billion" against a MOD in millions, "low double digits"),
+  and list that as a judgment call.
 - checkpoint: value green / yellow / red, reason >= 8 words.
 - react: call, pattern, reason (>= 12 words: does the move fit what the print justified?), wrong_if and watch
   (>= 5 words each).
@@ -37,8 +44,18 @@ Paths are relative to R. Note the line numbers of everything you will cite.
   >= 8 words} on whether the react call played out by T+7. Otherwise null.
 - judgment_calls: a list of every judgment call you made (at least one).
 
-Every quote is near-verbatim: copied from the cited line (case and spacing may differ), never a paraphrase.
-Never type a number the cited line does not print.
+## Rules code checks (plan.py first; anchors.py only on a plan that passed plan.py)
+- Quotes: at least 4 words, near-verbatim from the cited line (case, spacing, curly quotes and dash styles may
+  differ), never a paraphrase, and never cut so that it drops a "not", "no", "never" or "unlikely" just before it.
+- SFOT, call notes and guidance cite only this print's documents: context.json `docs.transcript`, `docs.release`
+  or `docs.preview`. lt_target may cite any file under R (an investor-day transcript or deck).
+- Numbers in free text (every reason, react's wrong_if and watch, headline, quarter_thoughts, played_out): copy
+  each figure from context.md or from that item's own cited line, and name where it comes from ("the 4.0% beat on
+  revenue against the frozen forecast"). Write figures as digits, not words. Never type a number no source prints.
+
+## T+7 rerun (context.json mode "rerun")
+Copy the previous W/after_plan.json, fill played_out, and change react only if the drift changes the call; say so
+in judgment_calls either way.
 
 ## Write
 W/after_plan.json in exactly this shape:
