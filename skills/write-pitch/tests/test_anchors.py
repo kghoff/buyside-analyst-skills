@@ -184,3 +184,80 @@ def test_quote_normalises_quotes_dashes_and_space(tmp_path, model_values):
     assert run(tmp_path, p, model_values, research=r)[0] == 0
     p["quotes"][0]["text"] = "We're growing"       # case-sensitive
     assert run(tmp_path, p, model_values, research=r)[0] == 1
+
+
+def test_calc_wrong_arity_is_a_problem(tmp_path, model_values):
+    for expr in ("max(2)", "abs(1,2)", "min()", "abs()"):
+        rc, out = run(tmp_path, with_number("c", 1.0, "1.0", "calc: " + expr), model_values)
+        assert rc == 1 and "[A3] c" in out and "Traceback" not in out, expr
+
+
+def test_bad_quotes_are_problems_not_crashes(tmp_path, model_values):
+    for q in ("just a string", None, {"id": "e", "text": "  ", "file": "Earnings Calls/_md/2026 Q3 XYZ call.md", "line": 214},
+              {"id": "b", "text": "We expect", "file": "Earnings Calls/_md/2026 Q3 XYZ call.md", "line": True},
+              {"id": "z", "text": "We expect", "file": "Earnings Calls/_md/2026 Q3 XYZ call.md", "line": 0}):
+        p = copy.deepcopy(BASE)
+        p["quotes"].append(q)
+        rc, out = run(tmp_path, p, model_values)
+        assert rc == 1 and "[A4]" in out, q
+
+
+def test_digit_inside_q3_is_not_a_match(tmp_path, model_values):
+    r = tmp_path / "res"
+    r.mkdir()
+    (r / "a.md").write_text("Q3 results were fine.\nGrowth was 28x or 3rd place, up 3.\n")
+    def hit(v, shown, ln):
+        return "[A2] n" in run(tmp_path, with_number("n", v, shown, f"a.md:{ln}"), model_values, research=r)[1]
+    assert hit(3.0, "3", 1)
+    assert not hit(3.0, "3", 2)
+    assert not hit(28.0, "28x", 2)
+
+
+def test_formula_without_value_says_not_recalculated(tmp_path, model_values):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    wb.active.title = "Valuation"
+    wb["Valuation"]["H2"] = "=1+1"
+    f = tmp_path / "raw.xlsx"
+    wb.save(f)
+    rc, out = run(tmp_path, with_number("x", 2.0, "2", "Valuation!H2"), f)
+    assert rc == 1 and "holds a formula but no value" in out and "recalculated" in out
+
+
+def test_dependent_calc_names_the_failed_key(tmp_path, model_values):
+    p = copy.deepcopy(BASE)
+    p["numbers"]["price"]["value"] = 80.0
+    p["numbers"]["price"]["shown"] = "$80.00"
+    rc, out = run(tmp_path, p, model_values)
+    line = next(ln for ln in out.splitlines() if ln.startswith("[A3] irr_3y"))
+    assert "depends on price, which failed [A1]" in line
+
+
+def test_percent_points_cell_passes_and_fraction_hint(tmp_path, model_values):
+    # Short Check!B5 holds 12.5, a cell in percentage points: value 0.125 shown 12.5% passes
+    assert run(tmp_path, with_number("d", 0.125, "12.5%", "'Short Check'!B5"), model_values)[0] == 0
+    rc, out = run(tmp_path, with_number("d", 31.0, "31%", "Valuation!F20"), model_values)
+    assert rc == 1 and "fractions" in out
+
+
+def test_negative_forms(tmp_path, model_values):
+    r = tmp_path / "res"
+    r.mkdir()
+    (r / "a.md").write_text("Loss of $(3.10) and down 15%.\n")
+    for shown, v in (("$(3.10)", -3.10), ("\u201315%", -0.15), ("\u221215%", -0.15), ("-15%", -0.15)):
+        rc, out = run(tmp_path, with_number("n", v, shown, "a.md:1"), model_values, research=r)
+        assert "[A2] n" not in out, (shown, out)
+    rc, out = run(tmp_path, with_number("n", 0.15, "\u201315%", "a.md:1"), model_values, research=r)
+    assert "[A2] n" in out
+
+
+def test_units_hint(tmp_path, model_values):
+    rc, out = run(tmp_path, with_number("n", 1.25, "$1.25bn", "SUM!H8"), model_values)
+    assert rc == 1 and "other units" in out and "$1,250m" in out
+
+
+def test_lowercase_ref_and_windows_path(tmp_path, model_values):
+    assert run(tmp_path, with_number("n", 72.4, "$72.40", "valuation!c5"), model_values)[0] == 0
+    rc, out = run(tmp_path, with_number("n", 15.0, "15", "Earnings Calls\\_md\\2026 Q3 XYZ call.md:214"),
+                  model_values)
+    assert rc == 1 and "forward slashes" in out
