@@ -239,7 +239,7 @@ async function main() {
     for (const id of wanted) {
       const e = manifest.items[id];
       const docs = id.startsWith('8k:') ? (e?.children || []).map((c) => [c, manifest.items[c]]) : [[id, e]];
-      if (docs.length === 0) console.log(`missing ${id} → : ${e?.reason || 'not fetched'}`);
+      if (docs.length === 0) console.log(`missing ${id} →  : ${e?.reason || 'not fetched'}`);
       for (const [cid, d] of docs) {
         const status = before[id] === 'local' ? 'local' : (d?.status || 'missing');
         console.log(`${status} ${d?.label || cid} → ${md(d) ? join(ticker, md(d)) : ''}${d?.reason && status !== 'found' && status !== 'local' ? ` : ${d.reason}` : ''}`);
