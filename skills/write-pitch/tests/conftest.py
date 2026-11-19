@@ -33,3 +33,11 @@ def tab_render(tmp_path_factory):
     wb.save(src)
     out = str(d / "tabs")
     return out, render_tabs.render(src, out), src
+
+
+@pytest.fixture(scope="session")
+def model_values(tmp_path_factory):
+    """Path of a throwaway workbook holding the cells fixtures/README.md lists (built by fixtures/make_values.py)."""
+    sys.path.insert(0, str(FIX))
+    from make_values import make_values
+    return make_values(tmp_path_factory.mktemp("values_fx") / "XYZ_values.xlsx")
