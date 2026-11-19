@@ -397,6 +397,81 @@
       "source": "Filings Charts tab"
     },
     {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "thesis.1",
+      "title": "Guidance Track Record",
+      "takeaway": "Management has a habit of guiding low and beating.",
+      "bullets": [
+        "Each recent guide was raised later in the year.",
+        "The Street anchors on the first guide."
+      ],
+      "notes": "Walk the chart.",
+      "source": "Filings Charts tab"
+    },
+    {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "thesis.2",
+      "title": "Mix Shift",
+      "takeaway": "The higher-margin line is the faster-growing one.",
+      "bullets": [
+        "Software grows faster than hardware.",
+        "Its share of revenue rises every year."
+      ],
+      "notes": "Walk the chart.",
+      "source": "Filings Charts tab"
+    },
+    {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "risks.1",
+      "title": "Backlog Cover",
+      "takeaway": "Signed backlog covers most of next year's plan.",
+      "bullets": [
+        "Backlog grew faster than revenue.",
+        "Cancellations stayed rare."
+      ],
+      "notes": "Walk the chart.",
+      "source": "Filings Charts tab"
+    },
+    {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "risks.2",
+      "title": "Rival Pricing",
+      "takeaway": "Rivals have raised prices, not cut them.",
+      "bullets": [
+        "The main rival raised list prices this year.",
+        "No rival has the installed base to win on price."
+      ],
+      "notes": "Walk the chart.",
+      "source": "Filings Charts tab"
+    },
+    {
+      "type": "two_column",
+      "section": "support",
+      "supports": "thesis.1",
+      "title": "Street Debate",
+      "takeaway": "The bears worry about a slowdown the backlog does not show.",
+      "left": {
+        "head": "Bull view",
+        "bullets": [
+          "Growth holds on new products.",
+          "Margins expand with mix."
+        ]
+      },
+      "right": {
+        "head": "Bear view",
+        "bullets": [
+          "Demand pulled forward.",
+          "Pricing peaks this year."
+        ]
+      },
+      "notes": "State the bear case fairly, then answer it.",
+      "source": "Street research report"
+    },
+    {
       "type": "quote",
       "section": "appendix",
       "title": "Management On Growth",
@@ -406,6 +481,76 @@
       ],
       "notes": "Read the quote once.",
       "source": "Q3 2026 call"
+    },
+    {
+      "type": "checklist",
+      "section": "appendix",
+      "title": "Stock-Selection Checklist",
+      "takeaway": "Most answers are yes; the stock is not cheap in absolute terms.",
+      "items": [
+        {
+          "q": "Business momentum positive or improving?",
+          "a": "Yes"
+        },
+        {
+          "q": "Organic growth above about five percent?",
+          "a": "Yes"
+        },
+        {
+          "q": "Room for margins to expand?",
+          "a": "Yes"
+        },
+        {
+          "q": "High-return places to put capital?",
+          "a": "Partly"
+        },
+        {
+          "q": "Competition stable?",
+          "a": "Yes"
+        },
+        {
+          "q": "Self-funding and free-cash-flow positive?",
+          "a": "Yes"
+        },
+        {
+          "q": "Cheap in absolute terms?",
+          "a": "No"
+        },
+        {
+          "q": "Cheap against peers?",
+          "a": "Partly"
+        },
+        {
+          "q": "A crowded long?",
+          "a": "No"
+        },
+        {
+          "q": "Management you trust?",
+          "a": "Yes"
+        },
+        {
+          "q": "Capital deployed logically?",
+          "a": "Yes"
+        },
+        {
+          "q": "A catalyst near enough to reprice it?",
+          "a": "Yes"
+        },
+        {
+          "q": "Room for sentiment to improve?",
+          "a": "Yes"
+        },
+        {
+          "q": "Next estimate revision more likely up?",
+          "a": "Yes"
+        },
+        {
+          "q": "A good set-up into the next quarter?",
+          "a": "Partly"
+        }
+      ],
+      "notes": "Read the no answers and say why they don't break the case.",
+      "source": "Plate file and research reports"
     }
   ],
   "pitch_sheet": {

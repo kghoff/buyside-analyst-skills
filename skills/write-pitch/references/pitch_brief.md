@@ -38,7 +38,8 @@ says what goes in them and why.
   {price} to {target_3y}", not "the stock is undervalued".
 - **The 20-second pitch** (`pitch_20s`) is the thesis said out loud: position, why it is mispriced, what is changing,
   the number that matters, the valuation gap, and an ask. If you cannot say it in 20 seconds you do not have a
-  thesis yet (§14.2, §14.4). It is also slide 2's takeaway line and page 1 of the pitch sheet.
+  thesis yet (§14.2, §14.4). The full pitch goes in `pitch_20s` (box budget, 420 characters) and opens the pitch
+  sheet; slide 2's takeaway is a shorter version of it, cut to the 160-character takeaway budget.
 - **Serve the judgment** (§3.7, §14.2). The PM decides; your job is to lay out the bet so the decision is easy:
   name the driver the bet rides on, and show EPS and the stock across a sensible range of it. Advocate, but never
   "buy this or you're wrong". The listener should leave with a decision, or knowing exactly what would produce one.
@@ -82,17 +83,20 @@ is an accordion: a point that needs ten slides of proof gets them in support, ne
 | 9 | `risk_reward` | Bull / base / bear with probabilities, the 3-year IRR against the hurdle, the three R's, the R/R ladder by entry price | Valuation tab (probability tree, IRR, three R's, ladder); Short Check for a short | each case's EPS, P/E, return and probability; `irr_3y`; the three R's; `rr_12m` |
 | 10 | `catalysts` | The path to getting paid and the trading plan: next print and the preview's stance, other dated events, the incremental buyer, tripwires and what we do at each | Earnings tab and preview note, the filings report's catalysts, the after-print note | the next print date; the preview's implied move; trim and add levels |
 
-**Support slides** (10 to 25; `section: "support"`, layouts `text_chart`, `table`, `quote`, `two_column`, `image`):
-at least one per thesis point and one per risk, each marked with `supports` (`thesis.1`, `thesis.2`, `thesis.3`,
-`risks.1`, `risks.2`). Good material: the driver math, a Filings Charts or Idio Chart picture, the comp scatter of
-P/E against growth, the consensus revision history, industry share, a variance table, verbatim cited quotes from the
-company or the sell side. A large delta to the Street needs the most backup: show the line items, not just the total.
+**Support slides** (10 to 25; `section: "support"`, layouts `text_chart`, `table`, `quote`, `two_column`, `image`,
+`checklist`): at least one per thesis point and one per risk, each marked with `supports` (`thesis.1`, `thesis.2`,
+`thesis.3`, `risks.1`, `risks.2`). Good material: the driver math, a Filings Charts or Idio Chart picture, the comp
+scatter of P/E against growth, the consensus revision history, industry share, a variance table, verbatim cited
+quotes from the company or the sell side. A large delta to the Street needs the most backup: show the line items, not
+just the total.
 
 **Appendix slides** (`section: "appendix"`), the Q&A bank. Always include:
-- the risk checklist (section 5 below), each of the seven areas answered in a line, plus what takes the stock down
-  25% and 50% and how likely each is;
-- the 15-question stock-selection checklist (§14.3), yes / no for each, with the score. It is a check that the idea
-  earns a place in the book, not a scoring formula; a "no" is fine if the slide says why it doesn't matter here. In
+- the risk checklist (section 5 below) as a `checklist` slide: one item per area, the area and your one-line answer
+  in `q` and a short verdict in `a` ("Low risk", "High risk"), plus items for what takes the stock down 25% and 50%
+  and how likely each is;
+- the 15-question stock-selection checklist (§14.3) as a `checklist` slide: one item per question, "Yes", "No" or
+  "Partly" in `a`, with the score in the takeaway. It is a check that the idea earns a place in the book, not a
+  scoring formula; a "no" is fine if the slide says why it doesn't matter here. In
   our words: (1) business momentum positive or improving? (2) organic growth above about 5%? (3) room for margins to
   expand? (4) high-return places to put capital? (5) competition stable? (6) self-funding, FCF-positive? (7) cheap in
   absolute terms? (8) cheap against peers? (9) a crowded long? (no is the good answer) (10) management you trust?
@@ -103,15 +107,18 @@ company or the sell side. A large delta to the Street needs the most backup: sho
 - management and capital deployment (track record, pay alignment, accounting, buybacks and M&A);
 - Likes / Dislikes, two columns;
 - the pre-mortem: if this loses money, the most likely reason, written now (§14.5);
-- every PM challenge left standing after your response (section 11 and the assignment).
+- PM challenges: in the first draft, before the PM has run, the challenges you expect yourself (your own attack on
+  the pitch); after the PM review, replace them with every PM challenge left standing after your response (section
+  11 and the assignment).
 
 **Short pitch** (call `Short`): the same order from the short side. Slide 4 is three reasons the stock goes down
 (fundamentals, expectations, valuation; §12). Slide 5's risks are the squeeze cases (the reward case for the bulls,
 a takeout). Slide 9 adds the short type, crowding (short interest, days to cover), borrow cost, the VaR-based maximum
 size and takeout risk, all from the Short Check tab.
 
-**Hold variant** (call `Watch`, chapter 14's "not quite yet", §14.1, §14.5): slide 1 says WATCH; slide 9 leads with
-the buy price and no-brainer price and the IRR at each; slide 10 says what would change the call (a price, a print,
+**Hold variant** (call `Watch`, chapter 14's "not quite yet", §14.1, §14.5): slide 1 says WATCH; slide 9's `lead`
+line gives the buy price, the no-brainer price and today's 3-year IRR (at those two prices the IRR is the hurdle by
+construction, so there is nothing more to show there); slide 10 says what would change the call (a price, a print,
 a driver reading). The thesis and risks are still there: the work is done, only the price is wrong.
 
 ## 4. Thesis points (§14.3, §3.7)
@@ -129,9 +136,10 @@ a driver reading). The thesis and risks are still there: the work is done, only 
   "why it compounds". The user's notes may say which.
 
 ## 5. Risks (§14.1, §14.3, §14.4)
-- **Exactly two key risks**, each with: a probability (`prob`, a fraction between 0 and 1, from your judgment and the
-  probability tree), what happens if it hits (`if_hits`: the price or return in that case, anchored), and the
-  mitigant with evidence (`mitigant`: why it is unlikely, why it is priced, or how the position is hedged).
+- **Exactly two key risks**, each with: a probability (`prob`, a fraction between 0 and 1: your own judgment, informed
+  by the probability tree; it is typed as a plain number, needs no anchor, and the slide labels it "our estimate"),
+  what happens if it hits (`if_hits`: the price or return in that case, anchored), and the mitigant with evidence
+  (`mitigant`: why it is unlikely, why it is priced, or how the position is hedged).
 - **Name the objection first.** The listener already has the obvious worry in their head ("it's expensive", "the new
   competitor"). Raising it yourself, then walking through why it is handled, buys more credibility than any other
   move in the pitch. If valuation is the obvious objection, it is usually risk 1.
@@ -169,15 +177,20 @@ a driver reading). The thesis and risks are still there: the work is done, only 
   differ). A delta with no research behind it is a guess, and the PM will say so.
 
 ## 7. Risk / reward and the hurdles (§14.1, §14.3, §3.7, §11)
+- **The hurdles are the user's.** The Valuation tab holds them as user-owned inputs labelled "IRR hurdle", "Buy at
+  R/R" and "Table-pound at R/R"; read them from the digest and use them everywhere below. Only if the tab lacks them,
+  use the house defaults (common.HURDLES): **2:1 R/R to buy**, **3:1 R/R to pound the table**, a **20% 3-year IRR**
+  and a 30% IRR for the no-brainer price. Say in `notes` which you used. The figures below are the defaults.
 - **Twelve months:** base reward and risk-case loss from the Valuation tab; R/R = base return ÷ |risk return|.
-  The house hurdles (common.HURDLES): **2:1 R/R to buy**, **3:1 R/R to pound the table**, and a **20% 3-year IRR**.
   A portfolio of 2:1 bets wins even if only half of them work; a 60/40 coin with a 2:1 payoff is the job.
 - **Three years:** IRR = (3-year target ÷ price)^(1/3) − 1. With the market making roughly 10% a year, a 3-year
   IRR in the low teens is little alpha even if the upside looks large in percent.
-- **Buy price and no-brainer price**, both from the IRR hurdle on the 3-year target:
-  - buy price = 3-year target ÷ 1.2^3 (the price at which the 3-year IRR is 20%);
-  - no-brainer price = 3-year target ÷ 1.3^3 (a 3-year IRR of about 30%). If the Valuation tab's R/R ladder shows
-    the 12-month R/R passing 3:1 at a clearly different price, mention it in the notes and say which you used.
+- **Buy price and no-brainer price**, both from the 3-year target:
+  - buy price = 3-year target ÷ (1 + IRR hurdle)^3, the price at which the 3-year IRR equals the hurdle (with the
+    20% default, ÷ 1.2^3);
+  - no-brainer price = 3-year target ÷ (1 + no-brainer IRR)^3 (with the 30% default, ÷ 1.3^3). If the Valuation
+    tab's R/R ladder shows the 12-month R/R passing the pound R/R (default 3:1) at a clearly different price,
+    mention it in the notes and say which you used.
   Both go in `numbers` with `calc:` anchors over `target_3y` (and in `sum_boxes`).
 - **Never stretch the estimates or the multiple until the hurdle clears** (§14.1). If it doesn't clear at today's
   price, the honest call is Watch with a buy price and a price alert; that is a good outcome, not a failure.
@@ -226,8 +239,13 @@ a recent large acquisition.
 - "What's baked in, and why it's wrong": the reverse DCF next to ours.
 
 ## 9. The call rule (spec §2, §4)
-- **Start from the earlier verdicts.** Copy them into `starting_verdicts`: the Valuation tab's verdict (Buy / Hold /
-  Sell) and, if the Short Check tab exists, its verdict (alpha short / filler short / watchlist / no short).
+- **Start from the earlier verdicts.** Copy them into `starting_verdicts`, from the digest:
+  - Valuation: the row labelled "Overall verdict (the agent's call: Buy / Hold / Sell)". The tab has a verdict per
+    multiple too; use only this overall one. If it is empty (the valuation plan had none), treat it as Hold, write
+    `Hold`, and say so in `notes`.
+  - Short: the Short Check row "Verdict (agent's call)", which the user owns; if it is empty, the row "Verdict (the
+    rule)" (B5). Copy it as the tab shows it (e.g. "Alpha short", "Filler short", "Watchlist", "No short");
+    comparisons ignore case. No Short Check tab: `null`, and a Short call is impossible.
 - **The default mapping:** Buy → `Long`, Sell → `Short`, Hold → `Watch`.
 - **You may override**, but only with cited evidence you found that the earlier agent did not weigh (a newer print, a
   quote, a driver calculation, the user's notes). Set `override` to `{"reason": "...", "evidence": "..."}` (evidence
@@ -241,9 +259,9 @@ a recent large acquisition.
   short, watchlist, no short) becomes `Watch`, not a short pitch; because Watch differs from the Sell → Short mapping,
   set `override` with the Short Check verdict cell as the evidence. A short pitch with no Short Check tab is not
   allowed.
-- **A Long must clear a hurdle:** if `irr_3y` is below 20% *and* the 12-month R/R (`base_ret` ÷ |`risk_ret`|) is
-  below 2:1, the call is `Watch`, or `override` explains why it is still a Long (e.g. a near catalyst the hurdle
-  misses).
+- **A Long must clear a hurdle:** if `irr_3y` is below the IRR hurdle (default 20%) *and* the 12-month R/R
+  (`base_ret` ÷ |`risk_ret`|) is below the buy R/R (default 2:1), the call is `Watch`, or `override` explains why it
+  is still a Long (e.g. a near catalyst the hurdle misses). An `action` of "Pound the table" needs the pound R/R.
 - **Make the call yourself.** Equivocating ("could be long, could be short") is one of the named mistakes. Say what
   you think and how confident you are, then let `action` carry the size.
 
@@ -264,15 +282,16 @@ a recent large acquisition.
   then "Likely question: ..." and "Answer: ...". Notes are what the user rehearses from; they must make sense read
   aloud.
 - **Text budgets** (common.BUDGET, characters): title 70; takeaway 160; bullet 170 (each thesis head, risk head,
-  `if_hits`, `mitigant`, tripwire, napkin bullet); box 420 (each thesis body and each SUM text box); note 1,500 (speaker
-  notes); quote 400; table cell 24. `plan_schema.md` lists which field takes which budget. Short beats long: a slide a
-  PM can read in ten seconds.
+  `if_hits`, `mitigant`, tripwire, napkin bullet, checklist question); box 420 (each thesis body, `pitch_20s` and
+  each SUM text box); note 1,500 (speaker notes); quote 400; cell 24 (table cells, checklist answers).
+  `plan_schema.md` lists which field takes which budget. Short beats long: a slide a PM can read in ten seconds.
 - **Numbers only through `{key}`** placeholders (plan_schema.md). Never type a number into text.
 - **The pitch sheet** (`pitch_sheet`): `script_3min` is twelve short paragraphs following the 3-to-5-minute script
   (§3.7): company and position; the 20-second summary; background and set-up; thesis points 1, 2, 3; risks 1 and 2;
   valuation and the 3-year algorithm; estimates vs the Street; upside, downside and R/R; the catalyst path.
   `napkin` is three to five bullets you could write on a napkin (§14.4). `hard_questions` are the three to five
-  hardest questions from the PM review with your answers. `know_cold` lists the number keys you must recite without
+  hardest questions with your answers: in the first draft, the ones you expect; after the PM review, the hardest
+  challenges left standing. `know_cold` lists the number keys you must recite without
   notes (at least price, base return, risk return, 3-year IRR, our vs Street EPS, buy price).
 - Plain English throughout. No jargon the PM has to decode; define any metric the company invented.
 

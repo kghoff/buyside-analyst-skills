@@ -1,4 +1,4 @@
-import copy, json, subprocess, sys, pathlib
+import copy, json, re, subprocess, sys, pathlib
 from conftest import FIX
 import plan
 P = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "plan.py"
@@ -56,7 +56,7 @@ def test_long_below_both_hurdles(tmp_path):
 def test_long_missing_hurdle_numbers():
     p = copy.deepcopy(BASE); del p["numbers"]["risk_ret"]
     out = plan.check(p, "Buy")
-    assert "call is Long but numbers risk_ret are missing: the hurdle check can't run" in out
+    assert "[R20] call is Long but numbers risk_ret are missing: the hurdle check can't run" in out
 
 def test_know_cold_key_missing(tmp_path):
     p = copy.deepcopy(BASE); p["pitch_sheet"]["know_cold"].append("ghost")
@@ -70,7 +70,7 @@ def test_budget_after_substitution(tmp_path):
     rc, out = check(tmp_path, p); assert rc == 1 and "takeaway" in out and "200" in out
 
 def test_unknown_quote_id(tmp_path):
-    p = copy.deepcopy(BASE); p["slides"][15]["quotes"] = ["q9"]
+    p = copy.deepcopy(BASE); at(p, "quote")["quotes"] = ["q9"]
     rc, out = check(tmp_path, p); assert rc == 1 and "q9" in out
 
 def test_number_needs_anchor(tmp_path):
@@ -188,3 +188,57 @@ def test_no_numbers_reported_once():
     p = copy.deepcopy(BASE); del p["numbers"]
     out = plan.check(p, "Buy")
     assert sum("numbers: missing" in l for l in out) == 1 and not any("is not defined in numbers" in l for l in out)
+
+# why: the support section is the proof behind the core deck; too few is a thin pitch, too many a book report
+def test_support_slide_count():
+    p = copy.deepcopy(BASE)
+    sup = [s for s in p["slides"] if s.get("section") == "support"]
+    assert len(sup) == 10       # the fixture sits on the lower bound
+    p["slides"].remove(next(s for s in sup if s["supports"] == "thesis.1"))
+    assert any("[R12] support slides: needs 10 to 25" in l for l in plan.check(p, "Buy"))
+    p = copy.deepcopy(BASE); p["slides"] += [copy.deepcopy(sup[0]) for _ in range(16)]
+    assert any("has 26" in l for l in plan.check(p, "Buy"))
+
+# why: the deck builder reads q and a from each checklist row, and a 15-question list must fit one slide
+def test_checklist_shape():
+    p = copy.deepcopy(BASE); c = at(p, "checklist")
+    c["items"][0] = {"q": "Cheap?", "a": ""}
+    c["items"][1] = {"q": "Cheap?", "a": "Yes, on every multiple we track"}
+    out = "\n".join(plan.check(p, "Buy"))
+    assert "item 1 needs a non-empty a" in out and "item 2 a: 31 characters" in out
+    c["items"] = c["items"][:2]
+    assert any("needs 3 to 15 items, has 2" in l for l in plan.check(p, "Buy"))
+
+# why: the Valuation tab's own hurdle is the user's; the house 20% / 2:1 is only the fallback
+def test_hurdles_from_valuation_tab(tmp_path):
+    p = copy.deepcopy(BASE)     # IRR 18.3%, R/R 2.1: clears the house 2:1
+    assert check(tmp_path, p, "--valuation-verdict", "Buy")[0] == 0
+    rc, out = check(tmp_path, p, "--valuation-verdict", "Buy", "--buy-rr", "2.5")
+    assert rc == 1 and "[R20]" in out and "under 2.5" in out
+    assert check(tmp_path, p, "--valuation-verdict", "Buy", "--buy-rr", "2.5", "--irr-hurdle", "0.15")[0] == 0
+    assert plan.check(p, "Buy", hurdles={"buy_rr": None}) == []      # a missing tab input falls back
+
+# why: "pound the table" on a set-up under the pound hurdle is the equivocal-payoff mistake
+def test_pound_needs_pound_rr(tmp_path):
+    p = copy.deepcopy(BASE); p["action"] = "Pound the table"
+    rc, out = check(tmp_path, p, "--valuation-verdict", "Buy"); assert rc == 1 and "[R21]" in out
+    assert check(tmp_path, p, "--valuation-verdict", "Buy", "--pound-rr", "2")[0] == 0
+
+# why: "Wait for {buy_price}" in action is filled by the builder, so its key must exist
+def test_action_placeholder_checked():
+    p = copy.deepcopy(BASE); p["action"] = "Wait for {entry}"
+    assert any("[R13] action: {entry} is not defined" in l for l in plan.check(p, "Buy"))
+
+# why: the short block and the Watch lead print on slide 9 like any other text
+def test_risk_reward_short_and_lead_budgeted():
+    p = copy.deepcopy(BASE); rr = at(p, "risk_reward")
+    rr["short"] = {"type": "Alpha short", "borrow": "x" * 200}
+    rr["lead"] = "Buy below {buy_price}, up 25%"
+    out = "\n".join(plan.check(p, "Buy"))
+    assert "short borrow: 200 characters" in out and "lead: typed number '25%'" in out
+
+# why: every line goes back to the agent, and the schema's rule list must be the list the code checks
+def test_every_problem_line_has_a_rule_id():
+    for bad in MALFORMED + [copy.deepcopy(BASE)]:
+        for line in plan.check(bad, "Sell", "watchlist"):
+            assert re.match(r"\[R\d+\] ", line), line

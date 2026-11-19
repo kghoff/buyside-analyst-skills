@@ -28,7 +28,10 @@ fixture workbook (built in the anchors tests) must hold with exactly these value
 | rev_26 | SUM!H8 | 1250 |
 | rev_27 | SUM!J8 | 1420 |
 
-Calc anchors: `irr_3y` = `(target_3y/price)^(1/3)-1` (0.1834, shown 18.3%); `buy_price` = `target_3y/1.2^3` (69.44).
+The ten support slides and the checklist appendix slide carry no numbers, so they add no cells.
+
+Calc anchors: `irr_3y` = `(target_3y/price)^(1/3)-1` (0.1834, shown 18.3%); `buy_price` = `target_3y/1.2^3` (69.44;
+the fixture has no Valuation hurdle inputs, so plan.py uses the 20% default).
 
 Research line: `Earnings Calls/_md/2026 Q3 XYZ call.md` line 214 must contain `15%` (the `guide_growth` number, shown
 15%) and the quote q1 text, `We expect to grow 15% next year.`

@@ -3,12 +3,21 @@ import re, pathlib
 import common
 R = pathlib.Path(__file__).resolve().parents[1] / "references"
 KNOWN = {"TICKER","COMPANY","AS_OF","MODE","WORK","RESEARCH","USER_NOTES_OR_NONE","DIGEST","TAB_INDEX",
-         "READING_LIST","OPTIONAL_MISSING","OLD_PLATE_OR_NONE"}
+         "READING_LIST","OPTIONAL_MISSING","OLD_PLATE_OR_NONE","SKILL"}
 
 
 def test_assignment_fills_known():
     for f in ("assignment.md", "pm_assignment.md"):
         assert set(re.findall(r"\{([A-Z_]+)\}", (R / f).read_text())) <= KNOWN
+
+
+# why: the agents run from the user's model folder, so a bare "references/x.md" points nowhere
+def test_assignments_name_briefs_by_skill_path():
+    for f, briefs in (("assignment.md", ("pitch_brief", "plan_schema")), ("pm_assignment.md", ("pm_brief",))):
+        text = (R / f).read_text()
+        for b in briefs:
+            assert f"{{SKILL}}/references/{b}.md" in text, (f, b)
+        assert "references/" not in text.replace("{SKILL}/references/", ""), f
 
 
 def test_briefs_exist_and_sized():
@@ -34,5 +43,38 @@ def test_docs_agree_with_common():
     h = common.HURDLES
     for text in (brief, schema):
         assert f"{h['buy_rr']:g}:1" in text and f"{h['pound_rr']:g}:1" in text and f"{h['irr']:.0%}" in text
-    # the buy price is the 3-year target discounted at the IRR hurdle
-    assert f"{1 + h['irr']:g}^3" in brief
+    # the buy price is the 3-year target discounted at the IRR hurdle, the no-brainer at the no-brainer IRR
+    pm = (R / "pm_brief.md").read_text()
+    for text in (brief, pm):
+        assert f"{1 + h['irr']:g}^3" in text and f"{1 + h['nobrainer_irr']:g}^3" in text
+        assert f"{h['nobrainer_irr']:.0%}" in text
+    assert f"{h['buy_rr']:g}:1" in pm and f"{h['pound_rr']:g}:1" in pm and f"{h['irr']:.0%}" in pm
+    # the budgets the brief restates are common.BUDGET's (the schema's table is checked above)
+    for name, limit in common.BUDGET.items():
+        assert re.search(rf"\b{name} {limit:,}\b".replace(",", ",?"), brief), (name, limit)
+    # the brief's slide-order table runs in common.CORE_TYPES order
+    rows = [brief.index(f"| {n} | `{t}` |") for n, t in enumerate(common.CORE_TYPES, 1)]
+    assert rows == sorted(rows)
+
+
+# why: the agent reads the verdicts and hurdles by their row labels in the digest; a label that drifts from the
+# Valuation / Short Check tabs leaves the agent looking for a row that isn't there
+def test_tab_labels_named():
+    labels = ["Overall verdict (the agent's call: Buy / Hold / Sell)", "Verdict (agent's call)", "Verdict (the rule)",
+              "IRR hurdle", "Buy at R/R", "Table-pound at R/R"]
+    for f in ("pitch_brief.md", "plan_schema.md", "assignment.md"):
+        text = re.sub(r"\s+", " ", (R / f).read_text())
+        for lab in labels:
+            assert f'"{lab}"' in text, (f, lab)
+
+
+# why: every problem line plan.py prints carries a rule id, and the agent fixes it by reading that rule in section 12;
+# a rule the schema doesn't list (or lists but the code never checks) misleads the agent
+def test_schema_rule_ids_match_plan_py():
+    src = (pathlib.Path(common.__file__).parent / "plan.py").read_text()
+    code = {m for pair in re.findall(r'\[R(\d+)\]|"R(\d+)"', src) for m in pair if m}
+    schema = (R / "plan_schema.md").read_text()
+    s12 = schema[schema.index("## 12. Every rule the code enforces"):]
+    listed = re.findall(r"\*\*\[R(\d+)\]\*\*", s12)
+    assert len(listed) == len(set(listed)), "an id is listed twice"
+    assert set(listed) == code

@@ -96,10 +96,14 @@ Run each and show your arithmetic with the cells you used:
   implied move) is too soft.
 - **The one-sigma check.** Is the risk-case loss at least a one-sigma 12-month move for this stock (the Valuation
   tab's volatility and one-sigma check)? A downside smaller than an ordinary year's noise is not a risk case.
+- **The hurdles** are the user's inputs on the Valuation tab ("IRR hurdle", "Buy at R/R", "Table-pound at R/R" in
+  the digest); only if the tab lacks them, the house defaults: 20% 3-year IRR, 2:1 R/R to buy, 3:1 to pound the
+  table, and 30% IRR for the no-brainer price. Check the plan used the tab's values.
 - **IRR at today's price.** Recompute the 3-year IRR = (3-year target ÷ today's price)^(1/3) − 1 from the plan's
-  anchored target and price. Is it quoted at today's price, not at a hoped-for entry? Does it clear 20%? Does the
-  12-month R/R clear 2:1 (3:1 for "pound the table")?
-- **The buy and no-brainer prices**: buy price = 3-year target ÷ 1.2^3; no-brainer ≈ target ÷ 1.3^3. Check them.
+  anchored target and price. Is it quoted at today's price, not at a hoped-for entry? Does it clear the IRR hurdle
+  (default 20%)? Does the 12-month R/R clear the buy R/R (default 2:1; 3:1 for "pound the table")?
+- **The buy and no-brainer prices**: buy price = 3-year target ÷ (1 + IRR hurdle)^3 (÷ 1.2^3 at the 20% default);
+  no-brainer price = 3-year target ÷ (1 + 30%)^3, i.e. ÷ 1.3^3. Check them.
 - **Our numbers vs the Street**: is the basis the same (GAAP vs non-GAAP)? Is a big EPS delta explained line by line
   (revenue, margin, share count), or only at the bottom line?
 - **The multiple**: is the target multiple anchored to the stock's own range, the peers or the S&P (Multiples tab),
@@ -108,10 +112,13 @@ Run each and show your arithmetic with the cells you used:
 
 ## 7. Overrides of earlier verdicts
 The analyst starts from the Valuation tab's verdict and the Short Check tab's verdict and may override either.
-- Check that `starting_verdicts` match the tabs (digest).
+- Check that `starting_verdicts` match the tabs (digest): the Valuation row "Overall verdict (the agent's call: Buy /
+  Hold / Sell)" (an empty cell counts as Hold), and the Short Check row "Verdict (agent's call)", or "Verdict (the
+  rule)" when that is empty.
 - An override needs evidence the earlier agent did not weigh. Read the evidence cited. Is it new (a later print, a
   quote, the user's notes) or just a different opinion on the same facts? An override with weak evidence is a serious
-  challenge; an override that hides a hurdle miss (a Long below 20% IRR and below 2:1 with no reason) is fatal.
+  challenge; an override that hides a hurdle miss (a Long below both the IRR hurdle and the buy R/R with no reason)
+  is fatal.
 - A short pitch without an alpha-short verdict from model-short is fatal.
 - A Watch is a legitimate outcome. Do not push the analyst to a Long the numbers do not support.
 

@@ -2,8 +2,9 @@
 
 The analyst writes `pitch_plan.json`; code checks it (`plan.py` for structure, `anchors.py` for truth) and builds the
 decks, the pitch sheet, the Markdown copy and the SUM boxes from it. Anything that breaks a rule below comes back to
-you as a problem to fix. The values used in the checks (slide types, layouts, text budgets, SUM boxes, hurdles, calls)
-live in the skill's `scripts/common.py`; this page repeats them so you don't need to open it.
+you as a problem to fix. The values used in the checks (slide types, layouts, text budgets, SUM boxes, calls and the
+fallback hurdles) live in the skill's `scripts/common.py`; this page repeats them so you don't need to open it. The
+hurdles themselves are the user's inputs on the Valuation tab (section 12, R20).
 
 ## Contents
 1. The whole shape
@@ -23,7 +24,7 @@ live in the skill's `scripts/common.py`; this page repeats them so you don't nee
 ```json
 {
   "ticker": "XYZ", "as_of": "2026-11-19", "call": "Long", "action": "Buy",
-  "starting_verdicts": {"valuation": "Buy", "short": "no short"},
+  "starting_verdicts": {"valuation": "Buy", "short": "No short"},
   "override": null,
   "most_important_thing": "one sentence",
   "pitch_20s": "the 20-second pitch",
@@ -55,7 +56,9 @@ live in the skill's `scripts/common.py`; this page repeats them so you don't nee
      "table": {"header": ["", "2026E", "2027E"], "rows": [["Revenue", "{rev_26}", "{rev_27}"]]},
      "notes": "...", "source": "..."},
     {"type": "quote", "section": "appendix", "title": "...", "takeaway": "...", "quotes": ["q1"],
-     "notes": "...", "source": "..."}
+     "notes": "...", "source": "..."},
+    {"type": "checklist", "section": "appendix", "title": "Stock-Selection Checklist", "takeaway": "...",
+     "items": [{"q": "Business momentum positive or improving?", "a": "Yes"}], "notes": "...", "source": "..."}
   ],
   "pitch_sheet": {"script_3min": ["12 short paragraphs, chapter 3's steps"], "napkin": ["3-5 bullets"],
                   "hard_questions": [{"q": "...", "a": "..."}], "know_cold": ["price", "base_ret", "irr_3y"]},
@@ -65,7 +68,7 @@ live in the skill's `scripts/common.py`; this page repeats them so you don't nee
 }
 ```
 The example is cut down: a real plan has all ten core slides, three risk_reward cases, 10-25 support slides and the
-appendix slides `pitch_brief.md` section 3 lists.
+appendix slides `pitch_brief.md` section 3 lists (the two checklists among them).
 
 ## 2. Top-level fields
 | Field | What goes in it |
@@ -73,11 +76,11 @@ appendix slides `pitch_brief.md` section 3 lists.
 | `ticker` | The ticker, upper case. |
 | `as_of` | Today's date, `YYYY-MM-DD`. |
 | `call` | One of `Long`, `Short`, `Watch` (common.CALLS). |
-| `action` | The size of the conviction in a few words: "Small buy", "Buy", "Pound the table", "Short", "Wait for {buy_price}". |
-| `starting_verdicts` | `valuation`: the Valuation tab's verdict as the tab shows it (`Buy`, `Hold`, `Sell`). `short`: the Short Check tab's verdict in lower case (`alpha short`, `filler short`, `watchlist`, `no short`), or `null` when there is no Short Check tab. |
+| `action` | The size of the conviction in a few words: "Small buy", "Buy", "Pound the table", "Short", "Wait for {buy_price}". `{key}`s are allowed and checked. "Pound" needs the pound R/R (R21). |
+| `starting_verdicts` | `valuation`: the value of the Valuation tab row labelled "Overall verdict (the agent's call: Buy / Hold / Sell)" (`Buy`, `Hold` or `Sell`); if that cell is empty (the valuation plan had no verdict), write `Hold` and say so in `notes`. `short`: the Short Check row "Verdict (agent's call)" (the user's own input) as the tab shows it (`Alpha short`, `Filler short`, `Watchlist`, `No short`); if that cell is empty, the row "Verdict (the rule)" (cell B5). `null` when there is no Short Check tab. Verdicts are compared ignoring case. |
 | `override` | `null` when `call` follows the mapping (Buy → Long, Sell → Short, Hold → Watch). Otherwise `{"reason": "...", "evidence": "..."}`; `evidence` cites `file:line` or `Tab!Cell`. |
 | `most_important_thing` | One sentence: the differentiated view on where a number in the statements is heading. |
-| `pitch_20s` | The 20-second pitch: position, why mispriced, what's changing, the number that matters, the valuation gap, the ask. |
+| `pitch_20s` | The full 20-second pitch (box budget, 420): position, why mispriced, what's changing, the number that matters, the valuation gap, the ask. It opens the pitch sheet; slide 2's `takeaway` is a version of it cut to 160 characters. |
 | `numbers` | Every number the plan shows (section 3). |
 | `quotes` | Every verbatim quote the plan uses (section 5). |
 | `slides` | The ten core slides in order, then support, then appendix (sections 6-7). |
@@ -102,15 +105,21 @@ Each entry is `"<key>": {"value": <number>, "shown": "<string>", "anchor": "<anc
 - **Required keys** (the call check reads them): `price` (today's price), `base_ret` (12-month base return),
   `risk_ret` (12-month risk-case return, negative), `irr_3y` (3-year IRR at today's price), `target_3y` (3-year
   target price), `buy_price` and `nobrainer_price`. Add `rr_12m` (= base_ret / abs(risk_ret)) if you show the R/R.
+  `buy_price` = `target_3y` / (1 + IRR hurdle)^3 and `nobrainer_price` = `target_3y` / (1 + no-brainer IRR)^3, the
+  IRR hurdle being the Valuation tab's "IRR hurdle" input (house default 20%, so `calc: target_3y/1.2^3`) and the
+  no-brainer IRR 30% (`calc: target_3y/1.3^3`).
 - **Anchors**, three forms:
   1. `Tab!Cell`, e.g. `Valuation!F20`, `SUM!J12`, `MOD!H45`: a cell in the model. `value` must equal the
      recalculated cell at the rounding `shown` implies. Use the cell that holds the number, not one that links to it,
      when both exist; either passes if the values match.
   2. `file:line`, e.g. `Earnings Calls/_md/2026 Q3 XYZ call.md:214`: a line in a research file. The path is relative
      to the research root (the folder `<research_dir>/<TICKER>/` the assignment names). The
-     `shown` number must be printed on that line (`$`, `,`, `%`, `x` and parentheses for negatives are allowed to
-     differ). Use it for numbers the model doesn't hold: guidance, a market size, a sell-side estimate, a number from
-     the user's notes (file `Pitch/_work/user_notes.md`).
+     `shown` number must be printed on that line. Before comparing, the check drops a leading `+` or `-`, any `$`,
+     `,`, `%`, `x`, `(` and `)`, and a unit suffix `m`, `bn` or `k`; what is left (the digits and decimal point) must
+     appear as a number on the line. So `"$1,204m"` matches `1,204` and `"(18%)"` matches `-18%`, but `"$1.2bn"` does
+     not match `1,204 million`: copy the form printed on the line. Use it for numbers the model doesn't hold:
+     guidance, a market size, a sell-side estimate, a number from the user's notes (file
+     `Pitch/_work/user_notes.md`).
   3. `calc: <expression>`, e.g. `calc: (target_3y/price)^(1/3)-1`, `calc: target_3y/1.2^3`: arithmetic over other
      keys. Allowed: key names, numbers, `+ - * / ^ ( )`, `abs`, `min`, `max`. The result must equal `value` at the
      shown rounding. Every key it uses must itself be anchored (no circles).
@@ -148,20 +157,21 @@ Core slides carry no `section`.
 | type | Fields beyond the common ones | What code adds |
 |---|---|---|
 | `title` | `image` (optional): `{"pdf": "<file>", "page": n, "crop": [x0, y0, x1, y1]}`, the crop as fractions of page width and height from the top-left; or `{"png": "<file in the tabs folder>"}`. The `title` carries the call: "LONG XYZ", "SHORT XYZ", "WATCH XYZ". | the picture |
-| `summary` | `bullets` (optional, 3-5) | the cap table and our-vs-Street grid from SUM |
+| `summary` | `takeaway`: the 20-second pitch cut to 160 characters; `bullets` (optional, 3-5) | the cap table and our-vs-Street grid from SUM |
 | `setup` | `bullets` (3-5): the set-up story; `events` (optional): `[{"date": "YYYY-MM-DD", "label": "..."}]` for the big moves to label | the price chart with Px Events markers |
 | `thesis` | `points`: exactly 3 `{"head", "body"}` | |
-| `risks` | `risks`: exactly 2 `{"head", "prob", "if_hits", "mitigant"}`, `prob` a number strictly between 0 and 1; `tripwires`: 2-4 strings | |
+| `risks` | `risks`: exactly 2 `{"head", "prob", "if_hits", "mitigant"}`, `prob` a number strictly between 0 and 1: your own judgment, not a model number, so it needs no `{key}` or anchor (it is a structured field, not text); `tripwires`: 2-4 strings | each `prob` as a percent labelled "our estimate" |
 | `why_now` | `bucket`: the alpha bucket's name (pitch_brief.md section 8); `bullets` (3-5) | |
 | `valuation` | `bullets` (2-4) | the P/E history chart from Multiples |
 | `different` | `table` (`header`, `rows`): ours vs Street on the key lines; `bullets` (2-4): implied vs ours per key driver | |
-| `risk_reward` | `cases`: three entries named `Bull`, `Base`, `Bear`, each `{"name", "eps", "pe", "ret", "prob"}` as `{key}` strings; `ladder`: `"Valuation"` (the R/R ladder by entry price is read from that tab); `irr`: `"{irr_3y}"`; `three_rs`: `{"roll", "revisions", "rerating"}` as `{key}` strings. A short adds `short`: `{"type", "crowding", "borrow", "var_size", "takeout"}` from Short Check. | the cases table, the ladder and its chart |
+| `risk_reward` | `cases`: three entries named `Bull`, `Base`, `Bear`, each `{"name", "eps", "pe", "ret", "prob"}` as `{key}` strings; `ladder`: `"Valuation"` (the R/R ladder by entry price is read from that tab); `irr`: `"{irr_3y}"`; `three_rs`: `{"roll", "revisions", "rerating"}` as `{key}` strings. A short adds `short`: `{"type", "crowding", "borrow", "var_size", "takeout"}`, each a line of text (bullet budget) from Short Check that may hold `{key}`s. `lead` (optional; the Watch call's opening line): the buy price, the no-brainer price and today's 3-year IRR, as text with `{key}`s (bullet budget). | the cases table, the ladder and its chart |
 | `catalysts` | `bullets` (3-6): dated events, the next print and the preview's stance, the incremental buyer; `tripwires` (optional) | |
 
 ## 7. slides: support and appendix
 Every slide after the tenth carries `"section": "support"` or `"section": "appendix"` and a `type` from
-common.SUPPORT_LAYOUTS: `text_chart`, `table`, `quote`, `two_column`, `image`. Support slides also carry `supports`:
-`thesis.1`, `thesis.2`, `thesis.3`, `risks.1` or `risks.2` (at least one support slide for each).
+common.SUPPORT_LAYOUTS: `text_chart`, `table`, `quote`, `two_column`, `image`, `checklist`. There are 10 to 25 support
+slides. Support slides also carry `supports`: `thesis.1`, `thesis.2`, `thesis.3`, `risks.1` or `risks.2` (at least
+one support slide for each). Put the support slides before the appendix slides.
 | type | Fields |
 |---|---|
 | `text_chart` | `bullets` (2-5) and `image` (a tab picture `{"png": ...}` or a PDF crop) |
@@ -169,11 +179,13 @@ common.SUPPORT_LAYOUTS: `text_chart`, `table`, `quote`, `two_column`, `image`. S
 | `quote` | `quotes`: 1-3 quote ids; `bullets` (optional): what the quotes prove |
 | `two_column` | `left` and `right`: each `{"head": "...", "bullets": [...]}` (Likes / Dislikes, bull / bear) |
 | `image` | `image` and an optional `caption` |
+| `checklist` | `items`: 3-15 `{"q", "a"}`; `q` the question (bullet budget), `a` a short answer (cell budget): "Yes", "No", "Partly", or a `{key}`. The two appendix checklists use it: the 15-question stock-selection checklist, and the 7-area risk checklist (`q` names the area and gives your one-line answer; `a` is the verdict, e.g. "Low risk", "High risk"). |
 
 ## 8. pitch_sheet
 - `script_3min`: exactly 12 short paragraphs in the 3-to-5-minute script's order (pitch_brief.md section 10).
 - `napkin`: 3-5 bullets.
-- `hard_questions`: 3-5 `{"q", "a"}`, the hardest from the PM review, with your answers.
+- `hard_questions`: 3-5 `{"q", "a"}` with your answers. In the first draft (before the PM has run) write the hardest
+  questions you expect yourself; after the PM review, replace them with the hardest challenges left standing.
 - `know_cold`: number keys (each must exist in `numbers`), at least `price`, `base_ret`, `risk_ret`, `irr_3y`,
   `buy_price` and our vs Street EPS for next year.
 
@@ -194,39 +206,71 @@ Characters, counted after each `{key}` is replaced by its `shown` (common.BUDGET
 |---|---|---|
 | title | 70 | every slide `title` |
 | takeaway | 160 | every slide `takeaway` |
-| bullet | 170 | thesis `head`; risk `head`, `if_hits`, `mitigant`; each item of `bullets` and `tripwires`; each `napkin` item; each `hard_questions` `q`; two_column `head`s; `caption`; `bucket` |
+| bullet | 170 | thesis `head`; risk `head`, `if_hits`, `mitigant`; each item of `bullets` and `tripwires`; each `napkin` item; each `hard_questions` `q`; two_column `head`s and `bullets`; `caption`; `bucket`; risk_reward `lead` and each `short` field; each checklist `q` |
 | box | 420 | thesis `body`; `most_important_thing`; `pitch_20s`; each `script_3min` paragraph; each `hard_questions` `a`; each text value of `sum_boxes` |
 | note | 1500 | every slide `notes` |
 | quote | 400 | each quote `text` |
-| cell | 24 | each table `header` and `rows` cell; each risk_reward case field |
+| cell | 24 | each table `header` and `rows` cell; each risk_reward case field; `irr`; each `three_rs` field; each checklist `a` |
 
 ## 12. Every rule the code enforces
-Structure (`plan.py`):
-1. `call` is one of `Long`, `Short`, `Watch`.
-2. The first 10 slides are the core types in order: `title`, `summary`, `setup`, `thesis`, `risks`, `why_now`,
-   `valuation`, `different`, `risk_reward`, `catalysts`.
-3. Every later slide has `section` `support` or `appendix` and a `type` in `text_chart`, `table`, `quote`,
-   `two_column`, `image`.
-4. `thesis` has exactly 3 points; `risks` exactly 2 risks, each `prob` strictly between 0 and 1.
-5. `risk_reward` has `Bull`, `Base` and `Bear` cases.
-6. Every `{key}` used anywhere exists in `numbers`; text has no typed numbers in their place.
-7. Every quote id a slide names exists in `quotes`.
-8. Every slide has non-empty `notes` and `source`.
-9. `pitch_sheet.hard_questions` has 3-5 items.
-10. `sum_boxes` keys are a subset of the six SUM box names.
-11. Every text field is within its budget (section 11).
-12. The call against the verdicts: Buy → Long, Sell → Short, Hold → Watch; any other call needs `override` with a
-    non-empty `reason` and `evidence`. `Short` needs the short verdict `alpha short`. A `Long` whose `irr_3y` is below
-    20% *and* whose `base_ret` / |`risk_ret`| is below 2.0 needs `override` or the call `Watch` (common.HURDLES:
-    2:1 to buy, 3:1 to pound the table, 20% 3-year IRR).
+Every problem line `plan.py` sends you starts with the id of the rule it breaks (`[R7] slide 12 (table): ...`). This
+list is exactly what it checks; the rest of this page is how to write a good plan, which the PM checks instead.
 
-Truth (`anchors.py`):
-13. A `Tab!Cell` anchor's value equals the recalculated cell at the rounding `shown` implies.
-14. A `file:line` anchor's `shown` number is printed on that line of that file (path relative to the research root).
-15. A `calc:` anchor evaluates, over the other keys' values, to `value` at the shown rounding; only names, numbers,
-    `+ - * / ^ ( )`, `abs`, `min`, `max`.
-16. A quote's `text` is verbatim on its `line` of its `file`.
-17. Two keys with the same anchor have the same `shown`.
+Structure (`plan.py`):
+- **[R1]** The file is valid JSON holding one object.
+- **[R2]** `call` is one of `Long`, `Short`, `Watch`.
+- **[R3]** `numbers` is a non-empty object holding every required key: `price`, `base_ret`, `risk_ret`, `irr_3y`,
+  `target_3y`, `buy_price`, `nobrainer_price`.
+- **[R4]** Every number key is lower-case letters, digits and `_`; every entry is an object with a numeric `value`, a
+  non-empty `shown` and a non-empty `anchor`.
+- **[R5]** `slides` is a list whose first 10 are the core types in order: `title`, `summary`, `setup`, `thesis`,
+  `risks`, `why_now`, `valuation`, `different`, `risk_reward`, `catalysts`.
+- **[R6]** Every later slide has `section` `support` or `appendix` and a `type` in `text_chart`, `table`, `quote`,
+  `two_column`, `image`, `checklist`.
+- **[R7]** Every slide is an object with non-empty `notes` and `source`.
+- **[R8]** Counts and shapes by slide type. `bullets`: `summary` 3-5 or none; `setup` and `why_now` 3-5; `valuation`
+  and `different` 2-4; `catalysts` 3-6; `text_chart` 2-5. `tripwires`: `risks` 2-4; `catalysts` 0-4. A `quote` slide
+  names 1-3 quote ids. A `two_column` slide's `left` and `right` are each an object with a non-empty `head` and a
+  `bullets` list. A `checklist` slide has 3-15 `items`, each an object with non-empty `q` and `a`.
+- **[R9]** `thesis` has exactly 3 `points`, each an object with non-empty `head` and `body`.
+- **[R10]** `risks` has exactly 2 `risks`, each an object with non-empty `head`, `if_hits` and `mitigant`, and a
+  `prob` that is a number strictly between 0 and 1.
+- **[R11]** `risk_reward` has cases named `Bull`, `Base` and `Bear` (case ignored).
+- **[R12]** There are 10 to 25 slides with `section` `support`; each has `supports` set to `thesis.1`, `thesis.2`,
+  `thesis.3`, `risks.1` or `risks.2`; each of those five is supported at least once.
+- **[R13]** Every `{key}` written in `action`, `pitch_20s`, `most_important_thing`, any slide field, `pitch_sheet`,
+  `sum_boxes` or `notes` exists in `numbers`.
+- **[R14]** No typed numbers in the budgeted text fields (section 11; quote `text` is exempt). How the check works:
+  it takes out the `{key}`s, splits the text on spaces, trims surrounding punctuation from each word, and flags a word
+  that holds `$` or `%`, holds a decimal (a digit, a point, a digit), or is a number followed by `x` (`12x`). Whole
+  numbers with no sign or unit ("2027E", "Q3 26", "15") pass the code, but the `{key}` rule in section 3 still binds
+  you: anything that measures the company or the stock goes through `numbers`. `risks[].prob` is a structured field,
+  not text, so it is not scanned.
+- **[R15]** Every quote id a slide names exists in `quotes`.
+- **[R16]** Every text field is within its budget (section 11), counted after each `{key}` is replaced by its `shown`.
+- **[R17]** `pitch_sheet` is an object: `script_3min` exactly 12 paragraphs; `napkin` 3-5 bullets; `hard_questions`
+  3-5 items; every `know_cold` key exists in `numbers`, and `know_cold` includes `price`, `base_ret`, `risk_ret`,
+  `irr_3y` and `buy_price`.
+- **[R18]** `sum_boxes`, if present, is an object whose keys are among the six SUM box names.
+- **[R19]** The call against the verdicts (the skill reads them from the tabs; failing that, `starting_verdicts`;
+  case ignored). If the Valuation verdict is Buy, Sell or Hold, a call other than its mapping (Buy → Long,
+  Sell → Short, Hold → Watch) needs `override` with a non-empty `reason` and `evidence`. `Short` needs the short
+  verdict `alpha short`, override or not; with no Short Check tab a Short is impossible.
+- **[R20]** A `Long` needs numeric `irr_3y`, `base_ret` and `risk_ret`. If `irr_3y` is below the IRR hurdle *and*
+  `base_ret` / |`risk_ret`| is below the buy R/R, it needs `override` or the call `Watch` (a `risk_ret` of 0 counts
+  as infinite R/R). The hurdles are the Valuation tab's "IRR hurdle" and "Buy at R/R" inputs; when the tab has none,
+  common.HURDLES: 20% 3-year IRR, 2:1 to buy, 3:1 to pound the table.
+- **[R21]** On a `Long`, an `action` containing "pound" needs `base_ret` / |`risk_ret`| at or above the pound R/R (the
+  Valuation tab's "Table-pound at R/R", default 3:1).
+
+Truth (`anchors.py`, run after `plan.py`):
+- **[A1]** A `Tab!Cell` anchor's value equals the recalculated cell at the rounding `shown` implies.
+- **[A2]** A `file:line` anchor's `shown` number is printed on that line of that file (path relative to the research
+  root), after dropping a leading `+` or `-`, `$ , % x ( )` and a unit suffix `m`, `bn` or `k` (section 3).
+- **[A3]** A `calc:` anchor evaluates, over the other keys' values, to `value` at the shown rounding; only names,
+  numbers, `+ - * / ^ ( )`, `abs`, `min`, `max`.
+- **[A4]** A quote's `text` is verbatim on its `line` of its `file`.
+- **[A5]** Two keys with the same anchor have the same `shown`.
 
 Problems come back to you as one line each; fix every one. A number still failing after two rounds is printed as
 UNVERIFIED in the speaker notes and the report, so anchor carefully the first time.

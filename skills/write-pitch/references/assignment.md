@@ -5,6 +5,7 @@ call, and write the pitch plan. A separate PM will then attack your draft, and y
 
 - Mode: {MODE} (`first` = no earlier pitch; `rerun` = an earlier plate file exists, read it first and then only what
   is newer).
+- Skill folder: `{SKILL}`
 - Work folder W: `{WORK}`
 - Research root R: `{RESEARCH}` (every `file:line` anchor and quote path is relative to it)
 - Model digest: `{DIGEST}`
@@ -17,8 +18,8 @@ The user's notes for this pitch (cite anything you use as `user note`, anchored 
 {USER_NOTES_OR_NONE}
 
 ## 1. Read the rules first
-Read `references/pitch_brief.md` and `references/plan_schema.md` (both in the skill's folder) in full before anything
-else. The brief says what a pitch must do; the schema says exactly what to write.
+Read `{SKILL}/references/pitch_brief.md` and `{SKILL}/references/plan_schema.md` in full before anything else.
+The brief says what a pitch must do; the schema says exactly what to write.
 
 ## 2. Read the sources, in this order
 {READING_LIST}
@@ -47,15 +48,21 @@ column) before you describe a chart. The numbers behind the charts are in the di
 not from reading a chart by eye. Note in the plate which pictures you would put on which slide.
 
 ## 5. Make the call
-Follow `pitch_brief.md` section 9: start from the Valuation and Short Check verdicts (find them in the digest), apply
-the mapping and the hurdles, and override only with cited evidence. Write the call and its reasons at the top of the
-plate before you write the plan.
+Follow `pitch_brief.md` section 9. Start from the verdicts in the digest: the Valuation row "Overall verdict (the
+agent's call: Buy / Hold / Sell)" (empty = Hold; say so in `notes`) and the Short Check row "Verdict (agent's call)"
+(empty = the row "Verdict (the rule)"; no Short Check tab = `null`, and no Short call). Apply the mapping and the
+hurdles from the Valuation tab's "IRR hurdle", "Buy at R/R" and "Table-pound at R/R" inputs (the house defaults in
+`pitch_brief.md` section 7 only if the tab lacks them), and override only with cited evidence. Write the call and
+its reasons at the top of the plate before you write the plan.
 
 ## 6. Write the plan
 Write `{WORK}/pitch_plan.json` exactly as `plan_schema.md` describes: the ten core slides in order, 10-25 support
 slides (at least one per thesis point and per risk), the appendix slides the brief lists, the pitch sheet, the SUM
 boxes and every judgment call in `notes`. Every number through a `{key}` with an anchor; every quote verbatim with its
-line. Check your own work against the rule list at the end of `plan_schema.md` before you reply.
+line. The PM has not run yet, so attack your own draft: put the hardest questions you expect in
+`pitch_sheet.hard_questions` (with your answers) and the challenges you expect on the "PM challenges" appendix slide;
+you will replace both after the review. Check your own work against the rule list at the end of `plan_schema.md`
+before you reply.
 
 Then reply exactly `PLAN WRITTEN` followed by five lines:
 1. Call and action (and the override, if any, in a few words).
@@ -70,9 +77,9 @@ The PM's review is in `{WORK}/pm_review.md`. Read it in full and open whatever i
    Answer every challenge by number (`C1`, `C2`, ...): either **concede** (say what you changed in the plan) or
    **defend** with cited evidence (`file:line` or `Tab!Cell`). "I disagree" with no evidence is not a defence.
 2. Revise `{WORK}/pitch_plan.json` for every concession: numbers, probabilities, slides, the call.
-3. Every challenge still standing after your response (one you defended but the PM may still reject, or one you
-   could not answer) goes on an appendix slide of PM challenges, and the hardest of them into
-   `pitch_sheet.hard_questions` with your best answer.
+3. Replace your own anticipated challenges: every challenge still standing after your response (one you defended
+   but the PM may still reject, or one you could not answer) goes on the "PM challenges" appendix slide, and the
+   hardest of them into `pitch_sheet.hard_questions` with your best answer.
 4. A verdict of `kill` that you cannot answer with evidence changes the call to `Watch` with a buy price, with
    `override` naming the PM challenge as the reason; say in `notes` what killed it.
 5. Update the plate file (a dated change-log entry: what the PM changed in your view).

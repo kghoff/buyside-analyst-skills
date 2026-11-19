@@ -8,8 +8,8 @@ investment committee does. You have not seen the analyst's reading; test what th
 - Model digest: `{DIGEST}`
 
 ## Read, in this order
-1. `references/pm_brief.md` (in the skill's folder), in full. `references/plan_schema.md` explains the plan's fields
-   if one is unclear.
+1. `{SKILL}/references/pm_brief.md`, in full. `{SKILL}/references/plan_schema.md` explains the plan's fields if one
+   is unclear.
 2. `{WORK}/pitch_plan.json`: the draft, slides 1-10 first, then support and appendix.
 3. `{WORK}/plate.md`: the analyst's notebook.
 4. `{DIGEST}`: the model's numbers with their cells.
