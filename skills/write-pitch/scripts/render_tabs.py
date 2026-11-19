@@ -5,10 +5,11 @@ usage: python3 render_tabs.py --values <recalculated copy> --out <work>/tabs
 Writes tabs/index.json, tabs/index.md and the PNGs. index.json is a list with one entry per PNG:
 {"tab", "page", "tile", "row", "col", "png" (relative to the tabs folder), "has_chart", "truncated"}; a tab that produced no
 non-blank tile gets one entry with "png": null (and "note" when something went wrong).
-- LibreOffice prints each visible tab as ONE page, as wide and tall as the tab (hidden tabs are skipped), in tab order.
+- LibreOffice prints every tab, hidden ones too, as ONE page as wide and tall as the tab, in workbook order. Hidden tabs
+  are left out of the index and the PNGs. A chartsheet gets an entry with png null (LibreOffice prints it blank).
 - That page is cut into a grid of tiles of 1000 pt wide and 1.3 x that high (a narrower page: one column of its own
   width), rendered 1600 px wide, so a normal table or chart is legible. Tiles go row by row from the top-left; blank
-  ones are skipped; at most 24 non-blank per tab with a chart or image, 4 per tab without; "truncated": true when more were left out. Each entry has its grid
+  ones are skipped; at most MAX_CHART_TILES (24) non-blank per tab with a chart or image, MAX_PLAIN_TILES (4) without; "truncated": true when more were left out. Each entry has its grid
   "row" and "col" (1-based) and the file name carries them.
 - has_chart comes from the xlsx zip itself: the tab's sheet rels point to a drawing part (charts and images).
 - The intermediate PDF is deleted after tiling."""
@@ -91,63 +92,99 @@ def pick_tiles(rects, blank, cap):
     return keep, False
 
 
-def _first_text(xlsx, name):
+def is_chartsheet(part):
+    return part.startswith("xl/chartsheets/")
+
+
+def cap_for(has_chart):
+    return MAX_CHART_TILES if has_chart else MAX_PLAIN_TILES
+
+
+def first_texts(xlsx, names):
+    """{tab: its first text cell (top-left 60 x 20), or None}; the workbook is opened once."""
     import openpyxl
+    out = {}
     wb = openpyxl.load_workbook(xlsx, read_only=True, data_only=True)
     try:
-        for row in wb[name].iter_rows(max_row=60, max_col=20):
-            for c in row:
-                if isinstance(c.value, str) and len(c.value.strip()) > 3:
-                    return c.value.strip()
+        for name in names:
+            out[name] = None
+            for row in wb[name].iter_rows(max_row=60, max_col=20):
+                for c in row:
+                    if out[name] is None and isinstance(c.value, str) and len(c.value.strip()) > 3:
+                        out[name] = c.value.strip()
+                if out[name]:
+                    break
     finally:
         wb.close()
-    return None
+    return out
 
 
 def _on_page(text, page_text):
-    """Is the cell text on the page? Whitespace and case are ignored, and the ends are dropped: a cell wider than its
-    column is clipped at both ends when printed (a centred title), so only its middle is searched."""
+    """Is the cell text on the page? Case and whitespace are ignored. A cell wider than its column is clipped at one or
+    both ends when printed (a centred title, or a long note cut at the column edge), so the match is either the 12
+    characters after the first 3, or the inside of one of the first three words (5+ letters, first and last dropped)."""
     norm = lambda t: " ".join(t.upper().split())
-    core = norm(text)
-    core = core[3:-3] if len(core) > 12 else core
-    return core[:20].strip() in norm(page_text)
+    t, pt = norm(text), norm(page_text)
+    if t[3:15].strip() in pt:
+        return True
+    return any(w[1:-1] in pt for w in t.split()[:3] if len(w) >= 5)
+
+
+def _clear(out):
+    """Remove what an earlier run wrote here (only *.png, index.json, index.md)."""
+    for f in os.listdir(out):
+        if f.endswith(".png") or f in ("index.json", "index.md"):
+            os.remove(os.path.join(out, f))
 
 
 def render(values, out):
+    """LibreOffice prints EVERY sheet, hidden ones too, one page each in workbook order. Pages are mapped to all sheets
+    by order; hidden sheets are then left out of the index and the PNGs (the analyst reads what the PM can see)."""
     import fitz
     import lo
     os.makedirs(out, exist_ok=True)
-    visible = [n for n, st, _ in sheets(values) if st == "visible"]
+    _clear(out)
+    allsheets = sheets(values)
     charts = chart_tabs(values)
+    texts = first_texts(values, [n for n, _, part in allsheets if not is_chartsheet(part)])
     pdf = lo.render_pdf(values, out)
     index, notes = [], []
+    empty = dict(tile=None, row=None, col=None, png=None, truncated=False)
     try:
         doc = fitz.open(pdf)
-        if len(doc) != len(visible):
-            notes.append(f"PDF has {len(doc)} pages for {len(visible)} visible tabs; mapped by order up to the shorter")
-        for page_no, tab in enumerate(visible[:len(doc)], start=1):
-            page = doc[page_no - 1]
-            base = {"tab": tab, "page": page_no, "has_chart": tab in charts}
-            first = _first_text(values, tab)
-            if first and not _on_page(first, page.get_text()):
-                notes.append(f"tab {tab}: its first text '{first[:25]}' was not found on page {page_no}; mapping by order may be off")
-            w, h = page.rect.width, page.rect.height
-
-            def blank(tile, page=page, w=w):
-                z = 160 / min(w, TILE_PT)
-                pix = page.get_pixmap(matrix=fitz.Matrix(z, z), clip=fitz.Rect(*tile[2]), colorspace=fitz.csGRAY)
-                return is_blank(pix.samples)
+        if len(doc) != len(allsheets):
+            notes.append(f"PDF has {len(doc)} pages for {len(allsheets)} tabs; mapped by order")
+        for page_no, (tab, state, part) in enumerate(allsheets, start=1):
+            if state != "visible":
+                continue
+            base = {"tab": tab, "page": page_no, "has_chart": tab in charts or is_chartsheet(part)}
             try:
-                keep, truncated = pick_tiles(tile_rects(w, h), blank, MAX_CHART_TILES if tab in charts else MAX_PLAIN_TILES)
+                if page_no > len(doc):
+                    index.append(dict(base, **empty, note="missing from the PDF"))
+                    continue
+                if is_chartsheet(part):
+                    index.append(dict(base, **empty, note="chartsheet: not rendered by LibreOffice"))
+                    continue
+                page = doc[page_no - 1]
+                first = texts.get(tab)
+                if first and not _on_page(first, page.get_text()):
+                    notes.append(f"tab {tab}: its first text '{first[:25]}' was not found on page {page_no}; mapping by order may be off")
+                w, h = page.rect.width, page.rect.height
+
+                def blank(tile, page=page, w=w):
+                    z = 160 / min(w, TILE_PT)
+                    pix = page.get_pixmap(matrix=fitz.Matrix(z, z), clip=fitz.Rect(*tile[2]), colorspace=fitz.csGRAY)
+                    return is_blank(pix.samples)
+                keep, truncated = pick_tiles(tile_rects(w, h), blank, cap_for(base["has_chart"]))
                 entries = []
                 for t, (row, col, r) in enumerate(keep, start=1):
                     z = TILE_PX / min(w, TILE_PT)
                     png = f"{re.sub(r'[^A-Za-z0-9]+', '_', tab).strip('_')}_p{page_no}_r{row}c{col}.png"
                     page.get_pixmap(matrix=fitz.Matrix(z, z), clip=fitz.Rect(*r)).save(os.path.join(out, png))
                     entries.append(dict(base, tile=t, row=row, col=col, png=png, truncated=truncated))
-                index += entries or [dict(base, tile=None, row=None, col=None, png=None, truncated=False, note="blank tab")]
-            except Exception as e:  # a page too large for MuPDF: say so, keep going
-                index.append(dict(base, tile=None, row=None, col=None, png=None, truncated=False, note=f"could not render: {e}"))
+                index += entries or [dict(base, **empty, note="blank tab")]
+            except Exception as e:  # e.g. a page too large for MuPDF: say so, keep going
+                index.append(dict(base, **empty, note=f"could not render: {e}"))
         doc.close()
     finally:
         if os.path.exists(pdf):

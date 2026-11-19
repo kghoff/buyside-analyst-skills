@@ -18,6 +18,9 @@ def tab_render(tmp_path_factory):
     ws1 = wb.active
     ws1.title = "Notes"
     ws1["A1"] = "Plain notes tab with no chart"
+    hid = wb.create_sheet("Secret")
+    hid["A1"] = "Hidden working tab never shown"
+    hid.sheet_state = "hidden"
     ws2 = wb.create_sheet("Charts")
     ws2["A1"] = "Price history"
     for i in range(1, 21):
@@ -29,4 +32,4 @@ def tab_render(tmp_path_factory):
     src = str(d / "T_model.xlsx")
     wb.save(src)
     out = str(d / "tabs")
-    return out, render_tabs.render(src, out)
+    return out, render_tabs.render(src, out), src

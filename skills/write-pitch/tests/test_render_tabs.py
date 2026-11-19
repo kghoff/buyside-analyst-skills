@@ -33,13 +33,6 @@ def test_chart_detected_from_the_zip_only_on_the_chart_tab(tmp_path):
         assert any(n.startswith("xl/charts/") for n in z.namelist())
 
 
-def test_hidden_tabs_are_not_in_the_visible_list(tmp_path):
-    # LibreOffice prints visible tabs only, so page numbers follow this list
-    p = _book(str(tmp_path / "b.xlsx"), "Graphs")
-    states = {n: s for n, s, _ in render_tabs.sheets(p)}
-    assert states["Hidden"] != "visible" and states["Plain"] == "visible"
-
-
 def test_blank_tile_is_detected_and_ink_is_not():
     # a white tile must not become a picture; a tile with a small chart line must
     assert render_tabs.is_blank(bytes([255]) * 10000)
@@ -90,15 +83,46 @@ def test_clipped_title_still_matches_its_page():
     assert not render_tabs._on_page("CAPITAL ASSET PRICING MODEL (CAPM)", "Revenue growth by segment")
 
 
+def test_clipped_title_still_matches_its_page():
+    # a centred title wider than its column prints without letters at one or both ends; that must not flag the mapping
+    title = "CAPITAL ASSET PRICING MODEL (CAPM)"
+    assert render_tabs._on_page(title, "APITAL ASSET PRICING MODEL (CAPM\nWACC")
+    assert render_tabs._on_page(title, "CAPITAL ASSET PRICING MO\nWACC")
+    assert not render_tabs._on_page(title, "Revenue growth by segment")
+
+
+def test_chartsheet_is_detected_and_does_not_crash_first_text(tmp_path):
+    # a chartsheet has no cells; asking it for its first text used to raise AttributeError
+    wb = openpyxl.Workbook()
+    wb.active["A1"] = "Data tab title"
+    ch = LineChart()
+    ch.add_data(Reference(wb.active, min_col=1, min_row=1, max_row=1))
+    cs = wb.create_chartsheet("Big chart")
+    cs.add_chart(ch)
+    p = str(tmp_path / "c.xlsx")
+    wb.save(p)
+    parts = {n: part for n, _, part in render_tabs.sheets(p)}
+    assert render_tabs.is_chartsheet(parts["Big chart"]) and not render_tabs.is_chartsheet(parts["Sheet"])
+    assert render_tabs.first_texts(p, ["Sheet"]) == {"Sheet": "Data tab title"}
+
+
+def test_cap_chosen_from_has_chart():
+    assert render_tabs.cap_for(True) == render_tabs.MAX_CHART_TILES
+    assert render_tabs.cap_for(False) == render_tabs.MAX_PLAIN_TILES
+
+
 @pytest.mark.slow
 def test_render_small_workbook(tab_render):
-    out, index = tab_render
+    out, index, src = tab_render
     assert json.load(open(os.path.join(out, "index.json"))) == index
     by_tab = {e["tab"]: e for e in index}
-    assert set(by_tab) == {"Notes", "Charts"}
+    assert set(by_tab) == {"Notes", "Charts"}            # the hidden tab is printed by LibreOffice but left out
     assert by_tab["Charts"]["has_chart"] and not by_tab["Notes"]["has_chart"]
+    # LibreOffice prints the hidden tab too, so the chart tab is page 3: a mapping that skipped it would say 2
+    assert (by_tab["Notes"]["page"], by_tab["Charts"]["page"]) == (1, 3)
     for e in index:
         assert e["png"] and os.path.exists(os.path.join(out, e["png"]))
     assert not [f for f in os.listdir(out) if f.endswith(".pdf")]
     md = open(os.path.join(out, "index.md")).read()
     assert md.index("Charts") < md.index("Notes")                 # chart tabs first
+    assert "Problems" not in md                                   # every tab's first text was found on its own page
