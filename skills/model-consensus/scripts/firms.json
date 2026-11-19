@@ -2,6 +2,7 @@
  "firms": [
   {"name": "Goldman Sachs", "type": "bank", "aliases": ["goldman", "goldman sachs and co"]},
   {"name": "Morgan Stanley", "type": "bank", "aliases": []},
+  {"name": "Freedom Broker", "type": "bank", "aliases": ["freedom capital markets", "freedom finance"]},
   {"name": "J.P. Morgan", "type": "bank", "aliases": ["jp morgan", "jpmorgan", "j p morgan", "jpm", "jp morgan securities"]},
   {"name": "BofA Securities", "type": "bank", "aliases": ["bofa", "bank of america", "b of a glbl res", "b of a global research", "merrill lynch", "bofa global research", "b of a securities"]},
   {"name": "Citi", "type": "bank", "aliases": ["citigroup", "citi research"]},
