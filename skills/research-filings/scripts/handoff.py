@@ -1,9 +1,10 @@
 """Filings research -> the user's model: the charts and tables they keep using, written into their workbook.
 
 usage: python3 handoff.py --src <ticker folder> --model <TICKER_model.xlsx> --context      (for the agent, first)
-       python3 handoff.py --src <ticker folder> --model <TICKER_model.xlsx> --out <OUT.xlsx> [--idio-only]
+       python3 handoff.py --src <ticker folder> --model <TICKER_model.xlsx> --out <OUT.xlsx> [--idio-only] [--charts-only]
 --idio-only: only the Idio Chart and Px Events parts below (for /model-price-history's refresh); Filings Charts is
 left as it is.
+--charts-only: only the Filings Charts tab (for /model-update's Q4 guidance refresh); Idio Chart and Px Events are left as they are.
 Reads _work/drivers_math.json (config), _work/model_series.csv (the MOD cell of each metric; rerun modeldata.py
 first if MOD rows moved), the readers' guidance.csv files and _work/model_handoff.json (the handoff agent's
 takeaways, eras, annotations, tables; references/handoff_prompt.md). Writes OUT:
@@ -1081,6 +1082,7 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--context", action="store_true", help="write _work/handoff_context.json for the agent and stop")
     ap.add_argument("--idio-only", action="store_true", help="leave Filings Charts as it is (price-history refresh)")
+    ap.add_argument("--charts-only", action="store_true", help="leave Idio Chart and Px Events as they are (model-update)")
     a = ap.parse_args()
     work = _work(a.src)
     if a.context:
@@ -1113,7 +1115,7 @@ def main():
         block_custom(T, M, b)
         built.append(b["title"])
     out = {"tab": TAB, "blocks": built}
-    part = _sheet_part(pkg, "Idio Chart")
+    part = None if a.charts_only else _sheet_part(pkg, "Idio Chart")
     if part:
         ss = _strings(pkg)
         filled, skipped = fill_notes(pkg, st, H, ss)
@@ -1130,7 +1132,7 @@ def main():
         start, sk2 = stock_blocks(pkg, st, part, H, ticker, sector)
         out.update({"annotation_cells_filled": filled, "kept_users_cells": skipped + sk2, "alpha_notes": n,
                     "stock_rows_from": start})
-    else:
+    elif not a.charts_only:
         out["idio"] = "no Idio Chart tab: run /model-price-history first"
     if not a.idio_only:
         write_tab(pkg, T, comments)

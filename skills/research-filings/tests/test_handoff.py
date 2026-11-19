@@ -131,3 +131,49 @@ def test_stock_blocks_read_the_stock_from_the_column_they_are_given(tmp_path):
     for f in stock:
         assert "$D$5:$D$20000" in f and "$B$5" not in f, f
     assert any(r.startswith("C") and "$C$5:$C$20000" in f for r, f in fs.items())     # SPY still reads C
+
+
+def test_charts_only_leaves_idio_chart_alone_so_a_q4_refresh_cannot_touch_price_history(tmp_path, monkeypatch, capsys):
+    # /model-update refreshes Filings Charts after a Q4; the user's Idio Chart and Px Events must not be looked at
+    import json, sys
+    work = tmp_path / "_work"
+    work.mkdir()
+    json.dump({"config": {"revenue": 1, "cogs": 2, "operating_income": 3}}, open(work / "drivers_math.json", "w"))
+    json.dump({"ticker": "TEST"}, open(work / "model_handoff.json", "w"))
+    asked = []
+
+    class FakePkg:
+        def __init__(self, p): pass
+        def text(self, n): return ""
+        def put(self, *a): pass
+        def finish(self): pass
+        def save(self, p): pass
+
+    class FakeStyles:
+        def __init__(self, x): pass
+        def render(self): return ""
+
+    class FakeTab:
+        def __init__(self, st):
+            self.s = {"title": 0}
+            self.sh = type("S", (), {"set": lambda *a: None, "heights": {}})()
+        def note(self, t): pass
+
+    monkeypatch.setattr(handoff, "_work", lambda src: str(work))
+    monkeypatch.setattr(handoff, "load_mod", lambda w: {})
+    monkeypatch.setattr(handoff, "check_rows", lambda *a: None)
+    monkeypatch.setattr(handoff, "Package", FakePkg)
+    monkeypatch.setattr(handoff, "Styles", FakeStyles)
+    monkeypatch.setattr(handoff, "Tab", FakeTab)
+    monkeypatch.setattr(handoff, "write_tab", lambda *a: None)
+    monkeypatch.setattr(handoff, "block_fixed_variable", lambda *a: False)
+    monkeypatch.setattr(handoff, "block_profit_bridge", lambda *a: False)
+    monkeypatch.setattr(handoff, "block_price_volume", lambda *a: False)
+    monkeypatch.setattr(handoff, "_sheet_part", lambda pkg, name: asked.append(name) or "xl/worksheets/sheet9.xml")
+    import notebox
+    monkeypatch.setattr(notebox, "fix", lambda *a, **k: None)
+    monkeypatch.setattr(sys, "argv", ["handoff.py", "--src", str(tmp_path), "--model", "m.xlsx", "--out", "o.xlsx",
+                                      "--charts-only"])
+    handoff.main()
+    assert "Idio Chart" not in asked
+    assert "idio" not in json.loads(capsys.readouterr().out)
