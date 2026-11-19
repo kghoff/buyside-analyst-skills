@@ -266,6 +266,56 @@ def estimates(mm, gm, q, frozen, drv, snap, snap_path, warnings):
     return out
 
 
+# ---------------------------------------------------------------- consensus (the preview's variance grid)
+VAR_EARN, VAR_CONS = "6. VARIANCE GRID", "2. VARIANCE"   # model-earnings-before band 6 / model-consensus band 2
+
+
+def _notes(model, tab):
+    """{ref: comment text} of one tab, read from the raw XML (no full workbook load)."""
+    from xlsx import Package, relpath_of, resolve
+    pkg = Package(model)
+    sh = {s[0]: s for s in pkg.sheets()}.get(tab)
+    out = {}
+    if not sh:
+        return out
+    for _, (typ, tgt) in pkg.rels(relpath_of(sh[3])).items():
+        if typ.endswith("/comments"):
+            x = pkg.text(resolve(sh[3], tgt))
+            for ref, body in re.findall(r'<comment ref="([A-Z]+\d+)"[^>]*>(.*?)</comment>', x, re.S):
+                out[ref] = re.sub(r"<[^>]+>", "", body).replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    return out
+
+
+def consensus(model, values, quarter):
+    """The consensus the preview's variance grid held for the quarter (column C): on the Earnings tab's band 6, or
+    in the Consensus tab's '2. VARIANCE' block (label in B). A minimal locator copied in idea from
+    model-earnings-before variance.inspect (not imported: the sibling's modules never mix with ours).
+    {where: 'earnings' / 'consensus' / None, rows: [{label, q, q_ref}] (only rows with a number), source: the
+    first consensus cell's note, or None}. Blank or skeleton grid: rows []."""
+    wb = openpyxl.load_workbook(values, read_only=True, data_only=True)
+    for tab, band, lab_col in ((et.TAB, VAR_EARN, 1), ("Consensus", VAR_CONS, 2)):
+        if tab not in wb.sheetnames:
+            continue
+        g = grid(wb[tab])
+        a = sorted((r, str(v).strip()) for (r, c), v in g.items() if c == 1 and isinstance(v, str))
+        top = next((r for r, t in a if t.startswith(band)), None)
+        if top is None:
+            continue
+        head = str(g.get((top + 1, 3)) or "")
+        if quarter not in head.replace("E", ""):
+            continue                                  # a grid for another quarter is not this print's consensus
+        end = next((r for r, t in a if r > top and re.match(r"\d+\.", t)), max(r for r, _ in g) + 1)
+        rows = [{"label": str(g[(r, lab_col)]).strip(), "q": g[(r, 3)], "q_ref": f"'{tab}'!$C${r}"}
+                for r in range(top + 2, end) if (r, lab_col) in g and am._n(g.get((r, 3)))]
+        if not rows:
+            continue
+        wb.close()
+        src = _notes(model, tab).get(rows[0]["q_ref"].split("!")[1].replace("$", ""))
+        return {"where": "earnings" if tab == et.TAB else "consensus", "rows": rows, "source": src}
+    wb.close()
+    return {"where": None, "rows": [], "source": None}
+
+
 # ---------------------------------------------------------------- valuation, docs, house
 def _fresh_note(root, ticker, day):
     """The newest '<date> <T> Valuation Note.md' dated on or after day (model-valuation writes one every run; its
@@ -446,6 +496,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
            "earnings_refs": tab["refs"], "earnings_values": ev, "earnings_start": tab["start"],
            "after_start": tab["after_start"],
            "move": mv, "estimates": est, "valuation": val, "irr_now": ir, "fade": fade,
+           "consensus": consensus(model, values, q),
            "latest_close": {"value": lc["close"], "date": lc["date"].isoformat(), "ref": close_ref},
            "docs": dd, "topics": callnotes.topics([d["name"] for d in drv]),
            "drivers": [{"name": d["name"], "key": d["key"], "row": d["row"]} for d in drv],

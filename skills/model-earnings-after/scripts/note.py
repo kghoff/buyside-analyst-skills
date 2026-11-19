@@ -38,7 +38,8 @@ TOC_START, TOC_END = "<!-- contents -->", "<!-- /contents -->"
 
 
 def fmt(cell):
-    """Copied from model-valuation note.py, Nov 2026; keep in sync.
+    """Copied from model-valuation note.py, Nov 2026; keep in sync. Change: any plain 0 / 0.0 / #,##0.00 style
+    format prints with its own decimal count (and thousands commas when it has them).
     A cell's value as Excel would show it (its own number format), in plain text."""
     v, f = cell.value, cell.number_format or "General"
     if v is None:
@@ -52,12 +53,9 @@ def fmt(cell):
         return f"{v:.1f}x"
     if "$" in f:
         return f"-${-v:,.2f}" if v < 0 else f"${v:,.2f}"
-    if f in ("#,##0.0",):
-        return f"{v:,.1f}"
-    if f == "0":
-        return f"{v:.0f}"
-    if f == "0.00":
-        return f"{v:.2f}"
+    m = re.fullmatch(r"[#,]*0(\.(0+))?", f)
+    if m:
+        return f"{v:{',' if ',' in f else ''}.{len(m.group(2) or '')}f}"
     return f"{v:,.2f}" if isinstance(v, float) else str(v)
 
 
@@ -98,6 +96,11 @@ class Tab:
         """The cell as the tab shows it; '?' when the label is not on the tab."""
         return show(self.cell(label, col)) if self.has(label) else "?"
 
+    def at(self, qref):
+        """The cell at a "'Tab'!$C$9" ref, or None."""
+        m = re.fullmatch(r"'?(.+?)'?!\$?([A-Z]+)\$?(\d+)", qref or "")
+        return self.wb[m.group(1)][f"{m.group(2)}{m.group(3)}"] if m and m.group(1) in self.wb.sheetnames else None
+
     def raw(self, label, col=None):
         return self.cell(label, col).value if self.has(label) else None
 
@@ -128,6 +131,19 @@ class Tab:
                     if j < len(r) and r[j] not in (None, ""):
                         out[q][str(r[0]).strip()] = str(r[j])
         return out, [q for _, q in qs]
+
+
+def _num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def _cons_ref(label, rows):
+    """The variance-grid consensus cell for a band 9 line: grid 'Revenue' for '... | Revenue', 'EPS' for
+    '... | EPS, diluted'; None when the grid has no such row."""
+    last = label.split(" | ")[-1].strip().lower()
+    return next((r["q_ref"] for r in rows
+                 if last == r["label"].lower() or last.startswith((r["label"].lower() + ",", r["label"].lower() + " "))),
+                None)
 
 
 def _quote(p):
@@ -169,10 +185,24 @@ def write_md(work, ticker, out_dir, date, values):
     # 2 Reaction
     L += ["## 2 Reaction", "", f"Actual against the forecast frozen {ctx['frozen']['date']} (Earnings tab band 9; "
           f"in line = within {t.v(IN_LINE_LABEL)}).", "",
-          "| Line | Frozen | Actual | Difference | % | Result |", "|---|---|---|---|---|---|"]
+          "| Line | Frozen | Actual | Difference | % | Result | Consensus | vs consensus |",
+          "|---|---|---|---|---|---|---|---|"]
+    cons = ctx.get("consensus") or {}
     for lab in lines9:
         cells = [t.v(lab, c) if t.raw(lab, c) is not None else "" for c in "BCDEF"]
+        cc = t.at(_cons_ref(lab, cons.get("rows") or []))
+        act = t.raw(lab, "C")
+        vs = act / cc.value - 1 if cc is not None and _num(cc.value) and cc.value and _num(act) else None
+        cells += [show(cc) if cc is not None and cc.value is not None else "n/a",
+                  "n/a" if vs is None else f"{vs * 100:.1f}%"]
         L.append(f"| {cell_text(lab)} | " + " | ".join(cell_text(c) for c in cells) + " |")
+    if cons.get("rows"):
+        where = "Earnings tab band 6" if cons["where"] == "earnings" else "the Consensus tab's variance block"
+        L += ["", f"Consensus is as typed into the grid before the print ({where}: "
+              f"{(cons.get('source') or 'no source note on the cell').strip().rstrip('.')}); a /model-consensus rerun after the print can "
+              "change it."]
+    else:
+        L += ["", "No consensus numbers in the variance grid."]
     if lay["placeholders"]:
         L += ["", f"Marked \"{PLACEHOLDER}\": " + ", ".join(lay["placeholders"]) + " (model-update's placeholder; "
               "no result until the 10-Q)."]
@@ -192,7 +222,9 @@ def write_md(work, ticker, out_dir, date, values):
 
     # 3 Call summary
     notes, order = t.call_notes()
-    pq = next((x for x in order[order.index(q) + 1:]), None) if q in order else None
+    i = order.index(q) if q in order else None                 # the previous quarter: the column right after ours
+    pq = order[i + 1] if i is not None and i + 1 < len(order) else None
+    others = [x for x in order if x != q]
     L += ["", "## 3 Call summary", "", f"From the {q} call ({ctx['docs']['transcript']}), near-verbatim by topic; "
           "each quote carries its file and line.", ""]
     pts = plan.get("call_notes") or {}
@@ -201,8 +233,10 @@ def write_md(work, ticker, out_dir, date, values):
         L += [_quote(p) for p in pts.get(topic) or []] or ["- Nothing on this call."]
         if topic in lay.get("call_notes_users", []):
             L.append(f"- You edited this cell on the Call Notes tab; it reads: {notes.get(q, {}).get(topic, '')}")
-        if pq is None:
+        if not others:
             L += ["", "First quarter in Call Notes."]
+        elif pq is None:
+            L += ["", f"No older quarter after {q} on Call Notes to compare with (columns: {', '.join(order)})."]
         else:
             was = notes.get(pq, {}).get(topic)
             now = notes.get(q, {}).get(topic)

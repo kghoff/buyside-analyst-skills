@@ -45,6 +45,35 @@ def _edit(path, fn):
     wb.save(path)
 
 
+def test_consensus_from_the_preview_grid(ctx):
+    """The after-print note compares the print with what the Street expected before it: band 6 holds the Yahoo mean
+    for revenue and EPS (typed, with its source note); the blank margin rows are not consensus."""
+    c = ctx["consensus"]
+    assert c["where"] == "earnings"
+    assert [(r["label"], r["q"]) for r in c["rows"]] == [("Revenue", 140), ("EPS", 0.62)]
+    assert c["rows"][0]["q_ref"].startswith("'Earnings'!$C$")
+    assert "Yahoo snapshot 2026-11-01" in c["source"]
+
+
+def test_consensus_tab_block_and_skeleton(model):
+    """With band 6 empty, model-consensus's empty skeleton gives no consensus at all (never a 0), and the Consensus
+    tab's block is read once the user typed a number there."""
+    def clear(wb):
+        for row in wb["Earnings"].iter_rows(min_col=3, max_col=5):
+            for c in row:
+                if c.comment and "Consensus tab mean row" in c.comment.text:
+                    c.value = None
+    _edit(model, clear)
+    assert context.consensus(model, model, "Q4 26") == {"where": None, "rows": [], "source": None}
+
+    def typed(wb):
+        ws = wb["Consensus"]
+        ws[f"C{next(c.row for c in ws['B'] if c.value == 'EPS')}"] = 0.6
+    _edit(model, typed)
+    c = context.consensus(model, model, "Q4 26")
+    assert c["where"] == "consensus" and [(x["label"], x["q"]) for x in c["rows"]] == [("EPS", 0.6)]
+
+
 def test_quarter_and_surprise(ctx):
     """The surprise is signed against the frozen line: revenue came in 4% above, operating income 3% below."""
     assert ctx["quarter"] == "Q4 26" and ctx["quarter_e"] == "Q4 26E"

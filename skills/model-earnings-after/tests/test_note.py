@@ -81,6 +81,81 @@ def test_fast_sections_wrap_and_changes_since_last_quarter(fake, tmp_path):
     assert "First quarter in Call Notes" not in md
 
 
+def test_fast_vs_consensus_from_the_grid(fake, tmp_path):
+    """The print against the Street as it stood before the print: the grid's consensus cell, and actual / consensus
+    - 1 from the two cells; a line the grid has no consensus for says n/a, never 0%."""
+    w, vals = fake
+    md = _md(w, vals, tmp_path)
+    s2 = _section(md, 2)
+    rows = {r[0]: r for r in _table_rows(s2)}
+    wb = openpyxl.load_workbook(vals)
+    ws = wb["Earnings"]
+    lay = json.load(open(os.path.join(w, "layout.json")))
+    ctx = json.load(open(os.path.join(w, "context.json")))
+    for lab, grid in (("INCOME STATEMENT | Revenue", "Revenue"), ("INCOME STATEMENT | EPS, diluted", "EPS")):
+        ref = next(r["q_ref"] for r in ctx["consensus"]["rows"] if r["label"] == grid).split("!")[1].replace("$", "")
+        cons = ws[ref]
+        act = ws[f"C{re.sub(r'[^0-9]', '', lay['refs'][lab])}"].value
+        assert rows[lab][6] == note.fmt(cons)
+        assert rows[lab][7] == f"{(act / cons.value - 1) * 100:.1f}%"
+    assert rows["INCOME STATEMENT | Gross Profit"][6:] == ["n/a", "n/a"]
+    assert "Consensus is as typed into the grid before the print (Earnings tab band 6: Consensus tab mean row " \
+           "(Yahoo snapshot 2026-11-01)); a /model-consensus rerun after the print can change it." in s2
+
+
+def test_fast_no_consensus_in_the_grid(fake, tmp_path):
+    w, vals = fake
+    p = os.path.join(w, "context.json")
+    ctx = json.load(open(p))
+    ctx["consensus"] = {"where": None, "rows": [], "source": None}
+    json.dump(ctx, open(p, "w"))
+    s2 = _section(_md(w, vals, tmp_path), 2)
+    assert "No consensus numbers in the variance grid." in s2 and "Consensus is as typed" not in s2
+    assert all(r[6:] == ["n/a", "n/a"] for r in _table_rows(s2))
+
+
+class _C:
+    def __init__(self, v, f):
+        self.value, self.number_format = v, f
+
+
+def test_fmt_uses_the_formats_own_decimals():
+    """A number reads as the tab shows it: 43.98 in a 0.0 cell is 44.0 on screen, so the note says 44.0."""
+    assert note.fmt(_C(43.98, "0.0")) == "44.0"
+    assert note.fmt(_C(43.98, "0.00")) == "43.98"
+    assert note.fmt(_C(1234.56, "#,##0")) == "1,235"
+    assert note.fmt(_C(1234.56, "#,##0.0")) == "1,234.6"
+    assert note.fmt(_C(3, "0")) == "3"
+
+
+def _call_notes_heads(vals, heads, tone):
+    """Rewrite the copy's Call Notes header row and Tone row: heads / tone texts from column B on."""
+    wb = openpyxl.load_workbook(vals)
+    cn = wb["Call Notes"]
+    h = next(r for r in cn.iter_rows() if r[0].value == "Topic")[0].row
+    t = next(c.row for c in cn["A"] if c.value == "Tone")
+    for j in range(2, 8):
+        cn.cell(h, j).value = cn.cell(t, j).value = None
+    for j, (q, x) in enumerate(zip(heads, tone), start=2):
+        cn.cell(h, j, q)
+        cn.cell(t, j, x)
+    wb.save(vals)
+
+
+def test_previous_quarter_is_the_column_right_after_ours(fake, tmp_path):
+    """The user may keep a newer column left of this quarter: the previous quarter is still the one right after
+    ours, and 'First quarter' only shows when no other quarter is on the tab."""
+    w, vals = fake
+    _call_notes_heads(vals, ["Q1 27", "Q4 26", "Q3 26"], ["newer", "now", "Cautious on the launch."])
+    tone = _md(w, vals, tmp_path).split("### Tone", 1)[1].split("###", 1)[0]
+    assert "Changed since last quarter: Q3 26 read: Cautious on the launch." in tone
+    _call_notes_heads(vals, ["Q1 27", "Q4 26"], ["newer", "now"])
+    md = _md(w, vals, tmp_path)
+    assert "No older quarter after Q4 26" in md and "First quarter in Call Notes" not in md
+    _call_notes_heads(vals, ["Q4 26"], ["now"])
+    assert "First quarter in Call Notes." in _md(w, vals, tmp_path)
+
+
 def test_fast_placeholder_and_yellow_cells_listed(fake, tmp_path):
     """A call the user never hears about is the worst outcome: every yellow cell appears with its cell, and the
     model-update placeholder is marked, not given a beat / miss."""
@@ -91,7 +166,7 @@ def test_fast_placeholder_and_yellow_cells_listed(fake, tmp_path):
     for lab, ref in lay["inputs"].items():
         assert f"Earnings!{ref}" in j and lab in j, lab
     units = [r for r in _table_rows(_section(md, 2)) if r[0] == "KEY OPERATING METRICS | Units"][0]
-    assert units[-1] == build.PLACEHOLDER
+    assert units[5] == build.PLACEHOLDER
     assert "KEY OPERATING METRICS | Units: \"estimate, awaiting 10-Q\"" in _section(md, 6)
 
 
@@ -140,8 +215,8 @@ def test_reaction_table_numbers_are_the_recalculated_cells(recalc_run, tmp_path)
                 checked += 1
     assert checked >= 15
     by = {r[0]: r for r in rows}
-    assert by["INCOME STATEMENT | Revenue"][4:] == ["4.0%", "beat"]
-    assert by["INCOME STATEMENT | Operating Income"][4:] == ["-3.0%", "miss"]
+    assert by["INCOME STATEMENT | Revenue"][4:6] == ["4.0%", "beat"]
+    assert by["INCOME STATEMENT | Operating Income"][4:6] == ["-3.0%", "miss"]
 
 
 def test_fast_users_changes_and_unverified_are_named(fake, tmp_path):
@@ -155,3 +230,27 @@ def test_fast_users_changes_and_unverified_are_named(fake, tmp_path):
     j = _section(_md(w, vals, tmp_path), 7)
     assert "| React: the call | hold **You changed this.** |" in j
     assert "Your changes kept: React: the call." in j and "- UNVERIFIED: sfot.tone" in j
+
+
+def _weasyprint_loads():
+    """(True, '') or (False, why): render.py runs WeasyPrint with the Homebrew library path, so try the same."""
+    import subprocess
+    env = dict(os.environ)
+    env["DYLD_FALLBACK_LIBRARY_PATH"] = ":".join(filter(None, [env.get("DYLD_FALLBACK_LIBRARY_PATH"),
+                                                               "/opt/homebrew/lib", "/usr/local/lib"]))
+    r = subprocess.run([sys.executable, "-c", "import weasyprint"], capture_output=True, text=True, env=env)
+    return r.returncode == 0, (r.stderr.strip().splitlines() or [""])[-1]
+
+
+@pytest.mark.slow
+def test_pdf_is_made_when_render_works(recalc_run, tmp_path):
+    """The PM reads the PDF: when WeasyPrint is there, render makes it and its first page carries the ticker."""
+    ok, why = _weasyprint_loads()
+    if not ok or not os.path.exists(note.RENDER):
+        pytest.skip(f"WeasyPrint cannot load ({why}) or render.py is missing: the PDF cannot be made here")
+    md = note.write_md(recalc_run["work"], "TEST", str(tmp_path), "2027-02-28", recalc_run["verify"]["recalculated"])
+    pdf, reason = note.render(md, md[:-3] + ".pdf", "TEST after-print note · 2027-02-28")
+    assert reason is None and pdf and os.path.exists(pdf)
+    import fitz
+    assert "TEST" in fitz.open(pdf)[0].get_text()
+    assert not os.path.exists(md[:-3] + ".render.md")             # the temporary copy without the contents list
