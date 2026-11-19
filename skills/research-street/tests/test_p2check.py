@@ -131,3 +131,18 @@ def test_unknown_reader_group_is_a_plain_problem(tmp_path):
     src, w = setup(tmp_path)
     write_reader(w, "s9", [], [mark()])
     assert p2check.check(src, "s9") == ["no reader group s9 in run.json"]
+
+
+def test_a_reader_may_cite_the_peer_documents_fetched_for_it_and_no_others(tmp_path):
+    # Each agent cites only what it was given: its own peer_docs.json, not another agent's.
+    src, w = setup(tmp_path)
+    g = json.load(open(os.path.join(w, "run.json")))["groups"][0]
+    call = {"ticker": "PEER", "label": "2026 Q3 PEER call", "status": "local", "md": str(tmp_path / "c.md"), "reason": "", "why": ""}
+    (tmp_path / "c.md").write_text("x")
+    write_reader(w, g["id"], g["labels"], [mark(), mark(source="2026 Q3 PEER call", holder="Peer Inc CFO", holder_type="official")])
+    json.dump([call], open(os.path.join(w, "readers", g["id"], "peer_docs.json"), "w"))
+    assert p2check.check(src, g["id"]) == []
+    os.remove(os.path.join(w, "readers", g["id"], "peer_docs.json"))
+    os.makedirs(os.path.join(w, "research", "r9"), exist_ok=True)
+    json.dump([call], open(os.path.join(w, "research", "r9", "peer_docs.json"), "w"))
+    assert any("2026 Q3 PEER call" in p for p in p2check.check(src, g["id"]))

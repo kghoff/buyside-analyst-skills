@@ -10,7 +10,7 @@ A citation can point to:
 Also lists sources dated after the as-of date. Writes --out (default _work/numcheck.md) and a .json alongside."""
 import argparse, csv, glob, json, os, re
 
-from p2common import load, p1_work, work_dir   # first: puts research-filings' scripts on sys.path
+from p2common import load, p1_work, peer_items, work_dir   # first: puts research-filings' scripts on sys.path
 from numcheck import _flat, _read_report, check_report   # the filings research
 from p2cites import canon, cited_urls, normalize, safe_label, web_dates
 from p2common import read_csv
@@ -52,6 +52,11 @@ def build_sources(src, run):
         sources[safe_label(it["label"])] = text                      # page ranges and other locators
         for n, body in pages(text).items():
             sources[f"{safe_label(it['label'])}, p{n}"] = body          # '[label, p3]' checks page 3 only
+    for it in peer_items(src):                                      # a peer's own call or filing, fetched for an agent
+        text = _plain(open(it["md"], encoding="utf-8").read())
+        sources[it["label"]] = text
+        for n, body in pages(text).items():
+            sources[f"{it['label']}, p{n}"] = body
     sources["Filings research"] = _plain(open(run["phase1_report"], encoding="utf-8").read())
     for p in sorted(glob.glob(os.path.join(work_dir(src), "research", "*", "excerpts.md"))):
         for url, text in excerpts(open(p, encoding="utf-8").read()).items():

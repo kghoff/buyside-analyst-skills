@@ -1,5 +1,5 @@
 """Shared constants and helpers for /research-street. research-filings' scripts are reused by import, never copied."""
-import csv, os, sys
+import csv, glob, os, sys
 
 P1_SKILL = os.environ.get("RP1_SKILL") or os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "..", "research-filings")
 P1_SCRIPTS = os.path.join(P1_SKILL, "scripts")
@@ -50,6 +50,23 @@ def write_csv(path, cols, rows):
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
+
+
+def peer_items(src):
+    """Peer documents fetched for agents (collect-documents' peer_docs.mjs writes peer_docs.json in the agent's folder):
+    [{label, md, ticker, agents}], one per label, only those found or already on disk. Kept out of run.json, which
+    preflight rewrites every run."""
+    w, out = work_dir(src), {}
+    paths = glob.glob(os.path.join(w, "readers", "*", "peer_docs.json")) + glob.glob(os.path.join(w, "research", "*", "peer_docs.json")) \
+        + glob.glob(os.path.join(w, "synthesis", "peer_docs.json"))
+    for p in sorted(paths):
+        agent = os.path.basename(os.path.dirname(p))
+        for d in load(p, []) or []:
+            if d.get("status") in ("found", "local") and d.get("md") and os.path.exists(d["md"]):
+                it = out.setdefault(d["label"], {"label": d["label"], "md": d["md"], "ticker": d.get("ticker", ""), "agents": []})
+                if agent not in it["agents"]:
+                    it["agents"].append(agent)
+    return sorted(out.values(), key=lambda d: d["label"])
 
 
 def sellside_items(src):

@@ -88,3 +88,19 @@ def test_out_flag_keeps_per_agent_results_apart(tmp_path):
     subprocess.run([sys.executable, script, "--src", src, "--report", notes, "--out", out], check=True, capture_output=True)
     assert os.path.exists(out) and os.path.exists(os.path.join(w, "checks", "r1.numcheck.json"))
     assert not os.path.exists(os.path.join(w, "numcheck.md"))           # default file untouched
+
+
+def test_peer_documents_confirm_numbers_and_quotes(tmp_path):
+    # A competitor's own call is a source like any other once it was fetched for an agent; a changed word still fails.
+    src = setup(tmp_path)
+    import json
+    call = tmp_path / "peer_call.md"
+    call.write_text("CFO: We haven't seen a degradation of pricing around the world. US revenue grew 14% to $812 million.")
+    d = os.path.join(src, "Street Research", "_work", "readers", "s1")
+    os.makedirs(d, exist_ok=True)
+    json.dump([{"ticker": "PEER", "label": "2026 Q3 PEER call", "status": "found", "md": str(call), "reason": "", "why": ""}],
+              open(os.path.join(d, "peer_docs.json"), "w"))
+    r = p2numcheck.run_check(src, 'The peer said "we haven\'t seen a degradation of pricing" on US sales of $812 million [2026 Q3 PEER call].\n')
+    assert r["bad_quotes"] == [] and r["bad_citations"] == [] and r["unconfirmed"] == []
+    r = p2numcheck.run_check(src, 'The peer said "we haven\'t seen any erosion of pricing" [2026 Q3 PEER call].\n')
+    assert len(r["bad_quotes"]) == 1

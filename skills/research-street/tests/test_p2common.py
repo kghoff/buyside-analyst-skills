@@ -32,3 +32,22 @@ def test_csv_roundtrip_handles_bom(tmp_path):
     assert header == ["a", "b"] and rows == [{"a": "1", "b": "2"}]
     p2common.write_csv(str(tmp_path / "y" / "z.csv"), ["a"], [{"a": "q", "b": "ignored"}])
     assert p2common.read_csv(str(tmp_path / "y" / "z.csv"))[1] == [{"a": "q"}]
+
+
+def _peer_json(d, docs):
+    os.makedirs(d, exist_ok=True)
+    import json
+    json.dump(docs, open(os.path.join(d, "peer_docs.json"), "w"))
+
+
+def test_peer_items_merges_every_agents_fetched_peer_documents(tmp_path):
+    # Peers live in each agent's peer_docs.json, not run.json (preflight rewrites run.json every run).
+    src = make_src(str(tmp_path))
+    w = p2common.work_dir(src)
+    md = tmp_path / "call.md"
+    md.write_text("x")
+    call = {"ticker": "PEER", "label": "2026 Q3 PEER call", "status": "local", "md": str(md), "reason": "", "why": "a"}
+    _peer_json(os.path.join(w, "readers", "s1"), [call])
+    _peer_json(os.path.join(w, "research", "r1"), [call, dict(call, label="2026 Q3 OTHER call", status="deferred", md="")])
+    items = p2common.peer_items(src)
+    assert [(i["label"], sorted(i["agents"])) for i in items] == [("2026 Q3 PEER call", ["r1", "s1"])]

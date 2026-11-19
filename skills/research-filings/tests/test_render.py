@@ -167,3 +167,12 @@ def test_a_misplaced_kpi_footnote_moves_the_tile_row_not_the_callout_above():
     assert '<div class="kpis fnkeep">' in body and "fnkeep" not in body.split('<div class="kpis', 1)[0]
     # still misplaced after one pass: the tile row (not the callout) starts a new page
     assert '<div class="kpis fnbreak">' in _keep_together(once, [0])
+
+
+def test_a_peer_document_label_prints_as_an_outside_view_when_listed(tmp_path):
+    # A competitor's own call ('2026 Q3 PEER call') has a company-document shape; only the caller knows it is a peer,
+    # so research-street passes its labels in. Without the list it stays blue, as before.
+    md = "Peer US growth was 14% [2026 Q3 PEER call]. Ours [ABC 2025 10-K, Item 7]."
+    assert '<span class="fn ext">2026 Q3 PEER call</span>' in to_html(md, str(tmp_path), "F", outside=["2026 Q3 PEER call"])
+    html = to_html(md, str(tmp_path), "F")
+    assert '<span class="fn co">2026 Q3 PEER call</span>' in html and '<span class="fn co">ABC 2025 10-K, Item 7</span>' in html

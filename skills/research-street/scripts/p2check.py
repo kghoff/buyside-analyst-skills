@@ -9,7 +9,7 @@ import argparse, os, re
 
 from p2cites import CITE, canon, cited_urls, normalize, safe_label
 from p2common import (FETCH_COLS, FETCH_STATUS, HOLDER_TYPES, LEDGER_COLS, MARK_COLS, STANCES, TIERS, TOPIC, load,
-                      read_csv, save, work_dir)
+                      peer_items, read_csv, save, work_dir)
 from readcheck import _cites, bad_citations   # the filings research
 
 MIN_WORDS, MIN_CITES = 800, 5
@@ -121,6 +121,7 @@ def check(src, item):
         if not open(os.path.join(d, "searches.txt"), encoding="utf-8-sig").read().strip():
             p.append("searches.txt is empty")
         labels = sorted(ok) + ["Filings research"]
+    labels += [it["label"] for it in peer_items(src) if item in it["agents"]]   # peer documents fetched for this agent
     p += _marks_problems(os.path.join(d, "marks.csv"), ledger, labels)
     p += _notes_problems(notes, labels)
     return p
