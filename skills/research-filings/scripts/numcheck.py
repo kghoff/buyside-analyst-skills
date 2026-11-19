@@ -146,7 +146,8 @@ def check_report(md, sources, model_cells, calc_pool, price_rows=()):
     for ln, unit, caption in _units(md):
         nums = numbers(unit)
         cites = [p.strip() for m in CITE.finditer(unit if CITE.search(unit) else caption)
-                 if "," in m.group(1) and not m.group(1).startswith("!") for p in m.group(1).split(";")]
+                 if ("," in m.group(1) or m.group(1).strip() in sources)   # a bare label (a transcript has no pages)
+                 and not m.group(1).startswith("!") for p in m.group(1).split(";")]
         docs, exact, cells, cited_cell = [], [], [], False
         for c in cites:
             first = c.split(",")[0].strip()

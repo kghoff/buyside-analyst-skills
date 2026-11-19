@@ -156,3 +156,21 @@ def test_a_quote_with_an_ellipsis_matches_when_its_pieces_are_present():
 def test_a_quote_cited_only_to_model_or_uncited_is_unsourced():
     r = runq('Mgmt called it "an entirely new growth engine" [Model, MOD!H61]. Also "an entirely new growth engine" here.')
     assert len(r["bad_quotes"]) == 2
+
+
+PEER = {"2026 Q3 PEER call": "CFO: We haven't seen a degradation of pricing around the world. US revenue grew 14%."}
+
+
+def test_a_citation_that_is_exactly_a_source_label_needs_no_locator():
+    # A transcript has no pages, so agents cite it bare: '[2026 Q3 PEER call]'. Without a comma the checker used to
+    # ignore the bracket, so every quote in the sentence was 'cites nothing' (three verbatim Dexcom quotes, ABT 2026-11-18).
+    r = check_report('The CFO said "we haven\'t seen a degradation of pricing" and US grew 14% [2026 Q3 PEER call].', PEER, {}, [])
+    assert r["bad_quotes"] == [] and r["unconfirmed"] == [] and r["uncited"] == []
+    r = check_report('The CFO said "we haven\'t seen any erosion of pricing" [2026 Q3 PEER call].', PEER, {}, [])
+    assert r["bad_quotes"][0]["cites"] == ["2026 Q3 PEER call"]
+
+
+def test_editorial_brackets_are_still_not_citations():
+    # only a bracket that IS a known label counts; "[s]" inside a quote never does
+    r = check_report('The CEO said pricing "remain[s] under pressure in every market" [2026 Q3 PEER call].', PEER, {}, [])
+    assert r["bad_citations"] == [] and [q["cites"] for q in r["bad_quotes"]] == [["2026 Q3 PEER call"]]

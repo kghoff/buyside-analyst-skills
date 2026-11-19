@@ -105,16 +105,17 @@ OWN_WORK = re.compile(r"(Calc|Model|price\.csv)\b")
 OUTSIDE = re.compile(r".*https?://|\d{4}-\d{2}-\d{2} [^,]*? - ")   # matched on the first source only
 
 
-def _cite(m):
+def _cite(m, outside=()):
     text = m.group(1).strip()
     if text.lower() == "unconfirmed":
         return '<span class="flag">unconfirmed</span>'
     first = html_lib.unescape(text).split(";")[0]   # the text is HTML here: '&amp;' must not split a firm name
-    kind = "calc" if OWN_WORK.match(text) else "ext" if OUTSIDE.match(first) else "co"
+    peer = html_lib.unescape(first).split(",")[0].strip() in outside   # a peer's own document, named by the caller
+    kind = "calc" if OWN_WORK.match(text) else "ext" if OUTSIDE.match(first) or peer else "co"
     return f'<span class="fn {kind}">{text}</span>'
 
 
-def _citations(html):
+def _citations(html, outside=()):
     """Bracket citations in the text -> footnote spans. Tags (attributes) and <code>/<pre> contents are left alone."""
     out, skip = [], 0
     for part in re.split(r"(<[^>]+>)", html):
@@ -124,7 +125,7 @@ def _citations(html):
                 skip += -1 if part.startswith("</") else 1
             out.append(part)
         else:
-            out.append(part if skip else CITE.sub(_cite, part))
+            out.append(part if skip else CITE.sub(lambda m: _cite(m, outside), part))
     return "".join(out)
 
 
@@ -171,11 +172,11 @@ def _cover_end(html):
     return 0
 
 
-def _build(md, base_dir, footer, toc=False):
+def _build(md, base_dir, footer, toc=False, outside=()):
     """(html, entries). entries: [{id, level, title}] for every h2/h3 after the cover, in order."""
     md = re.sub(r"\n\s*\n(?=> ?\[!)", "\n\n<!-- -->\n\n", md)   # python-markdown would merge back-to-back callouts
     md = _space_lists(md)
-    body = _citations(_callouts(markdown.markdown(md, extensions=["tables", "attr_list", "sane_lists", "md_in_html"])))
+    body = _citations(_callouts(markdown.markdown(md, extensions=["tables", "attr_list", "sane_lists", "md_in_html"])), set(outside))
 
     def img(m):
         p = os.path.join(base_dir, m.group(1))
@@ -209,8 +210,8 @@ def _build(md, base_dir, footer, toc=False):
     return html, entries
 
 
-def to_html(md, base_dir, footer, toc=False):
-    return _build(md, base_dir, footer, toc)[0]
+def to_html(md, base_dir, footer, toc=False, outside=()):
+    return _build(md, base_dir, footer, toc, outside)[0]
 
 
 def _print_pdf(html, out):
@@ -295,13 +296,13 @@ def _weasyprint(html_path, out):
               file=sys.stderr)
 
 
-def render(src, out, footer, preview=None, toc=True):
+def render(src, out, footer, preview=None, toc=True, outside=()):
     if os.path.isdir(src):
         md, base = join_sections(src), os.path.dirname(os.path.abspath(src))
         open(os.path.splitext(out)[0] + ".md", "w", encoding="utf-8").write(md)
     else:
         md, base = open(src, encoding="utf-8").read(), os.path.dirname(os.path.abspath(src))
-    html, _ = _build(md, base, footer, toc)
+    html, _ = _build(md, base, footer, toc, outside)
     _print_pdf(html, out)
     if preview:
         os.makedirs(preview, exist_ok=True)
@@ -323,5 +324,7 @@ if __name__ == "__main__":
     ap.add_argument("--footer", required=True)
     ap.add_argument("--preview")
     ap.add_argument("--no-toc", action="store_true")
+    ap.add_argument("--outside-labels", help="file of document labels (one per line) to print as outside views, e.g. a peer's own call")
     a = ap.parse_args()
-    print("wrote", render(a.src, a.out, a.footer, a.preview, toc=not a.no_toc))
+    outside = [l.strip() for l in open(a.outside_labels, encoding="utf-8") if l.strip()] if a.outside_labels else []
+    print("wrote", render(a.src, a.out, a.footer, a.preview, toc=not a.no_toc, outside=outside))

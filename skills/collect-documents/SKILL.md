@@ -134,3 +134,22 @@ Run `node "$SKILLS/collect-documents/scripts/manifest.mjs" render <DIR>`. Then t
 - if any transcripts are `deferred`, that rerunning `/collect-documents TICKER` later will finish them (reruns only fetch what's missing)
 
 Never say "done" while hiding a gap.
+
+## Targeted fetch (for other skills; not part of a /collect-documents run)
+
+When another skill's agent needs a few of a peer's documents (a competitor's earnings call, 10-Q, 10-K or release),
+don't run the full skill. The research agents have no shell, so they write requests and the main agent fetches:
+
+```bash
+node "$SKILLS/collect-documents/scripts/peer_docs.mjs" --requests <agent out dir>/doc_requests.txt --subject <TICKER>
+```
+- Request lines: `TICKER kinds quarters | why`, e.g. `DXCM calls 2026Q3 | CGM share`. Kinds: `calls`, `10-Q`,
+  `10-K`, `releases` (comma-separated); quarters: `2026Q3[,2026Q2]` or `last2`. At most 6 lines; the subject's own
+  ticker is refused (its documents are already collected).
+- It runs `gather.mjs PEER --only <kinds> --quarters <q>` once per peer. Documents already in
+  `<research_dir>/<PEER>/` come back `local` and are not refetched; the rest are fetched with the same names, `_md/`
+  copies and manifest ids a full run uses, so a later full `/collect-documents PEER` skips them.
+- It writes `peer_docs.json` next to the requests: `[{ticker, label, status, md, reason, why}]`, `md` absolute. Send the
+  agent the `found` / `local` paths; it cites each by its label.
+- Not covered (full run only): decks, investor events, segment recasts, proxies, the IR agent and sell-side filing.
+  Transcripts count against the Alpha Vantage daily limit; a spent limit comes back `deferred`.

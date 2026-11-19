@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // /collect-documents entry point. Pulls SEC filings, earnings 8-K exhibits and Alpha
 // Vantage transcripts for one ticker into <out>/<TICKER>/, tracked in
-// _manifest.json. Usage: node gather.mjs TICKER [--out DIR]
+// _manifest.json. Usage: node gather.mjs TICKER [--out DIR] [--only KINDS --quarters Q]
+// --only (calls, 10-Q, 10-K, releases) fetches just those documents for the --quarters asked (default last2):
+// the targeted fetch other skills use for a peer's call or filing (see SKILL.md "Targeted fetch").
 
 import { mkdir, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,6 +22,7 @@ import {
 } from './manifest.mjs';
 import { shortLabel, quarterKey } from './fiscal.mjs';
 import { relabel } from './relabel.mjs';
+import { parseOnly, parseQuarters, filterSelection, requestedIds, localStatus } from './only.mjs';
 
 const CATEGORIES = ['10-Ks', '10-Qs', 'Earnings Calls', 'Press Releases', 'Investor Decks', 'Investor Events', 'Segment Recasts', 'Proxy Statements', 'Sellside Research'];
 
@@ -28,9 +31,11 @@ function fail(msg) {
   process.exit(1);
 }
 
-const { positionals, values } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' } } });
+const { positionals, values } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, only: { type: 'string' }, quarters: { type: 'string' } } });
 const ticker = (positionals[0] || '').toUpperCase();
-if (!ticker) fail('usage: node gather.mjs TICKER [--out DIR]');
+if (!ticker) fail('usage: node gather.mjs TICKER [--out DIR] [--only KINDS --quarters Q]');
+const targeted = values.only !== undefined || values.quarters !== undefined;
+if (targeted && values.only === undefined) fail('--quarters needs --only (calls, 10-Q, 10-K, releases)');
 const dir = resolve(values.out || researchDir(), ticker);
 
 try {
@@ -45,8 +50,9 @@ async function main() {
   const since = new Date(Date.now() - 11 * 365.25 * 86_400_000).toISOString().slice(0, 10);
   const sub = await fetchSubmissions(company.cik, since);
   const fiscalTags = await fetchFiscalTags(company.cik);
-  const sel = selectFilings({ filings: sub.filings, fiscalTags, fiscalYearEnd: sub.fiscalYearEnd });
+  let sel = selectFilings({ filings: sub.filings, fiscalTags, fiscalYearEnd: sub.fiscalYearEnd });
   if (sel.tenKs.length === 0) fail(`no 10-K filings for ${ticker} (foreign filers on 20-F are not supported)`);
+  if (targeted) sel = filterSelection(sel, parseOnly(values.only), parseQuarters(values.quarters, sel));
 
   for (const c of CATEGORIES) await mkdir(join(dir, c), { recursive: true });
   relabel(dir); // folders gathered before year-first names
@@ -60,6 +66,8 @@ async function main() {
   const tmp = await mkdtemp(join(tmpdir(), 'gather-'));
   const stats = { fetched: 0, skipped: 0 };
   const claim = createClaimer(manifest.items);
+  const wanted = targeted ? requestedIds(sel) : [];
+  const before = localStatus(manifest, dir, wanted);
 
   // Run one item unless already complete (default: found with files on disk).
   // Errors become 'missing' and the run continues.
@@ -175,14 +183,15 @@ async function main() {
     for (const f of sel.regFd) {
       await save8kExhibits(f, (_kind, ex) => `${f.filingDate} ${ticker} deck ${ex.type}`, (kind) => kind === 'deck');
     }
-    for (const q of sel.releaseWindow) {
+    // Gap placeholders say "tried and failed" for a whole window; a targeted run never makes them.
+    for (const q of targeted ? [] : sel.releaseWindow) {
       const key = quarterKey(q);
       syncPlaceholder(manifest, dir, `pr:${key}`, covered['Press Releases'].has(key), {
         category: 'Press Releases', label: `${shortLabel(q)} ${ticker} press release`,
         reason: 'no Item 2.02 8-K on EDGAR for this quarter (may be on the IR site or filed under 7.01/8.01)',
       });
     }
-    for (const q of sel.window) {
+    for (const q of targeted ? [] : sel.window) {
       const key = quarterKey(q);
       syncPlaceholder(manifest, dir, `deck:${key}`, covered['Investor Decks'].has(key), {
         category: 'Investor Decks', label: `${shortLabel(q)} ${ticker} deck`,
@@ -224,6 +233,20 @@ async function main() {
   const items = visibleItems(manifest);
   const by = (s) => items.filter((e) => e.status === s);
   console.log(`${ticker} → ${dir}`);
+  if (targeted) {
+    // One line per requested document: found | local (already on disk) | missing | deferred, label → md path.
+    const md = (e) => (e?.files || []).find((f) => f.endsWith('.md')) || (e?.files || [])[0] || '';
+    for (const id of wanted) {
+      const e = manifest.items[id];
+      const docs = id.startsWith('8k:') ? (e?.children || []).map((c) => [c, manifest.items[c]]) : [[id, e]];
+      if (docs.length === 0) console.log(`missing ${id} →  : ${e?.reason || 'not fetched'}`);
+      for (const [cid, d] of docs) {
+        const status = before[id] === 'local' ? 'local' : (d?.status || 'missing');
+        console.log(`${status} ${d?.label || cid} → ${md(d) ? join(ticker, md(d)) : ''}${d?.reason && status !== 'found' && status !== 'local' ? ` : ${d.reason}` : ''}`);
+      }
+    }
+    return;
+  }
   console.log(`found ${by('found').length} · missing ${by('missing').length} · deferred ${by('deferred').length} · skipped ${by('skipped').length}`);
   console.log(`this run: fetched ${stats.fetched}, already done ${stats.skipped}`);
   if (sel.tenKs.length < 10) console.log(`note: only ${sel.tenKs.length} 10-Ks on EDGAR`);
