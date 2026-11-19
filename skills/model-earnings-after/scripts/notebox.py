@@ -1,4 +1,3 @@
-# Copied from model-multiples, Nov 2026; keep in sync.
 """(Copied from model-earnings-before, Nov 2026; keep in sync. Origin: model-multiples.) Cell-note boxes: check them, and re-anchor the ones that would open squashed (text, authors, cells untouched).
 
 usage: python3 notebox.py check MODEL.xlsx          prints the notes whose box is too narrow; exit 1 if any

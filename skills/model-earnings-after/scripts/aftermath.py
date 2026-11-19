@@ -12,7 +12,8 @@ def _n(v):
 
 
 def growth(now, then):
-    return now / then - 1 if _n(now) and _n(then) and then != 0 else None
+    """now / then - 1 over a positive base (growth off a loss or a zero reads backwards)."""
+    return now / then - 1 if _n(now) and _n(then) and then > 0 else None
 
 
 def surprise(actual, frozen):
@@ -50,11 +51,11 @@ def trend(by_year, now_year, k=TREND_YEARS):
     return (a - b) / k if _n(a) and _n(b) else None
 
 
-def lt_pace(now_value, now_year, trend, target, target_year):
+def lt_pace(now_value, now_year, slope, target, target_year):
     yrs = target_year - now_year
-    if not all(_n(x) for x in (now_value, trend, target)) or yrs <= 0:
+    if not all(_n(x) for x in (now_value, slope, target)) or yrs <= 0:
         return {"run_rate": None, "needed_per_year": None, "status": "?"}
-    run = now_value + trend * yrs
+    run = now_value + slope * yrs
     up = target >= now_value
     ok = run >= target if up else run <= target
     return {"run_rate": run, "needed_per_year": (target - now_value) / yrs, "status": "on pace" if ok else "behind pace"}

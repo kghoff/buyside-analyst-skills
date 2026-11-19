@@ -1,4 +1,3 @@
-# Copied from model-multiples, Nov 2026; keep in sync.
 """(Copied from model-earnings-before, Nov 2026; keep in sync. Origin: model-multiples.) The user's MOD tab layout: period columns (row 2) and row keys ('<section> | <label>').
 
 usage: python3 modmap.py rowmap <model.xlsx> <out.md>     (the row list the plan agent picks keys from)

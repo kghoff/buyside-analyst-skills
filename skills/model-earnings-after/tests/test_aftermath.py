@@ -41,7 +41,7 @@ def test_result_in_line_band():
 
 def test_long_term_pace_from_the_chapter_table():
     # 13.7 "Tracking Long-Term Guidance": 11% in 2021, +100 bps a year, 15% target in 2024 -> run rate 14%
-    p = am.lt_pace(now_value=0.11, now_year=2021, trend=0.01, target=0.15, target_year=2024)
+    p = am.lt_pace(now_value=0.11, now_year=2021, slope=0.01, target=0.15, target_year=2024)
     assert p["run_rate"] == pytest.approx(0.14)
     assert p["needed_per_year"] == pytest.approx(0.04 / 3)
     assert p["status"] == "behind pace"
@@ -56,3 +56,29 @@ def test_trend_is_average_annual_change_over_three_years():
 def test_target_change_minus_move_flags_under_reaction():
     # 13.6 "Adjusting the Price Target": stock +15%, target +21% -> under-reaction of 6 pts
     assert am.gap(0.21, 0.15) == pytest.approx(0.06)
+
+
+def test_growth_needs_a_positive_base():
+    # growth off a loss reads backwards (-2 -> 5 would show -350%), so it is None, as in model-earnings-before
+    assert am.growth(5, -2) is None
+    assert am.growth(110, 100) == pytest.approx(0.10)
+
+
+def test_lt_pace_for_a_target_below_today():
+    # a target to come down (cost ratio): falling at least as fast as needed is on pace
+    assert am.lt_pace(0.15, 2021, -0.02, 0.10, 2024)["status"] == "on pace"
+    assert am.lt_pace(0.15, 2021, -0.01, 0.10, 2024)["status"] == "behind pace"
+
+
+def test_lt_pace_with_no_time_left_is_unknown():
+    assert am.lt_pace(0.11, 2024, 0.01, 0.15, 2024)["status"] == "?"
+    assert am.lt_pace(0.11, 2025, 0.01, 0.15, 2024)["status"] == "?"
+
+
+def test_result_boundary_is_in_line():
+    assert am.result(0.01, 0.01) == "in line"
+
+
+def test_irr_needs_positive_prices():
+    assert am.irr(0, 40) is None
+    assert am.irr(20, -1) is None
