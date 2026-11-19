@@ -153,6 +153,61 @@ def build(model, quarter, res, out, state_path, restate=False):
             "restate_skipped": skipped, "header": header}
 
 
+def fill_tenq(model, quarter, res, out, state_path, take=None):
+    state = json.load(open(state_path))
+    qc = state["column"]
+    formulas, values = _cells(model)
+    pkg = Package(model)
+    part = _part(pkg)
+    xml = unshare(pkg.text(part), TAB, TAB)
+    st = Styles(pkg.text("xl/styles.xml"))
+    waiting = {a["ref"] for a in state["awaiting"]}
+    cells, notes, diffs, filled = {}, {}, [], []
+    new = {}
+    for e in res["matched"]:
+        if e.get("cur") is None:
+            continue
+        ref = f"{qc}{e['row']}"
+        new[ref] = e
+        if ref in waiting:
+            cells[ref] = ("n", float(e["cur"]), st.recolor(_style_of(xml, ref), BLUE))
+            notes[ref] = _note(e)
+            filled.append(ref)
+        elif ref in state["release_values"] and abs(state["release_values"][ref] - e["cur"]) > e["tol"]:
+            diffs.append({"ref": ref, "key": e["key"], "release": state["release_values"][ref], "tenq": e["cur"],
+                          "file": e["file"], "lineno": e["lineno"]})
+            if take and ref in take:
+                cells[ref] = ("n", float(e["cur"]), st.recolor(_style_of(xml, ref), BLUE))
+                notes[ref] = _note(e) + f" (release said {state['release_values'][ref]})"
+    for c in state["combined"]:
+        parts = [new.get(f"{qc}{r}") for r in c["rows"]]
+        if all(parts) and abs(sum(p["cur"] for p in parts) - c["cur"]) > c["tol"] * len(parts):
+            diffs.append({"ref": None, "key": " + ".join(c["keys"]), "release": c["cur"],
+                          "tenq": sum(p["cur"] for p in parts), "file": c["file"], "lineno": c["lineno"], "combined": True})
+    waiting -= set(filled)
+    restored, still = [], []
+    for t in state["typed_subtotals"]:
+        refs = {f"{c}{r}" for c, r in REF.findall(t["formula"]) if c == qc}
+        if refs & waiting:
+            still.append(t)
+        else:
+            cells[t["ref"]] = ("f", t["formula"], st.recolor(_style_of(xml, t["ref"]), BLACK))
+            restored.append(t["ref"])
+    xml, _ = set_cells(xml, cells, replace=True)
+    pkg.put(part, xml)
+    mnotes.add_notes(pkg, part, notes)
+    pkg.put("xl/styles.xml", st.render())
+    pkg.finish()
+    pkg.save(out)
+    import modfill; modfill.fix(out, out)
+    import notebox; notebox.fix(out, out)
+    state["awaiting"] = [a for a in state["awaiting"] if a["ref"] in waiting]
+    state["typed_subtotals"] = still
+    state["tenq_checked"] = not diffs or take is not None
+    json.dump(state, open(state_path, "w"), indent=1)
+    return {"filled": filled, "restored": restored, "differences": diffs, "awaiting": state["awaiting"]}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True), ap.add_argument("--quarter", required=True)
