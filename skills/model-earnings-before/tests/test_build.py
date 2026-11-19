@@ -177,3 +177,60 @@ def test_variance_block_without_rows_does_not_crash(work, tmp_path):
     wb = openpyxl.load_workbook(out)
     texts = [c.value for row in wb[build.TAB].iter_rows() for c in row if isinstance(c.value, str)]
     assert any("the Consensus tab's variance block" in t for t in texts)
+
+
+def _add_wrap(path):
+    """Stand in for model-earnings-after: its title row and band 9 under the tab, and a Call Notes tab."""
+    wb = openpyxl.load_workbook(path)
+    ws = wb[build.TAB]
+    r = ws.max_row + 2
+    ws.cell(r, 1, "TEST after the print: Q4 26E (model-earnings-after, 2026-11-19)")
+    ws.cell(r + 1, 1, "9. ACTUAL VS FROZEN: Q4 26E (test)")
+    wb.create_sheet("Call Notes").cell(1, 1, "Call notes kept")
+    wb.save(path)
+
+
+def _col_a(path):
+    wb = openpyxl.load_workbook(path, read_only=True)
+    a = [v for (v,) in wb[build.TAB].iter_rows(min_col=1, max_col=1, values_only=True) if isinstance(v, str)]
+    names = wb.sheetnames
+    wb.close()
+    return a, names
+
+
+def test_same_quarter_rerun_stops_before_clearing_the_wrap(model, work, tmp_path):
+    """Bands 9-15 hold the after-print wrap: a same-quarter preview rerun would wipe it, so it stops and says how
+    to bring it back, unless the user said to clear it. Call Notes is its own tab and survives either way."""
+    out1 = str(tmp_path / "o1.xlsx")
+    first = build.build(model, work, "TEST", out1, variance="earnings")
+    assert first["after_cleared"] is False
+    _promote(work)
+    _add_wrap(out1)
+    with pytest.raises(SystemExit, match=r"/model-earnings-after TEST --rebuild"):
+        build.build(out1, work, "TEST", str(tmp_path / "o2.xlsx"), variance="earnings")
+    assert not os.path.exists(tmp_path / "o2.xlsx")
+    out3 = str(tmp_path / "o3.xlsx")
+    res = build.build(out1, work, "TEST", out3, variance="earnings", clear_after=True)
+    assert res["after_cleared"] is True
+    a, names = _col_a(out3)
+    assert not any(build.AFTER_RE.match(t) or "(model-earnings-after," in t for t in a)
+    assert "Call Notes" in names
+
+
+def test_new_quarter_clears_the_wrap_without_stopping(model, work, tmp_path):
+    """A preview for the next quarter replaces last quarter's wrap (it lives on in the after-print note and Call
+    Notes): no stop, but the result says it was cleared so the user is told."""
+    out1 = str(tmp_path / "o1.xlsx")
+    build.build(model, work, "TEST", out1, variance="earnings")
+    _promote(work)
+    _add_wrap(out1)
+    p = os.path.join(work, "context.json")
+    ctx = json.load(open(p))
+    ctx["quarter"] = "Q1 27E"
+    json.dump(ctx, open(p, "w"))
+    out2 = str(tmp_path / "o2.xlsx")
+    res = build.build(out1, work, "TEST", out2, variance="earnings")
+    assert res["after_cleared"] is True and res["frozen"]["kept"] is False
+    a, names = _col_a(out2)
+    assert not any(build.AFTER_RE.match(t) for t in a)
+    assert "Call Notes" in names
