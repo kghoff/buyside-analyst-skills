@@ -1,8 +1,10 @@
 """Read the deck's model data out of the recalculated values copy, by label or header, never by address.
 Pure: grids (lists of rows) in, plain data out; no pptx. build_deck.py draws what these return.
-usage: from model_reads import Values, cap_table, estimates_grid, price_history, pe_history, ladder
+usage: from model_reads import Values, cap_table, typed_prices, estimates_grid, price_history, pe_history, ladder
 
-- cap_table(SUM grid, plan numbers): the "Cap table" block's label column (model-summary layout.py, B:C).
+- cap_table(SUM grid, plan numbers): the "Cap table" block's label column (model-summary layout.py, B:C); the buy and
+  no-brainer prices always come from the plan. typed_prices(SUM grid, plan numbers, record) names a SUM price box the
+  user typed a different number into.
 - estimates_grid(SUM grid): the "Internal estimates" block; its year columns stop at the first header that is blank
   or not year-shaped, because SUM's header row also carries the probability tree (P:U) and the R/R ladder (W:AA).
 - price_history(Px Data grid, Px Events grid, ticker): "Date" and "<T> close" columns; "Full-results release date".
@@ -27,6 +29,7 @@ CAP_ROWS = (  # (shown label, SUM label, exact?, after this SUM label, format, p
     ("12-month risk price", "Risk price", True, None, "px", None),
     ("12-month risk return", "% return", True, "Risk price", "spct", "risk_ret"),
     ("Blended reward / risk", "Blended reward / risk", True, None, "x", None))
+PLAN_FIRST = ("buy_price", "nobrainer_price")    # SUM's action-price boxes: write-pitch fills them, after the deck
 YEAR = re.compile(r"^(FY\s?)?(\d{2}|\d{4})[AE]?$", re.I)            # 2026, 2026E, 2025A, FY26E, FY 2026
 LADDER = re.compile(r"^(\d+[a-z]?\.\s*)?reward / risk ladder\b", re.I)
 
@@ -129,27 +132,57 @@ def grid_kind(lab):
 
 
 # ------------------------------------------------------------------ the blocks
-def cap_table(g, numbers):
-    """([(label, shown, colour)], [plan keys used because SUM's cell was empty]) from SUM's cap table, or None."""
+def _cap_cells(g):
+    """[(CAP_ROWS entry, SUM value or None, found?)] from SUM's "Cap table" block, or None without one."""
     at = g and find(g, lambda t: t.startswith("Cap table"))
     if not at:
         return None
     r0, c = at
     labels = [(r, text_of(cell(g, r, c))) for r in range(r0 + 1, len(g))]
-    out, fell_back = [], []
-    for shown, lab, exact, after, kind, key in CAP_ROWS:
+    out = []
+    for row in CAP_ROWS:
+        _, lab, exact, after, _, _ = row
         start = next((r for r, t in labels if t == after), None) if after else r0
         if start is None:
             continue
         hit = next((r for r, t in labels if r > start and (t == lab if exact else t.startswith(lab))), None)
-        v = cell(g, hit, c + 1) if hit is not None else None
-        if num(v) is None and key in numbers:          # e.g. an action price write-pitch fills later: the plan's number
+        out.append((row, cell(g, hit, c + 1) if hit is not None else None, hit is not None))
+    return out
+
+
+def cap_table(g, numbers):
+    """([(label, shown, colour)], [plan keys shown in place of a SUM cell]) from SUM's cap table, or None.
+    The action prices (PLAN_FIRST) are always the plan's: SUM's boxes are what write-pitch wrote last run (it fills
+    them after the deck is built), so on a rerun they are stale. Any other row falls back to the plan when empty."""
+    rows = _cap_cells(g)
+    if rows is None:
+        return None
+    out, from_plan = [], []
+    for (shown, _, _, _, kind, key), v, hit in rows:
+        if key in numbers and (key in PLAN_FIRST or num(v) is None):
             s = numbers[key]["shown"]
             out.append((shown, s, text_sign(s) if kind == "spct" else None))
-            fell_back.append(key)
-        elif hit is not None:
+            from_plan.append(key)
+        elif hit:
             out.append((shown, show(v, kind), sign_colour(v) if kind == "spct" else None))
-    return out, fell_back
+    return out, from_plan
+
+
+def typed_prices(g, numbers, record=None):
+    """Speaker-note lines for a SUM action-price box holding a number that is neither the plan's nor what the last run
+    wrote (record: sum_written.json, {label: {"cell", "value"}}; None = no record, so any other number is the user's).
+    The pitch shows the plan's price; the line tells the presenter the model says something else."""
+    lines = []
+    for (shown, lab, _, _, kind, key), v, _ in _cap_cells(g) or []:
+        if key not in PLAN_FIRST or key not in numbers or num(v) is None:
+            continue
+        plan_v, last = num(numbers[key].get("value")), ((record or {}).get(lab) or {}).get("value")
+        if plan_v is not None and abs(num(v) - plan_v) < 0.005:
+            continue
+        if num(last) is not None and abs(num(v) - num(last)) < 1e-9 * max(1.0, abs(num(last))):
+            continue                                       # still what the last run wrote: Step 10 replaces it
+        lines.append(f"SUM's {lab} box holds {show(v, kind)} (typed by you); the pitch uses {numbers[key]['shown']}")
+    return lines
 
 
 def estimates_grid(g):

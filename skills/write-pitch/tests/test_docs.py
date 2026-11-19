@@ -115,3 +115,28 @@ def test_labels_py_matches_brief():
     brief = re.sub(r"\s+", " ", (R / "pitch_brief.md").read_text())
     for lab in (labels.VAL_VERDICT, labels.SHORT_AGENT, labels.SHORT_RULE, *labels.HURDLE_LABELS.values()):
         assert f'"{lab}"' in brief, lab
+
+
+# why: each line below is a rule a run gets wrong without it: the deck shows last run's SUM prices (--sum-record), a
+# build lands in Pitch/ before the look step (bare names), a box in the user's model holds an unchecked number nobody
+# named, the look step loops with the analyst forever, or the PM's rerun Write is refused (unread file)
+def test_rerun_and_report_rules_are_written_down():
+    skill = re.sub(r"\s+", " ", (R.parent / "SKILL.md").read_text())
+    assert '--sum-record "$MD/_model_work/write-pitch/sum_written.json"' in skill
+    assert "as bare file names (no folder)" in skill
+    assert "Every SUM box that now holds an UNVERIFIED number" in skill and "`unverified.json`" in skill
+    assert "at most one more check round: Step 7's two-round limit does not restart" in skill
+    pm = re.sub(r"\s+", " ", (R / "pm_assignment.md").read_text())
+    assert "already exists (a rerun), Read it first" in pm
+    notes = re.sub(r"\s+", " ", (R.parent / "NOTES.md").read_text())
+    assert "Table of contents: an exception to the house rule" in notes and "slide 2's summary" in notes
+
+
+# why: model-update's forecast roll reads the newest Pitch/*.md, and CLAUDE.md names the prefixes; neither may call
+# write-pitch a future skill now that it writes that file
+def test_other_docs_know_write_pitch_exists():
+    root = R.parents[2]
+    claude = re.sub(r"\s+", " ", (root / "CLAUDE.md").read_text())
+    assert "`write-` (future)" not in claude and "`write-` produces a deliverable" in claude
+    upd = (root / "skills" / "model-update" / "SKILL.md").read_text()
+    assert "newest `$SRC/Pitch/*.md`" in upd and "future /write-pitch" not in upd

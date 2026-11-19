@@ -123,27 +123,31 @@ and `$W/tabs/index.md`. `$V` stays until Step 10 (the checks read it); then it i
      `rm -f "$W/unverified.json" "$W/anchor_problems.json"`.
 
 ## Step 8: Build
-1. Names: `python3 -I "$SK/names.py" --pitch-dir "$P" --ticker <T>` prints `long`, `core`, `sheet`, `md`:
-   `<date> <T> Pitch.pptx`, `<date> <T> Pitch (core).pptx`, `<date> <T> Pitch Sheet.docx`, `<date> <T> Pitch.md`. If
-   any file of that set exists it adds ` (2)`, ` (3)`… to every name: never overwrite an earlier pitch. Build into
-   `$B` under those file names; Step 9 moves them into `$P`.
+1. Names: `python3 -I "$SK/names.py" --pitch-dir "$P" --ticker <T>` prints `long`, `core`, `sheet`, `md` as bare
+   file names (no folder): `<date> <T> Pitch.pptx`, `<date> <T> Pitch (core).pptx`, `<date> <T> Pitch Sheet.docx`,
+   `<date> <T> Pitch.md`. If any file of that set exists in `$P` it adds ` (2)`, ` (3)`… to every name: never
+   overwrite an earlier pitch. Build into `$B` under those file names; Step 9 moves them into `$P`.
 2. Build:
    ```bash
    B="$W/build"; mkdir -p "$B"
    python3 -I "$SK/build_deck.py" --plan "$W/pitch_plan.json" --template "$SKILL/assets/pitch_template.pptx" \
-       --values "$V" --research "$R" --tabs "$W/tabs" --out-long "$B/<long name>" --out-core "$B/<core name>"     # add --unverified "$W/unverified.json" if it exists
+       --values "$V" --research "$R" --tabs "$W/tabs" --out-long "$B/<long name>" --out-core "$B/<core name>" \
+       --sum-record "$MD/_model_work/write-pitch/sum_written.json"     # add --unverified "$W/unverified.json" if it exists
    python3 -I "$SK/build_sheet.py" --plan "$W/pitch_plan.json" --out "$B/<sheet name>"
    python3 -I "$SK/build_md.py" --plan "$W/pitch_plan.json" --pm-review "$W/pm_review.md" --out "$B/<md name>"
    python3 -I "$SK/export_pdf.py" "$B/<long name>" --out-dir "$B"      # and the same for the core deck and the sheet
    ```
-   Each PDF lands next to its source with the same name.
+   Each PDF lands next to its source with the same name. Slide 2's buy and no-brainer prices are always the plan's
+   (SUM's boxes still hold last run's until Step 10); if SUM holds a number the user typed instead, the slide's
+   speaker notes say so ("SUM's Buy price box holds ... (typed by you); the pitch uses ...").
 
 ## Step 9: Look
 1. `python3 -I "$SK/export_pdf.py" --pngs "$B/<long name>.pdf" --out-dir "$W/look/deck"` and the same for the
    sheet's PDF into `$W/look/sheet`. Read every PNG. Check the core deck's PDF has 10 pages (slides 1-10).
 2. Look for text running out of its box, tables cut off, empty or unreadable charts, a picture in the wrong place, a
    sheet longer than 2 pages. Fix the cause: text too long goes back to the analyst (SendMessage the slide and what
-   to shorten; then Step 7 again on the changed plan); a layout fault is the builder's to fix. Rebuild (Step 8.2)
+   to shorten; then Step 7 again on the changed plan, but at most one more check round: Step 7's two-round limit does
+   not restart, so after that round apply Step 7.4 and rebuild); a layout fault is the builder's to fix. Rebuild (Step 8.2)
    and look again. Never hand-edit an output. If you cannot make it right, stop: delete the model copies
    (`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`) and tell the user what is wrong and on which slide.
 3. When it looks right, `mkdir -p "$P"` and `mv -n` each file of `$B` (decks, sheet, Markdown, PDFs) into `$P`; then
@@ -182,6 +186,9 @@ Tell the user, in plain English:
   run is not done until the user has seen them.
 - SUM boxes: written (`written`), kept because the user typed in them (`kept`), left alone (`skipped_null`), not
   found (`missing`: rerun /model-summary), and sum_boxes' `warnings`; or that the model was not changed.
+- **Every SUM box that now holds an UNVERIFIED number**: for each box in `written`, take the `{key}`s in the plan's
+  `sum_boxes` text for it; any key that is a `key` in `unverified.json` means a box in the user's model holds an
+  unchecked number. Name the box, the number (`shown`) and why it failed, so the user can check or clear it.
 - Every judgment call: each entry of the plan's `notes`, your own (fixes in the look step, anything shortened).
 - The missing optional inputs (preflight's `optional_missing` and the reading list's "Missing" section) and
   preflight's `warnings`.

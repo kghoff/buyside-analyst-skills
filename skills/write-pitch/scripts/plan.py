@@ -8,6 +8,8 @@ usage: python3 plan.py --plan pitch_plan.json [--valuation-verdict Buy] [--short
 (the hurdles are the Valuation tab's inputs; common.HURDLES when not given. Prints the problems, or "plan OK";
 exit 1 if any)"""
 import argparse
+import datetime
+import math
 import os
 import re
 import sys
@@ -31,6 +33,11 @@ SUPPORTS = ("thesis.1", "thesis.2", "thesis.3", "risks.1", "risks.2")
 SUPPORT_COUNT = (10, 25)                                     # support slides in the long deck
 CHECKLIST_ITEMS = (3, 15)
 KEY = re.compile(r"^[a-z0-9_]+$")
+TOP_TEXT = ("ticker", "as_of", "action", "most_important_thing", "pitch_20s")    # the builders print each one
+CASE_FIELDS = ("name", "eps", "pe", "ret", "prob")
+THREE_RS = ("roll", "revisions", "rerating")
+PRICE_BOXES = ("Buy price", "No-brainer price")
+ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")    # Excel cannot store these in a SUM box
 
 
 def _num(x):
@@ -108,9 +115,10 @@ def _fields(slide, quotes):
 
 def _holders(plan):
     """(where, key) for every {key} typed anywhere in the plan outside numbers and quotes."""
-    parts = [("slide %d" % i, s) for i, s in enumerate(plan.get("slides") or [], 1)]
-    parts += [(k, plan.get(k))
-              for k in ("action", "pitch_20s", "most_important_thing", "pitch_sheet", "sum_boxes", "notes")]
+    slides = plan.get("slides") if isinstance(plan.get("slides"), list) else []
+    parts = [("slide %d" % i, s) for i, s in enumerate(slides, 1)]
+    parts += [(k, plan.get(k)) for k in ("action", "pitch_20s", "most_important_thing", "override", "pitch_sheet",
+                                         "sum_boxes", "notes")]
     for where, part in parts:
         for s in _strings(part):
             for m in HOLDER.findall(s):
@@ -131,8 +139,8 @@ def _numbers(plan, out):
         if not isinstance(n, dict):
             out.append(f"[R4] number {k}: must be an object with value, shown and anchor")
             continue
-        if not _num(n.get("value")):
-            out.append(f"[R4] number {k}: value must be a number, got {n.get('value')!r}")
+        if not (_num(n.get("value")) and math.isfinite(n["value"])):
+            out.append(f"[R4] number {k}: value must be a finite number, got {n.get('value')!r}")
         if not _text(n.get("shown")):
             out.append(f"[R4] number {k}: needs shown (the text printed on the slide)")
         if not _text(n.get("anchor")):
@@ -165,7 +173,7 @@ def _slides(plan, out):
             out.append(f"[R6] slide {i} ({s.get('type')}): support layout must be one of {', '.join(SUPPORT_LAYOUTS)}")
     for i, s in enumerate(slides, 1):
         if isinstance(s, dict):
-            for k in ("notes", "source"):
+            for k in ("title", "takeaway", "notes", "source"):
                 if not _text(s.get(k)):
                     out.append(f"[R7] slide {i} ({s.get('type')}): needs non-empty {k}")
         else:
@@ -175,7 +183,12 @@ def _slides(plan, out):
 
 def _items(rid, i, t, s, key, label, fields, out):
     """Items of a list on slide i must be objects with every field non-empty; returns the list."""
-    items = _as_list(s.get(key))
+    items = s.get(key)
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        out.append(f"[{rid}] slide {i} ({t}): {key} must be a list")
+        return []
     for j, x in enumerate(items, 1):
         if not isinstance(x, dict):
             out.append(f"[{rid}] slide {i} ({t}): {label} {j} must be an object with {', '.join(fields)}")
@@ -192,24 +205,81 @@ def _count(i, t, s, key, lo, hi, out, label=None):
         out.append(f"[R8] slide {i} ({t}): needs {lo} to {hi} {label or key}, has {n}")
 
 
+def _strs(i, t, s, key, out):
+    v = s.get(key)
+    if v is not None and not (isinstance(v, list) and all(_text(x) for x in v)):
+        out.append(f"[R8] slide {i} ({t}): {key} must be a list of non-empty strings")
+
+
+def _table(i, t, s, out):
+    tb = s.get("table")
+    if not (isinstance(tb, dict) and isinstance(tb.get("header"), list) and tb["header"]
+            and isinstance(tb.get("rows"), list) and all(isinstance(r, list) for r in tb["rows"])):
+        out.append(f"[R8] slide {i} ({t}): table must be an object with a non-empty header list and a rows list "
+                   f"whose rows are lists")
+
+
+def _image(i, t, s, out):
+    im = s.get("image")
+    if not (isinstance(im, dict) and (_text(im.get("png")) or _text(im.get("pdf")))):
+        out.append(f"[R8] slide {i} ({t}): image must be an object with png (a tab picture) or pdf (a research file)")
+
+
+def _events(i, t, s, out):
+    for j, ev in enumerate(_items("R8", i, t, s, "events", "event", ("date", "label"), out), 1):
+        if isinstance(ev, dict) and _text(ev.get("date")):
+            try:
+                datetime.date.fromisoformat(ev["date"])
+            except ValueError:
+                out.append(f"[R8] slide {i} ({t}): event {j} date must be YYYY-MM-DD, got {ev['date']!r}")
+
+
+def _risk_reward(i, t, s, out):
+    cases = _items("R11", i, t, s, "cases", "case", CASE_FIELDS, out)
+    if t == "risk_reward":
+        names = {str(c.get("name", "")).strip().lower() for c in cases if isinstance(c, dict)}
+        for need in ("bull", "base", "bear"):
+            if need not in names:
+                out.append(f"[R11] slide {i} (risk_reward): cases are missing the {need} case")
+    r3 = s.get("three_rs")
+    if t == "risk_reward" or r3 is not None:
+        if not (isinstance(r3, dict) and all(_text(r3.get(k)) for k in THREE_RS)):
+            out.append(f"[R11] slide {i} ({t}): three_rs must be an object with non-empty {', '.join(THREE_RS)}")
+    if s.get("short") is not None and not isinstance(s.get("short"), dict):
+        out.append(f"[R11] slide {i} ({t}): short must be an object (type, crowding, borrow, var_size, takeout)")
+
+
 def _shapes(slides, out):
+    """Counts belong to a slide type; a field's shape is checked on any slide that carries it (the builders print it)."""
     covered, n_support = set(), 0
     for i, s in slides:
-        t = s.get("type")
+        t = s.get("type") if isinstance(s.get("type"), str) else repr(s.get("type"))    # R5 / R6 report a bad type
         if t in BULLETS:
             _count(i, t, s, "bullets", *BULLETS[t], out)
         if t in ("risks", "catalysts"):
             _count(i, t, s, "tripwires", 2 if t == "risks" else 0, 4, out)
+        for k in ("bullets", "tripwires"):
+            _strs(i, t, s, k, out)
+        for k in ("caption", "bucket", "lead", "irr"):
+            if s.get(k) is not None and not isinstance(s[k], str):
+                out.append(f"[R8] slide {i} ({t}): {k} must be text")
         if t == "quote":
             _count(i, t, s, "quotes", 1, 3, out, "quote ids")
-        if t == "two_column":
-            for side in ("left", "right"):
-                c = s.get(side)
-                if not (isinstance(c, dict) and _text(c.get("head")) and isinstance(c.get("bullets"), list)):
-                    out.append(f"[R8] slide {i} (two_column): {side} must be an object with head and bullets")
-        if t == "checklist":
+        for side in ("left", "right"):
+            c = s.get(side)
+            if (t == "two_column" or c is not None) and not (
+                    isinstance(c, dict) and _text(c.get("head")) and isinstance(c.get("bullets"), list)):
+                out.append(f"[R8] slide {i} ({t}): {side} must be an object with head and bullets")
+        if t == "checklist" or s.get("items") is not None:
             _items("R8", i, t, s, "items", "item", ("q", "a"), out)
+        if t == "checklist":
             _count(i, t, s, "items", *CHECKLIST_ITEMS, out)
+        if s.get("table") is not None:
+            _table(i, t, s, out)
+        if s.get("image") is not None:
+            _image(i, t, s, out)
+        if s.get("events") is not None:
+            _events(i, t, s, out)
         if s.get("section") == "support":
             n_support += 1
             sup = s.get("supports")
@@ -217,23 +287,20 @@ def _shapes(slides, out):
                 out.append(f"[R12] slide {i} ({t}): supports must be one of {', '.join(SUPPORTS)}, got {sup!r}")
             else:
                 covered.add(sup)
-        if t == "thesis":
+        if t == "thesis" or s.get("points") is not None:
             pts = _items("R9", i, t, s, "points", "thesis point", ("head", "body"), out)
-            if len(pts) != 3:
+            if t == "thesis" and len(pts) != 3:
                 out.append(f"[R9] slide {i} (thesis): needs exactly 3 thesis points, has {len(pts)}")
-        if t == "risks":
+        if t == "risks" or s.get("risks") is not None:
             risks = _items("R10", i, t, s, "risks", "risk", ("head", "if_hits", "mitigant"), out)
-            if len(risks) != 2:
+            if t == "risks" and len(risks) != 2:
                 out.append(f"[R10] slide {i} (risks): needs exactly 2 risks, has {len(risks)}")
             for j, r in enumerate(risks, 1):
                 p = r.get("prob") if isinstance(r, dict) else None
                 if not (_num(p) and 0 < p < 1):
-                    out.append(f"[R10] slide {i} (risks): risk {j} prob must be a number between 0 and 1, got {p!r}")
-        if t == "risk_reward":
-            names = {str(c.get("name", "")).strip().lower() for c in _as_list(s.get("cases")) if isinstance(c, dict)}
-            for need in ("bull", "base", "bear"):
-                if need not in names:
-                    out.append(f"[R11] slide {i} (risk_reward): cases are missing the {need} case")
+                    out.append(f"[R10] slide {i} ({t}): risk {j} prob must be a number between 0 and 1, got {p!r}")
+        if t == "risk_reward" or any(s.get(k) is not None for k in ("cases", "three_rs", "short")):
+            _risk_reward(i, t, s, out)
     if slides:    # every thesis point and risk needs a support slide behind it
         for sup in SUPPORTS:
             if sup not in covered:
@@ -245,7 +312,14 @@ def _shapes(slides, out):
 
 def _text_checks(plan, slides, nums, out):
     quotes = {}
-    for q in _as_list(plan.get("quotes")):
+    qs = plan.get("quotes")
+    if qs is not None and not isinstance(qs, list):
+        out.append("[R15] quotes: must be a list")
+    for j, q in enumerate(_as_list(qs) if isinstance(qs, list) else [], 1):
+        line = q.get("line") if isinstance(q, dict) else None
+        if not (isinstance(q, dict) and _text(q.get("id")) and _text(q.get("text")) and _text(q.get("file"))
+                and isinstance(line, int) and not isinstance(line, bool)):
+            out.append(f"[R15] quote {j}: must be an object with id, text, file and a whole-number line")
         if isinstance(q, dict) and isinstance(q.get("id"), str):
             quotes[q["id"]] = q.get("text")
     if nums is not None:      # no numbers: already reported once, so skip the per-placeholder lines
@@ -254,6 +328,8 @@ def _text_checks(plan, slides, nums, out):
                 out.append(f"[R13] {where}: {{{k}}} is not defined in numbers")
     nums = nums or {}
     for i, s in slides:
+        if s.get("quotes") is not None and not isinstance(s.get("quotes"), list):
+            out.append(f"[R15] slide {i} ({s.get('type')}): quotes must be a list of quote ids")
         for q in _as_list(s.get("quotes")):
             if not isinstance(q, str) or q not in quotes:
                 out.append(f"[R15] slide {i} ({s.get('type')}): quote id {q!r} is not in quotes")
@@ -310,21 +386,49 @@ def _sheet(plan, nums, out):
         out.append(f"[R17] pitch_sheet know_cold: must include {', '.join(gone)}")
     if len(kc) > 10:
         out.append(f"[R17] pitch_sheet know_cold: at most 10 keys (the sheet is two pages), has {len(kc)}")
+    for k in ("script_3min", "napkin", "hard_questions", "know_cold"):
+        if not isinstance(sheet.get(k), list):
+            out.append(f"[R17] pitch_sheet {k}: must be a list")
     n = len(_as_list(sheet.get("script_3min")))
     if n != 12:
         out.append(f"[R17] pitch_sheet script_3min: needs exactly 12 paragraphs, has {n}")
     n = len(_as_list(sheet.get("napkin")))
     if not 3 <= n <= 5:
         out.append(f"[R17] pitch_sheet napkin: needs 3 to 5 bullets, has {n}")
+    for k in ("script_3min", "napkin"):
+        if isinstance(sheet.get(k), list) and not all(_text(x) for x in sheet[k]):
+            out.append(f"[R17] pitch_sheet {k}: every entry must be non-empty text")
     hq = _as_list(sheet.get("hard_questions"))
     if not 3 <= len(hq) <= 5:
         out.append(f"[R17] pitch_sheet hard_questions: needs 3 to 5 items, has {len(hq)}")
+    for j, h in enumerate(hq, 1):
+        if not (isinstance(h, dict) and _text(h.get("q")) and _text(h.get("a"))):
+            out.append(f"[R17] pitch_sheet hard question {j}: must be an object with non-empty q and a")
     boxes = plan.get("sum_boxes")
     if boxes is not None and not isinstance(boxes, dict):
         out.append("[R18] sum_boxes: must be an object keyed by SUM box name")
-    for k in (boxes if isinstance(boxes, dict) else {}):
+    for k, v in (boxes.items() if isinstance(boxes, dict) else ()):
         if k not in SUM_BOXES:
             out.append(f"[R18] sum_boxes: {k!r} is not one of the SUM boxes ({', '.join(SUM_BOXES)})")
+        if v is None:
+            continue
+        if not isinstance(v, str):
+            out.append(f"[R18] sum_boxes {k}: must be text or null, got {v!r}")
+        elif k in PRICE_BOXES and not re.fullmatch(r"\s*\{\w+\}\s*", v):
+            out.append(f"[R18] sum_boxes {k}: a price box is a single {{key}} (e.g. \"{{buy_price}}\"), got {v!r}")
+        elif v.lstrip().startswith("="):
+            out.append(f"[R18] sum_boxes {k}: must not start with '=' (Excel would read a formula)")
+        elif ILLEGAL.search(v):
+            out.append(f"[R18] sum_boxes {k}: holds control characters Excel cannot store")
+
+
+def _top(plan, out):
+    for k in TOP_TEXT:
+        if not _text(plan.get(k)):
+            out.append(f"[R22] {k}: must be non-empty text")
+    n = plan.get("notes")
+    if n is not None and not (isinstance(n, list) and all(isinstance(x, str) for x in n)):
+        out.append("[R22] notes: must be a list of sentences")
 
 
 def _override_ok(o):
@@ -375,6 +479,7 @@ def check(plan, valuation_verdict=None, short_verdict=None, hurdles=None):
     if not isinstance(plan, dict):
         return ["[R1] plan: the file must hold one JSON object"]
     out = []
+    _top(plan, out)
     nums = _numbers(plan, out)
     slides = _slides(plan, out)
     _shapes(slides, out)

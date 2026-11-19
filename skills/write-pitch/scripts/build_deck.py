@@ -2,7 +2,7 @@
 
 usage: python3 build_deck.py --plan pitch_plan.json --template assets/pitch_template.pptx --values <recalculated copy>
                              --research <research root> --tabs <work>/tabs --out-long <file>.pptx
-                             --out-core <file>.pptx [--unverified anchors.json]
+                             --out-core <file>.pptx [--unverified anchors.json] [--sum-record sum_written.json]
 
 - Each slide uses the template layout named after its type; placeholders are found by idx (make_template.py's map).
   Text placeholders get the plan's text with every {key} replaced by its `shown` (fill.py); the builder only sets
@@ -15,6 +15,9 @@ usage: python3 build_deck.py --plan pitch_plan.json --template assets/pitch_temp
   text note in that area and prints a "WARNING:" line; the build goes on.
 - Pictures: {"png": <file in --tabs>} or {"pdf": <file under --research>, "page": n, "crop": [x0, y0, x1, y1]}, fitted
   inside the placeholder keeping the aspect ratio.
+- The summary's buy and no-brainer prices are always the plan's (SUM's boxes are filled after the deck, so they hold
+  last run's). If SUM holds another number that is not what the last run wrote (--sum-record, the skill's
+  sum_written.json; without it, any number other than the plan's), the summary's notes say so.
 - Speaker notes = the slide's notes plus one "UNVERIFIED: <problem>" line per --unverified item ({"key"|"quote",
   "rule", "problem"}, from anchors.py --json) whose key or quote the slide uses. Never on the slide face.
 - The core deck is built a second time from the plan's first ten slides (slides are not copied between files).
@@ -57,6 +60,7 @@ from model_reads import pe_history  # noqa: E402
 from model_reads import price_history  # noqa: E402
 from model_reads import show  # noqa: E402
 from model_reads import text_sign  # noqa: E402
+from model_reads import typed_prices  # noqa: E402
 
 FONT = THEME["font"]
 SETUP_YEARS = 3          # the set-up chart shows the last three years of daily closes, as weekly closes
@@ -221,9 +225,10 @@ def inside(root, rel):
 
 
 class Ctx:
-    def __init__(self, plan, values, research, tabs, unverified, tmp):
+    def __init__(self, plan, values, research, tabs, unverified, tmp, record=None):
         self.plan, self.v, self.research, self.tabs, self.tmp = plan, values, research, tabs, tmp
         self.n, self.unverified, self.crops, self.extra_keys = plan["numbers"], unverified, {}, []
+        self.record, self.extra_notes = record, []
         self.T = plan.get("ticker", "")
 
     def f(self, t):
@@ -472,6 +477,7 @@ def fill_slide(ctx, slide, s, i):
     elif t == "summary":
         cap, used_keys = cap_table(ctx.v.grid("SUM"), ctx.n) or (None, [])
         ctx.extra_keys = used_keys                       # plan numbers shown in place of SUM cells: UNVERIFIED scan
+        ctx.extra_notes = typed_prices(ctx.v.grid("SUM"), ctx.n, ctx.record)
         if cap:
             table(slide, frame(body[12]), ["Cap table", ""], [[a, b] for a, b, _ in cap], [2.4, 1.6], size=10,
                   colours={(k, 1): c for k, (_, _, c) in enumerate(cap) if c}, row_h=0.26)
@@ -553,11 +559,11 @@ def fill_slide(ctx, slide, s, i):
                                                      and p.placeholder_format.idx >= 10):
             drop(p)
     slide.notes_slide.notes_text_frame.text = notes(ctx, s)
-    ctx.extra_keys = []
+    ctx.extra_keys, ctx.extra_notes = [], []
 
 
 def notes(ctx, s):
-    out = [ctx.f(s.get("notes", ""))]
+    out = [ctx.f(s.get("notes", ""))] + ctx.extra_notes
     blob = json.dumps(s) + "".join("{" + k + "}" for k in ctx.extra_keys)
     for u in ctx.unverified:
         if (u.get("key") and "{" + u["key"] + "}" in blob) or (u.get("quote") and u["quote"] in s.get("quotes", [])):
@@ -583,15 +589,17 @@ def main(argv=None):
     for a in ("plan", "template", "values", "research", "tabs", "out-long", "out-core"):
         ap.add_argument(f"--{a}", required=True)
     ap.add_argument("--unverified")
+    ap.add_argument("--sum-record", help="sum_written.json: what the last run wrote to SUM (missing file = no record)")
     a = ap.parse_args(argv)
     if os.path.realpath(a.out_long) == os.path.realpath(a.out_core):
         raise SystemExit("--out-long and --out-core must be different files")
     plan = load(a.plan)
     unv = load(a.unverified) if a.unverified else []
+    record = load(a.sum_record) if a.sum_record and os.path.isfile(a.sum_record) else None
     values = Values(a.values)
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            ctx = Ctx(plan, values, a.research, a.tabs, unv, tmp)
+            ctx = Ctx(plan, values, a.research, a.tabs, unv, tmp, record)
             print("wrote", build(ctx, a.template, plan["slides"], a.out_long))
             print("wrote", build(ctx, a.template, plan["slides"][:10], a.out_core))
     finally:

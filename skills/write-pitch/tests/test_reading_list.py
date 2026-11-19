@@ -110,18 +110,17 @@ def test_since(tmp_path):
 
 
 # why: an earlier pitch is a record of what was said to the PM on that day; a same-day rerun must add " (2)" to every
-# file of the set (so the deck, core deck, sheet and Markdown still pair up) and never overwrite one
+# file of the set (so the deck, core deck, sheet and Markdown still pair up) and never overwrite one. The names are bare:
+# the skill builds into its build folder and only `mv -n` puts the files in Pitch/, so a path into Pitch/ would build there
 def test_names_never_overwrite(tmp_path):
     import names
     first = names.names(tmp_path, "xyz", "2026-02-20")
-    assert first["long"] == str(tmp_path / "2026-02-20 XYZ Pitch.pptx")
+    assert first["long"] == "2026-02-20 XYZ Pitch.pptx" and all(os.sep not in v for v in first.values())
     assert first["core"].endswith("2026-02-20 XYZ Pitch (core).pptx") and first["sheet"].endswith("Pitch Sheet.docx")
     (tmp_path / "2026-02-20 XYZ Pitch Sheet.pdf").write_text("x")          # any file of the set takes the suffix
     second = names.names(tmp_path, "XYZ", "2026-02-20")
-    assert second == {"long": str(tmp_path / "2026-02-20 XYZ Pitch (2).pptx"),
-                      "core": str(tmp_path / "2026-02-20 XYZ Pitch (core) (2).pptx"),
-                      "sheet": str(tmp_path / "2026-02-20 XYZ Pitch Sheet (2).docx"),
-                      "md": str(tmp_path / "2026-02-20 XYZ Pitch (2).md")}
+    assert second == {"long": "2026-02-20 XYZ Pitch (2).pptx", "core": "2026-02-20 XYZ Pitch (core) (2).pptx",
+                      "sheet": "2026-02-20 XYZ Pitch Sheet (2).docx", "md": "2026-02-20 XYZ Pitch (2).md"}
     (tmp_path / "2026-02-20 XYZ Pitch (core) (2).pptx").write_text("x")
     assert names.names(tmp_path, "XYZ", "2026-02-20")["long"].endswith("Pitch (3).pptx")
     assert names.names(tmp_path, "XYZ", "2026-02-21")["long"].endswith("2026-02-21 XYZ Pitch.pptx")

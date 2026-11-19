@@ -28,7 +28,7 @@ plugin `buyside`. Explain everything in plain English.
 | – | model-consensus | optional: broker ratings, targets, estimates, rating history, consensus snapshots; rerun each print |
 
 Naming: `collect-` gathers raw material, `model-` adds to the Excel model, `research-` writes a report, `write-`
-(future) produces a deliverable such as a pitch deck. A new skill takes the prefix of what it produces.
+produces a deliverable (write-pitch: the pitch deck). A new skill takes the prefix of what it produces.
 
 ## Rules every skill follows
 - Works for any listed company. Nothing company-specific in scripts, prompts or lists; DXCM appears only as an example.

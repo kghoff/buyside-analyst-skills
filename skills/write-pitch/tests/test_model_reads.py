@@ -63,6 +63,20 @@ def test_cap_table_scopes_repeated_labels_and_reports_fallbacks():
     assert got["Buy price"] == "$69.44" and fell_back == ["buy_price"]   # empty SUM cell: the plan's anchored number
 
 
+# why: SUM's action-price boxes are filled in Step 10, after the deck is built in Step 8; on a rerun SUM still holds
+# last run's prices, so the deck must show this run's plan prices, and say so when the user typed a different one
+def test_action_prices_always_from_the_plan_and_typed_ones_named():
+    numbers = {"buy_price": {"value": 69.44, "shown": "$69.44"}, "nobrainer_price": {"value": 54.62, "shown": "$54.62"}}
+    g = sum_like()                                        # SUM's No-brainer box holds 55.0
+    got = {a: b for a, b, _ in M.cap_table(g, numbers)[0]}
+    assert got["Buy price"] == "$69.44" and got["No-brainer price"] == "$54.62"
+    assert M.typed_prices(g, numbers) == ["SUM's No-brainer price box holds $55.00 (typed by you); the pitch uses "
+                                          "$54.62"]
+    assert M.typed_prices(g, numbers, {"No-brainer price": {"cell": "C20", "value": 55.0}}) == []   # last run's
+    numbers["nobrainer_price"]["value"] = 55.0
+    assert M.typed_prices(g, numbers) == []                # the same number as the plan's: nothing to say
+
+
 def weekly(gaap):
     c = {"A1": "XYZ multiples", "A2": "Trailing (TTM) multiples as known on each date", "A40": "WEEKLY DATA"}
     heads = ["Week", "Price", "P/E"] + (["P/E (GAAP)"] if gaap else []) + ["S&P 500 P/E", "Core-peer median P/E"]

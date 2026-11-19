@@ -23,7 +23,9 @@ the risk checklist, the common mistakes, the stock-selection checklist, the numb
 `pm_brief.md`. Cite everything you checked (`file:line` or `Tab!Cell`).
 
 ## Write
-Write `{WORK}/pm_review.md` in exactly the shape `pm_brief.md` section 9 gives: numbered challenges
+If `{WORK}/pm_review.md` already exists (a rerun), Read it first: the Write tool will not overwrite a file you have not
+read, and the last run's challenges show what was already raised (check whether the draft answers them). Then write
+`{WORK}/pm_review.md` in exactly the shape `pm_brief.md` section 9 gives: numbered challenges
 `### C1 [fatal|serious|minor] <title>`, fatal first, each with what you checked and what would answer it, then
 `## Verdict: pass to IC`, `## Verdict: not good enough yet` or `## Verdict: kill` and one paragraph.
 

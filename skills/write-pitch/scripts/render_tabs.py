@@ -18,9 +18,13 @@ import json
 import os
 import posixpath
 import re
+import sys
 import time
 import zipfile
 from xml.etree import ElementTree as ET
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with python3 -I
+import lo  # noqa: E402
 
 TILE_RATIO = 1.3
 TILE_PT = 1000          # tile width in PDF points: about ten table columns or one Excel chart, legible at TILE_PX
@@ -92,6 +96,11 @@ def pick_tiles(rects, blank, cap):
     return keep, False
 
 
+def png_name(tab, page, row, col):
+    """The tile's file name: <tab>_p<page>_r<row>c<col>.png, the tab name with every run of other characters as _."""
+    return f"{re.sub(r'[^A-Za-z0-9]+', '_', tab).strip('_')}_p{page}_r{row}c{col}.png"
+
+
 def is_chartsheet(part):
     return part.startswith("xl/chartsheets/")
 
@@ -141,7 +150,6 @@ def render(values, out):
     """LibreOffice prints EVERY sheet, hidden ones too, one page each in workbook order. Pages are mapped to all sheets
     by order; hidden sheets are then left out of the index and the PNGs (the analyst reads what the PM can see)."""
     import fitz
-    import lo
     os.makedirs(out, exist_ok=True)
     _clear(out)
     allsheets = sheets(values)
@@ -179,7 +187,7 @@ def render(values, out):
                 entries = []
                 for t, (row, col, r) in enumerate(keep, start=1):
                     z = TILE_PX / min(w, TILE_PT)
-                    png = f"{re.sub(r'[^A-Za-z0-9]+', '_', tab).strip('_')}_p{page_no}_r{row}c{col}.png"
+                    png = png_name(tab, page_no, row, col)
                     page.get_pixmap(matrix=fitz.Matrix(z, z), clip=fitz.Rect(*r)).save(os.path.join(out, png))
                     entries.append(dict(base, tile=t, row=row, col=col, png=png, truncated=truncated))
                 index += entries or [dict(base, **empty, note="blank tab")]

@@ -1,4 +1,5 @@
 import copy, json, re, subprocess, sys, pathlib
+import pytest
 from conftest import FIX
 import plan
 P = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "plan.py"
@@ -242,3 +243,88 @@ def test_every_problem_line_has_a_rule_id():
     for bad in MALFORMED + [copy.deepcopy(BASE)]:
         for line in plan.check(bad, "Sell", "watchlist"):
             assert re.match(r"\[R\d+\] ", line), line
+
+
+# why: plan.py is the gate before the build; each of these passed it once and then crashed build_md or build_sheet
+# (a KeyError mid-run, after the analyst's rounds were spent), so each must come back to the analyst as a problem
+def _breakers():
+    def mut(f):
+        p = copy.deepcopy(BASE); f(p); return p
+    rr = lambda p: at(p, "risk_reward")  # noqa: E731
+    return {
+        "slide without title": mut(lambda p: p["slides"][0].pop("title")),
+        "slide without takeaway": mut(lambda p: p["slides"][12].pop("takeaway")),
+        "case without eps": mut(lambda p: rr(p)["cases"][0].pop("eps")),
+        "case without prob": mut(lambda p: rr(p)["cases"][1].pop("prob")),
+        "case without pe": mut(lambda p: rr(p)["cases"][2].pop("pe")),
+        "case without ret": mut(lambda p: rr(p)["cases"][0].pop("ret")),
+        "three_rs without roll": mut(lambda p: rr(p)["three_rs"].pop("roll")),
+        "three_rs without rerating": mut(lambda p: rr(p)["three_rs"].pop("rerating")),
+        "event without date": mut(lambda p: at(p, "setup").update(events=[{"label": "Q4 print"}])),
+        "event without label": mut(lambda p: at(p, "setup").update(events=[{"date": "2026-02-03"}])),
+        "hard question as a string": mut(lambda p: p["pitch_sheet"]["hard_questions"].__setitem__(0, "Why now?")),
+        "override reason key not in numbers": mut(lambda p: p.update(override={"reason": "{ghost}", "evidence": "e"})),
+        "override evidence key not in numbers": mut(lambda p: p.update(override={"reason": "r", "evidence": "{gh}"})),
+        "no action": mut(lambda p: p.pop("action")),
+        "quote without file": mut(lambda p: p["quotes"][0].pop("file")),
+        "slide quotes as a string": mut(lambda p: at(p, "quote").update(quotes="q1")),
+        "table rows not lists": mut(lambda p: at(p, "table")["table"].update(rows=["Revenue"])),
+        "items on a non-checklist slide": mut(lambda p: at(p, "table").update(items={"q": "x"})),
+        "price box not a single key": mut(lambda p: p["sum_boxes"].update({"Buy price": "about {buy_price}"})),
+        "lead as a number": mut(lambda p: rr(p).update(lead=5)),
+    }
+
+
+@pytest.mark.parametrize("name", sorted(_breakers()))
+def test_plans_the_builders_cannot_build_are_rejected(tmp_path, name):
+    rc, out = check(tmp_path, _breakers()[name], "--valuation-verdict", "Buy")
+    assert rc == 1 and re.match(r"\[R\d+\] ", out), (name, out)
+
+
+# why: "plan OK" must mean "builds". Every single-field breakage of the example plan (deleted, null, a number, text,
+# an empty list or object, an unknown {key}) that plan.py accepts must build the Markdown copy and the pitch sheet;
+# build_deck.py reads the same fields with .get and fallbacks (a one-off sweep of it found nothing; its own tests
+# cover the fallbacks). One slide of each type, so the sweep stays fast.
+SWEEP_BASE = copy.deepcopy(BASE)
+SWEEP_BASE["override"] = {"reason": "Catalyst at {price}.", "evidence": "Valuation!C5"}
+at(SWEEP_BASE, "setup")["events"] = [{"date": "2026-02-03", "label": "Q4 print"}]
+at(SWEEP_BASE, "risk_reward").update(short={"type": "Alpha short", "borrow": "General collateral"},
+                                     lead="Buy below {buy_price}")
+at(SWEEP_BASE, "text_chart").update(image={"png": "Filings_Charts_p1_r1c1.png"})
+at(SWEEP_BASE, "two_column")["caption"] = "A caption"
+SHEET_READS = ("ticker", "call", "action", "numbers", "pitch_20s", "pitch_sheet")    # all build_sheet reads
+
+
+def _paths(x, pre=()):
+    items = x.items() if isinstance(x, dict) else enumerate(x) if isinstance(x, list) else ()
+    for k, v in items:
+        yield pre + (k,)
+        yield from _paths(v, pre + (k,))
+
+
+def test_every_plan_plan_py_accepts_builds(tmp_path):
+    import build_md, build_sheet
+    first = {s["type"]: i for i, s in reversed(list(enumerate(SWEEP_BASE["slides"])))}.values()
+    gone, accepted = object(), 0
+    for path in _paths(SWEEP_BASE):
+        if (path[0] == "slides" and len(path) > 1 and path[1] not in first) or (path[0] == "numbers" and len(path) > 2):
+            continue
+        for bad in (gone, None, 5, "x", [], {}, "{ghost}"):
+            p = copy.deepcopy(SWEEP_BASE)
+            parent = p
+            for k in path[:-1]:
+                parent = parent[k]
+            if bad is gone:
+                parent.pop(path[-1])
+            else:
+                parent[path[-1]] = bad
+            if plan.check(p, "Buy"):
+                continue
+            accepted += 1
+            try:
+                build_md.build(p, "", str(tmp_path / "p.md"))
+                if path[0] in SHEET_READS:
+                    build_sheet.build(p, str(tmp_path / "s.docx"))
+            except Exception as e:
+                raise AssertionError(f"plan OK but the build failed: {path} = {bad!r}: {e!r}") from e
+    assert accepted > 100            # the sweep really built plans, not just rejected everything

@@ -222,37 +222,47 @@ Structure (`plan.py`):
 - **[R2]** `call` is one of `Long`, `Short`, `Watch`.
 - **[R3]** `numbers` is a non-empty object holding every required key: `price`, `base_ret`, `risk_ret`, `irr_3y`,
   `target_3y`, `buy_price`, `nobrainer_price`.
-- **[R4]** Every number key is lower-case letters, digits and `_`; every entry is an object with a numeric `value`, a
-  non-empty `shown` and a non-empty `anchor`.
+- **[R4]** Every number key is lower-case letters, digits and `_`; every entry is an object with a finite numeric
+  `value`, a non-empty `shown` and a non-empty `anchor`.
 - **[R5]** `slides` is a list whose first 10 are the core types in order: `title`, `summary`, `setup`, `thesis`,
   `risks`, `why_now`, `valuation`, `different`, `risk_reward`, `catalysts`.
 - **[R6]** Every later slide has `section` `support` or `appendix` and a `type` in `text_chart`, `table`, `quote`,
   `two_column`, `image`, `checklist`.
-- **[R7]** Every slide is an object with non-empty `notes` and `source`.
+- **[R7]** Every slide is an object with non-empty `title`, `takeaway`, `notes` and `source`.
 - **[R8]** Counts and shapes by slide type. `bullets`: `summary` 0-3; `setup` and `why_now` 3-5; `valuation`
-  and `different` 2-4; `catalysts` 3-6; `text_chart` 2-5. `tripwires`: `risks` 2-4; `catalysts` 0-4. A `quote` slide
-  names 1-3 quote ids. A `two_column` slide's `left` and `right` are each an object with a non-empty `head` and a
-  `bullets` list. A `checklist` slide has 3-15 `items`, each an object with non-empty `q` and `a`.
-- **[R9]** `thesis` has exactly 3 `points`, each an object with non-empty `head` and `body`.
-- **[R10]** `risks` has exactly 2 `risks`, each an object with non-empty `head`, `if_hits` and `mitigant`, and a
+  and `different` 2-4; `catalysts` 3-6; `text_chart` 2-5. `tripwires`: `risks` 2-4; `catalysts` 0-4. `bullets` and
+  `tripwires` are lists of non-empty strings; `caption`, `bucket`, `lead` and `irr` are text. A `quote` slide names 1-3 quote ids. A `two_column` slide's `left` and
+  `right` are each an object with a non-empty `head` and a `bullets` list. A `checklist` slide has 3-15 `items`, a list
+  of objects with non-empty `q` and `a`. A `table` is an object with a non-empty `header` list and a `rows` list whose
+  rows are lists. An `image` is an object with `png` or `pdf`. `events` is a list of objects, each with a `date`
+  (`YYYY-MM-DD`) and a non-empty `label`. A field's shape is checked on any slide that carries it (the builders print
+  it wherever it is); the counts belong to the slide type.
+- **[R9]** `thesis` has exactly 3 `points`, a list of objects with non-empty `head` and `body`.
+- **[R10]** `risks` has exactly 2 `risks`, a list of objects with non-empty `head`, `if_hits` and `mitigant`, and a
   `prob` that is a number strictly between 0 and 1.
-- **[R11]** `risk_reward` has cases named `Bull`, `Base` and `Bear` (case ignored).
+- **[R11]** `risk_reward` has `cases`, a list of objects with non-empty `name`, `eps`, `pe`, `ret` and `prob`, named
+  `Bull`, `Base` and `Bear` (case ignored); `three_rs` is an object with non-empty `roll`, `revisions` and
+  `rerating`; `short`, if present, is an object.
 - **[R12]** There are 10 to 25 slides with `section` `support`; each has `supports` set to `thesis.1`, `thesis.2`,
   `thesis.3`, `risks.1` or `risks.2`; each of those five is supported at least once.
-- **[R13]** Every `{key}` written in `action`, `pitch_20s`, `most_important_thing`, any slide field, `pitch_sheet`,
-  `sum_boxes` or `notes` exists in `numbers`.
+- **[R13]** Every `{key}` written in `action`, `pitch_20s`, `most_important_thing`, `override`, any slide field,
+  `pitch_sheet`, `sum_boxes` or `notes` exists in `numbers`.
 - **[R14]** No typed numbers in the budgeted text fields (section 11; quote `text` is exempt). How the check works:
   it takes out the `{key}`s, splits the text on spaces, trims surrounding punctuation from each word, and flags a word
   that holds `$` or `%`, holds a decimal (a digit, a point, a digit), or is a number followed by `x` (`12x`). Whole
   numbers with no sign or unit ("2027E", "Q3 26", "15") pass the code, but the `{key}` rule in section 3 still binds
   you: anything that measures the company or the stock goes through `numbers`. `risks[].prob` is a structured field,
   not text, so it is not scanned.
-- **[R15]** Every quote id a slide names exists in `quotes`.
+- **[R15]** `quotes` is a list of objects, each with `id`, `text`, `file` and a whole-number `line`; a slide's
+  `quotes` is a list of ids, and every id it names exists in `quotes`.
 - **[R16]** Every text field is within its budget (section 11), counted after each `{key}` is replaced by its `shown`.
-- **[R17]** `pitch_sheet` is an object: `script_3min` exactly 12 paragraphs; `napkin` 3-5 bullets; `hard_questions`
-  3-5 items; every `know_cold` key exists in `numbers`, and `know_cold` includes `price`, `base_ret`, `risk_ret`,
-  `irr_3y` and `buy_price`; at most 10 keys.
-- **[R18]** `sum_boxes`, if present, is an object whose keys are among the six SUM box names.
+- **[R17]** `pitch_sheet` is an object whose four fields are lists: `script_3min` exactly 12 paragraphs and `napkin`
+  3-5 bullets, each non-empty text; `hard_questions` 3-5 objects with non-empty `q` and `a`; every `know_cold` key
+  exists in `numbers`, and `know_cold` includes `price`, `base_ret`, `risk_ret`, `irr_3y` and `buy_price`; at most 10
+  keys.
+- **[R18]** `sum_boxes`, if present, is an object whose keys are among the six SUM box names and whose values are text
+  or `null`; `Buy price` and `No-brainer price` are a single `{key}`; no text starts with `=` or holds control
+  characters.
 - **[R19]** The call against the verdicts (the skill reads them from the tabs; failing that, `starting_verdicts`;
   case ignored). If the Valuation verdict is Buy, Sell or Hold, a call other than its mapping (Buy → Long,
   Sell → Short, Hold → Watch) needs `override` with a non-empty `reason` and `evidence`. `Short` needs the short
@@ -263,6 +273,8 @@ Structure (`plan.py`):
   common.HURDLES: 20% 3-year IRR, 2:1 to buy, 3:1 to pound the table.
 - **[R21]** On a `Long`, an `action` containing "pound" needs `base_ret` / |`risk_ret`| at or above the pound R/R (the
   Valuation tab's "Table-pound at R/R", default 3:1).
+- **[R22]** `ticker`, `as_of`, `action`, `most_important_thing` and `pitch_20s` are non-empty text; `notes`, if
+  present, is a list of sentences.
 
 Truth (`anchors.py`, run after `plan.py`):
 - **[A1]** A `Tab!Cell` anchor's value equals the recalculated cell at the rounding `shown` implies.

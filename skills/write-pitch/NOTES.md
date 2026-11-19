@@ -37,6 +37,11 @@ Why things are the way they are. Read before changing scripts.
   rendered through LibreOffice: a 15 x 90 checklist fits, the summary is capped at 3 bullets, risk_reward short
   lines got their own box (idx 16).
 - The pitch sheet is 8.5pt so full-budget text stays on 2 pages; know_cold is capped at 10.
+- Table of contents: an exception to the house rule (every report has one after the cover). The decks and the pitch
+  sheet have none: in a pitch deck, slide 2's summary and the accordion structure (ten core slides, then support
+  slides each tied to a thesis point or risk, then the appendix) play that role, and a contents slide would cost one
+  of the ten; the sheet is 2 pages. The Markdown copy keeps its contents list (build_md.py), since it is read as a
+  document.
 
 ## The call and the hurdles
 - The call starts from Valuation "Overall verdict" and Short Check "Verdict (agent's call)" (fallback "Verdict (the
@@ -44,7 +49,10 @@ Why things are the way they are. Read before changing scripts.
 - Hurdles come from the user's own Valuation inputs ("IRR hurdle", "Buy at R/R", "Table-pound at R/R") via
   labels.py; common.HURDLES is only the fallback.
 - Buy price = 3-year target / (1 + hurdle)^3. No-brainer price = target / 1.3^3 (30% IRR, the course's figure).
-- plan.py rule ids [R1]-[R21] are kept in sync with plan_schema section 12 by a test.
+- plan.py rule ids [R1]-[R22] are kept in sync with plan_schema section 12 by a test.
+- plan.py rejects every plan the builders cannot build: a field's shape is checked on any slide that carries it
+  (build_md prints any field wherever it is), and a test feeds single-field breakages of the example plan through
+  plan.py and builds every one it accepts. plan.py runs before the build; anchors.py problems do not stop it.
 
 ## SUM boxes
 - XML-only writes (copied from model-summary's xlsx.py); verify.py proves every other part is byte-identical.

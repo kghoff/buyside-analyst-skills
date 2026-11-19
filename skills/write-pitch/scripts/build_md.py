@@ -51,7 +51,7 @@ def _image(im):
 def _slide(s, i, plan, f):
     L = [f"### {i}. {f(s['title'])}", ""]
     if s.get("supports"):
-        kind, _, num = s["supports"].partition(".")
+        kind, _, num = str(s["supports"]).partition(".")
         L += [f"Supports: {SUPPORTS.get(kind, kind)} {num}", ""]
     L += [f"**{f(s['takeaway'])}**", ""]
     bl = lambda items: [f"- {f(x)}" for x in items] + [""]  # noqa: E731
@@ -141,7 +141,7 @@ def build(plan, pm_review, out):
         L += [f"**{f(qa['q'])}**", "", f(qa["a"]), ""]
     L += ["### Know cold", ""] + [f"- {label(k)}: {n[k]['shown']}" for k in sheet["know_cold"]] + [""]
     L += ["## PM review", "", _verdict(pm_review) or "PM review: none", "", "## Judgment calls", ""]
-    L += [f"- {f(t)}" for t in plan.get("notes", [])] + [""]
+    L += [f"- {f(t)}" for t in plan.get("notes") or []] + [""]
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with open(out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(L))

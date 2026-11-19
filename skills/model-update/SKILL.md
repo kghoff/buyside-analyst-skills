@@ -133,7 +133,7 @@ yet: tell the user the forecast columns were left as they were).
    python3 "$SK/modmap.py" rowmap "$TMP/a.xlsx" "$QW/rowmap_a.md"
    ```
 3. `{THESIS_READING_LIST}`, one line per file that exists, in this order (the thesis before the numbers):
-   - the pitch deck: newest `$SRC/Pitch/*.md` (from a future /write-pitch, when it exists)
+   - the pitch deck: newest `$SRC/Pitch/*.md` (the Markdown copy /write-pitch writes, when it has run)
    - the filings research report: newest `$SRC/Filings Research/*Filings Research Report.md` (not the long version)
    - the street research report: newest `$SRC/Street Research/*Street Research Report.md`
    - the latest valuation, short and earnings preview notes: newest `.md` in `$SRC/Valuation`, `$SRC/Short Check`,

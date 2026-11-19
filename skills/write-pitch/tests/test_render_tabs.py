@@ -126,3 +126,12 @@ def test_render_small_workbook(tab_render):
     md = open(os.path.join(out, "index.md")).read()
     assert md.index("Charts") < md.index("Notes")                 # chart tabs first
     assert "Problems" not in md                                   # every tab's first text was found on its own page
+
+
+# why: the deck tests point plan images at the fixture tabs folder; a name render_tabs could never write would let a
+# test pass on a picture no real run has
+def test_fixture_tab_pictures_use_render_tabs_names():
+    from conftest import FIX
+    for e in json.loads((FIX / "tabs" / "index.json").read_text()):
+        assert e["png"] == render_tabs.png_name(e["tab"], e["page"], e["row"], e["col"])
+        assert (FIX / "tabs" / e["png"]).is_file()
