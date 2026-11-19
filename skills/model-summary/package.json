@@ -1,0 +1,6 @@
+{
+  "name": "model-summary",
+  "private": true,
+  "type": "module",
+  "dependencies": { "yahoo-finance2": "3.13.2" }
+}
