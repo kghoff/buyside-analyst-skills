@@ -16,6 +16,7 @@ fullCalcOnLoad so SUM's formulas on the prices recalculate on open, and every ot
 calcChain.xml is left as it is: it lists formula cells, and no formula cell is added or removed."""
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -24,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with pyt
 import openpyxl  # noqa: E402
 
 import common  # noqa: E402
-from xlsx import Package, colnum, esc  # noqa: E402
+from xlsx import Package, colname, colnum, esc  # noqa: E402
 
 TAB = "SUM"
 # label -> (columns, rows) from the label cell to the input cell. Copied from model-summary layout.INPUT_OFFSET
@@ -35,14 +36,12 @@ PRICES = ("Buy price", "No-brainer price")
 KEY = re.compile(r"\{(\w+)\}")
 CELL = re.compile(r"<c\b(?P<a>[^>]*?)(?:/>|>(?P<body>.*?)</c>)", re.S)
 ROW = re.compile(r"<row\b(?P<a>[^>]*?)(?:/>|>(?P<body>.*?)</row>)", re.S)
+CALCPR = re.compile(r"<calcPr\b(?P<a>[^>]*?)(?:/>|>\s*</calcPr>)")
+ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")    # not allowed in XML 1.0
 
 
 def ref_of(c, r):
-    s = ""
-    while c:
-        c, k = divmod(c - 1, 26)
-        s = chr(65 + k) + s
-    return f"{s}{r}"
+    return f"{colname(c)}{r}"
 
 
 def split_ref(ref):
@@ -67,7 +66,9 @@ def find_boxes(model):
     try:
         if TAB not in wb.sheetnames:
             raise SystemExit("write-pitch: the model has no SUM tab. Run /model-summary first.")
-        g = {(r, c): v for r, row in enumerate(wb[TAB].iter_rows(values_only=True), 1)
+        ws = wb[TAB]
+        ws.reset_dimensions()          # a stale <dimension> would cut rows off and make a typed box read as empty
+        g = {(r, c): v for r, row in enumerate(ws.iter_rows(values_only=True), 1)
              for c, v in enumerate(row, 1) if v is not None}
     finally:
         wb.close()
@@ -95,10 +96,17 @@ def wanted(label, text, numbers):
             raise SystemExit(f"write-pitch: sum_boxes['{label}'] must be a single {{key}} (e.g. \"{{buy_price}}\"), "
                              f"got {text!r}.")
         v = numbers[m.group(1)]["value"]
-        if not isinstance(v, (int, float)) or isinstance(v, bool):
-            raise SystemExit(f"write-pitch: numbers['{m.group(1)}'].value is not a number ({v!r}).")
+        if not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v):
+            raise SystemExit(f"write-pitch: numbers['{m.group(1)}'].value is not a finite number ({v!r}); fix the "
+                             "plan's number before filling SUM.")
         return v
-    return KEY.sub(lambda m: str(numbers[m.group(1)]["shown"]), text)
+    t = KEY.sub(lambda m: str(numbers[m.group(1)]["shown"]), text).replace("\r\n", "\n").replace("\r", "\n")
+    if ILLEGAL.search(t):
+        raise SystemExit(f"write-pitch: sum_boxes['{label}'] has control characters Excel cannot store: {t!r}.")
+    if t.lstrip().startswith("="):
+        raise SystemExit(f"write-pitch: sum_boxes['{label}'] starts with '=', which model-summary would turn into a "
+                         "formula on its next rerun. Reword the plan's text so it does not start with '='.")
+    return t
 
 
 def cell_xml(ref, attrs, value):
@@ -134,9 +142,9 @@ def put_cell(xml, ref, value):
 
 def full_calc_on_load(wb):
     """workbook.xml with calcPr fullCalcOnLoad="1" (as model-summary's Package.finish sets it)."""
-    if "<calcPr" in wb:
-        return re.sub(r"<calcPr\b([^>]*?)/>", lambda m: "<calcPr" + re.sub(r'\s*fullCalcOnLoad="\w+"', "", m.group(1))
-                      + ' fullCalcOnLoad="1"/>', wb, count=1)
+    if CALCPR.search(wb):
+        return CALCPR.sub(lambda m: "<calcPr" + re.sub(r'\s*fullCalcOnLoad="\w+"', "", m.group("a"))
+                          + ' fullCalcOnLoad="1"/>', wb, count=1)
     return re.sub(r"(</sheets>(?:\s*<functionGroups[^>]*/>)?(?:\s*<externalReferences>.*?</externalReferences>)?"
                   r"(?:\s*<definedNames>.*?</definedNames>)?)", r'\1<calcPr fullCalcOnLoad="1"/>', wb, count=1,
                   flags=re.S)
@@ -150,9 +158,10 @@ def run(model, plan, record, out):
     bad = sorted(set(boxes) - set(common.SUM_BOXES))
     if bad:
         raise SystemExit("write-pitch: sum_boxes has labels SUM does not have: " + ", ".join(bad))
-    last = common.load(record) if record and os.path.exists(record) else {}
+    has_record = bool(record) and os.path.exists(record)
+    last = common.load(record) if has_record else {}
     found, warnings = find_boxes(model)
-    if not last:
+    if not has_record:
         warnings.append("No sum_written.json (the record of what the last run wrote), so only empty boxes are "
                         "written; every filled box is treated as yours.")
     rep = {"written": [], "kept": [], "skipped_null": [], "missing": [], "cells": {}, "warnings": warnings}
@@ -161,16 +170,18 @@ def run(model, plan, record, out):
     part = {s[0]: s[3] for s in pkg.sheets()}[TAB]
     xml = pkg.text(part)
     for label in common.SUM_BOXES:
-        if label not in boxes:
-            continue
-        text = boxes[label]
-        if label not in found:
-            rep["missing"].append(label)
+        rec = last.get(label)
+        if label not in found:                                          # can't see the box: keep what we knew
+            if label in boxes:
+                rep["missing"].append(label)
+            if rec:
+                nxt[label] = rec
             continue
         ref, now = found[label]
-        rec = last.get(label)
-        if text is None:
-            rep["skipped_null"].append(label)
+        text = boxes.get(label)
+        if text is None:                                                # null or left out: leave the box alone
+            if label in boxes:
+                rep["skipped_null"].append(label)
             if rec and not empty(now) and same(now, rec["value"]):     # still ours: keep it on the record
                 nxt[label] = rec
             continue

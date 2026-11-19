@@ -4,6 +4,7 @@ import ast
 import hashlib
 import json
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -32,7 +33,7 @@ def box_ref(label):
     return sum_boxes.ref_of(c + dc, r + dr)
 
 
-def make_model(path, typed=None):
+def make_model(path, typed=None, bare=()):
     """A small model: MOD with numbers, SUM with the six labelled yellow boxes (empty unless typed) and the
     model-summary formula that reads the buy price."""
     wb = openpyxl.Workbook()
@@ -46,7 +47,8 @@ def make_model(path, typed=None):
     s["D19"] = '=IF(ISNUMBER(C19),C19/$C$7-1,"")'
     for label, at in LABELS.items():
         s[at] = label
-        s[box_ref(label)].fill = PatternFill("solid", fgColor=YELLOW)
+        if label not in bare:                                       # bare: the box cell has no XML element
+            s[box_ref(label)].fill = PatternFill("solid", fgColor=YELLOW)
     s.merge_cells("E31:N40")
     for label, v in (typed or {}).items():
         s[box_ref(label)] = v
@@ -231,3 +233,106 @@ def test_offsets_match_model_summary_layout():
     theirs = {k.value: ast.literal_eval(v) for k, v in zip(node.keys, node.values) if isinstance(k, ast.Constant)}
     assert {k: theirs[k] for k in sum_boxes.INPUT_OFFSET} == sum_boxes.INPUT_OFFSET
     assert set(sum_boxes.INPUT_OFFSET) == set(sum_boxes.common.SUM_BOXES)
+
+
+def plan_with(tmp_path, **boxes):
+    """plan_example.json with some sum_boxes replaced (a value of ... drops the box from the plan)."""
+    P = json.loads(PLAN.read_text())
+    for k, v in boxes.items():
+        k = k.replace("_", " ")
+        if v is ...:
+            P["sum_boxes"].pop(k)
+        else:
+            P["sum_boxes"][k] = v
+    p = tmp_path / "plan.json"
+    p.write_text(json.dumps(P))
+    return p
+
+
+def sum_part_rewrite(path, fn):
+    """Rewrite SUM's sheet XML in place in a throwaway workbook (to fake what Excel or a tamper leaves)."""
+    part = {s[0]: s[3] for s in sum_boxes.Package(path).sheets()}["SUM"]
+    tmp = str(path) + ".tmp"
+    with zipfile.ZipFile(path) as zi, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zo:
+        for i in zi.infolist():
+            data = zi.read(i.filename)
+            zo.writestr(i, fn(data.decode()).encode() if i.filename == part else data)
+    shutil.move(tmp, path)
+
+
+def test_stale_dimension_does_not_hide_a_typed_box(tmp_path, sum_model):
+    # read-only openpyxl trusts <dimension>; one cut between a label and its box would make the user's text read as
+    # empty and get overwritten
+    sum_part_rewrite(sum_model, lambda x: re.sub(r'<dimension ref="[^"]*"/>', '<dimension ref="A1:P42"/>', x))
+    out, rep = run_sum_boxes(tmp_path, sum_model)
+    assert "Trading Plan" in rep["kept"]
+    assert read_cell(out, "SUM", "Trading Plan") == "my own plan"
+
+
+def test_box_left_out_of_plan_stays_on_record(tmp_path, sum_model_written_before):
+    # a plan that omits a box must not forget we wrote it, or the next run would treat our text as the user's
+    plan = plan_with(tmp_path, Thesis_Summary=...)
+    run_sum_boxes(tmp_path, sum_model_written_before, record="record_from_last_run.json", plan=plan)
+    nxt = json.loads((tmp_path / "_model_work" / "write-pitch" / "sum_written.next.json").read_text())
+    assert nxt["Thesis Summary"]["value"] == "Old thesis from the last run."
+
+
+def test_missing_label_stays_on_record(tmp_path):
+    m = make_model(tmp_path / "XYZ_model.xlsx")
+    wb = openpyxl.load_workbook(m)
+    wb["SUM"][LABELS["Valuation Thoughts"]] = None
+    wb.save(m)
+    (tmp_path / "rec.json").write_text(json.dumps({"Valuation Thoughts": {"cell": "P41", "value": "Ours."}}))
+    run_sum_boxes(tmp_path, m, record="rec.json")
+    nxt = json.loads((tmp_path / "_model_work" / "write-pitch" / "sum_written.next.json").read_text())
+    assert nxt["Valuation Thoughts"] == {"cell": "P41", "value": "Ours."}
+
+
+def test_line_breaks_normalised(tmp_path, sum_model):
+    out, _ = run_sum_boxes(tmp_path, sum_model, plan=plan_with(tmp_path, Thesis_Summary="One.\r\nTwo.\rThree."))
+    assert read_cell(out, "SUM", "Thesis Summary") == "One.\nTwo.\nThree."
+
+
+@pytest.mark.parametrize("box, text, why", [
+    ("Thesis_Summary", "=Valuation!C30 is the target", "formula"),
+    ("Thesis_Summary", "bell\x07 here", "control characters"),
+])
+def test_bad_text_stops(tmp_path, sum_model, box, text, why):
+    with pytest.raises(SystemExit, match=why):
+        sum_boxes.run(sum_model, str(plan_with(tmp_path, **{box: text})), None, str(tmp_path / "out.xlsx"))
+
+
+def test_nan_price_stops(tmp_path, sum_model):
+    # NaN would be written as <v>nan</v>: Excel calls the file corrupt
+    P = json.loads(PLAN.read_text())
+    P["numbers"]["buy_price"]["value"] = float("nan")
+    p = tmp_path / "plan.json"
+    p.write_text(json.dumps(P))
+    with pytest.raises(SystemExit, match="finite"):
+        sum_boxes.run(sum_model, str(p), None, str(tmp_path / "out.xlsx"))
+
+
+def test_calcpr_open_close_form_gets_full_calc():
+    wb = '<workbook><sheets/><calcPr calcId="191029"></calcPr></workbook>'
+    assert sum_boxes.full_calc_on_load(wb) == '<workbook><sheets/><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>'
+
+
+def test_no_record_warning_only_when_file_absent(tmp_path, sum_model):
+    (tmp_path / "empty.json").write_text("{}")
+    _, rep = run_sum_boxes(tmp_path, sum_model, record="empty.json")
+    assert not any("No sum_written.json" in w for w in rep["warnings"])
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    _, rep = run_sum_boxes(fresh, sum_model)
+    assert any("No sum_written.json" in w for w in rep["warnings"])
+
+
+def test_added_row_still_checks_other_rows(tmp_path):
+    # the box cell (and its row) may have to be created; verify must still catch a change to any other row
+    m = make_model(tmp_path / "XYZ_model.xlsx", bare=("Valuation Thoughts",))
+    out, rep = run_sum_boxes(tmp_path, m)
+    assert "Valuation Thoughts" in rep["written"]
+    assert read_cell(out, "SUM", "Valuation Thoughts") == "Target $120 in three years, IRR 18.3%."
+    assert run_verify(m, out) == 0
+    sum_part_rewrite(out, lambda x: x.replace('<row r="19"', '<row r="19" ht="40" customHeight="1"', 1))
+    assert run_verify(m, out) == 1

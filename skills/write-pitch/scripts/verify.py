@@ -18,10 +18,8 @@ import zipfile
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with python3 -I
 import openpyxl  # noqa: E402
 
-from sum_boxes import CELL, TAB, same  # noqa: E402
+from sum_boxes import CALCPR, CELL, TAB, same  # noqa: E402
 from xlsx import Package  # noqa: E402
-
-CALCPR = re.compile(r"<calcPr\b[^>]*/>")
 
 
 def expected(path):
@@ -82,9 +80,13 @@ def check(before, after, expect=None):
             problems.append(f"SUM!{ref} was removed")
         elif ref in ca and style(ca[ref][0]) != style(cb[ref][0]):
             problems.append(f"SUM!{ref} lost its style (s={style(ca[ref][0])} before, s={style(cb[ref][0])} after)")
-    rows = lambda s: [m.group(0) for m in re.finditer(r"<row\b[^>]*?(?:/>|>)", s)]   # noqa: E731
-    if not added and rows(sa) != rows(sb):
-        problems.append(f"{part}: row attributes changed")
+    rows = lambda s: {re.search(r'\sr="(\d+)"', m.group(0)).group(1): m.group(0).replace("/>", ">")  # noqa: E731
+                      for m in re.finditer(r"<row\b[^>]*?(?:/>|>)", s)}
+    ra, rb = rows(sa), rows(sb)
+    new_rows = {re.search(r"\d+", ref).group(0) for ref in added}     # a row sum_boxes created for an added cell
+    for r in sorted(set(ra) | set(rb), key=int):
+        if ra.get(r) != rb.get(r) and not (r not in ra and r in new_rows):
+            problems.append(f"{part}: row {r} changed its attributes or was removed")
     if E:
         wb = openpyxl.load_workbook(after, read_only=True)
         try:
