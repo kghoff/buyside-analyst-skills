@@ -136,3 +136,23 @@ def test_big_tab_bulk_summarized_but_small_labelled_block_below_listed(tmp_path)
     t = run_digest(wb, tmp_path)
     assert "Px: first (2) 0.2" in t and "B150" not in t
     assert "r310 (Beta): B=1.25" in t and "B500: end" in t
+
+
+def test_error_cells_are_not_headers_and_collapse_to_a_range_line(tmp_path):
+    # why: an #N/A between a header and its numbers must not become the column header, nor flood Text
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Px"
+    ws["B1"] = "NTM EPS"
+    for i in range(2, 6):
+        ws.cell(i, 2, "#N/A")
+    ws["B6"], ws["B7"] = 0.15, 0.16
+    ws["C3"] = "#DIV/0!"
+    t = run_digest(wb, tmp_path)
+    assert "r6: B NTM EPS=0.15" in t and "#N/A=" not in t
+    assert "errors: B2:B5 #N/A (4 cells), C3 #DIV/0! (1 cell)" in t and "B3: #N/A" not in t
+
+
+def test_error_cells_in_a_bulk_column_do_not_become_its_header(tmp_path):
+    wb = openpyxl.Workbook(); ws = price_sheet(wb, 300)
+    ws["B2"] = "#N/A"
+    t = run_digest(wb, tmp_path)
+    assert "Close: first (3) 103" in t and "errors: B2 #N/A (1 cell)" in t

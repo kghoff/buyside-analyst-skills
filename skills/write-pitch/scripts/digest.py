@@ -22,6 +22,8 @@ Per tab, in workbook order: Text, Notes, Numbers, Bulk blocks.
   are left out, and the count is stated.
 - MOD period headers that match no rule (e.g. a date) are named in a `skipped columns:` line, with the count of older
   actual quarters dropped. Hidden sheets are marked `(hidden)`.
+- Excel error cells (#N/A ...) are never headers or labels and are not listed one by one: one `errors:` line under
+  Text gives each contiguous run per column as a range.
 The file must be a values copy (data_only), so formulas show their results."""
 import argparse
 import bisect
@@ -32,6 +34,7 @@ import re
 import openpyxl
 from openpyxl.utils import get_column_letter as L
 
+ERRORS = {"#N/A", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#NULL!"}
 BULK_ROWS, BULK_SHARE, MOD_QUARTERS = 200, 0.8, 8
 QTR = re.compile(r"^Q[1-4] \d\d(E?)$")
 YEAR = re.compile(r"^(FY ?)?(\d{2}|\d{4})E?$")
@@ -71,7 +74,7 @@ def read_sheet(ws):
 
 
 def row_label(cells):
-    return next((v for c, v in cells if c <= 3 and isinstance(v, str)), "")
+    return next((v for c, v in cells if c <= 3 and isinstance(v, str) and v not in ERRORS), "")
 
 
 def blocks_of(rows):
@@ -119,7 +122,7 @@ def summarize(block, rows, num_cols, txt_cols):
         for c, v in rows[r]:
             if c in num_cols and is_num(v):
                 cols.setdefault(c, []).append((r, v))
-            elif c in num_cols | txt_cols and not is_num(v):
+            elif c in num_cols | txt_cols and not is_num(v) and v not in ERRORS:
                 if c not in heads:
                     heads[c] = str(v)
                 elif c in txt_cols:
@@ -154,9 +157,25 @@ def mod_columns(rows):
     return keep, heads, skipped, max(len(actual) - MOD_QUARTERS, 0)
 
 
+def error_runs(errs):
+    """errs: {col: [(row, error)]} -> 'AB5:AB8 #N/A (4 cells)' per contiguous run of one error in one column."""
+    out = []
+    for c in sorted(errs):
+        run = []
+        for r, e in errs[c] + [(None, None)]:
+            if run and (r is None or e != run[-1][1] or r != run[-1][0] + 1):
+                a, b = f"{L(c)}{run[0][0]}", f"{L(c)}{run[-1][0]}"
+                out.append(f"{a}{':' + b if len(run) > 1 else ''} {run[0][1]} ({len(run)} cell{'s' if len(run) > 1 else ''})")
+                run = []
+            if r is not None:
+                run.append((r, e))
+    return out
+
+
 def digest_sheet(ws):
     rows, notes = read_sheet(ws)
-    d = {"hidden": ws.sheet_state != "visible", "text": {}, "notes": [], "numbers": [], "bulk": []}
+    d = {"hidden": ws.sheet_state != "visible", "text": {}, "errors": [], "notes": [], "numbers": [], "bulk": []}
+    errs = {}
     is_mod = ws.title == "MOD"
     keep, mod_heads = set(), {}
     if is_mod:
@@ -173,6 +192,9 @@ def digest_sheet(ws):
                 label = next((x for c, x in rows[r] if c == 2 and isinstance(x, str)), label)
             cells = []
             for c, v in rows[r]:
+                if isinstance(v, str) and v in ERRORS:
+                    errs.setdefault(c, []).append((r, v))
+                    continue
                 if c in txt_cols and not is_num(v):
                     continue
                 if c in num_cols:
@@ -193,6 +215,7 @@ def digest_sheet(ws):
                     cells.append({"col": L(c), "header": heads.get(c, ""), "value": fmt(v)})
             if cells:
                 d["numbers"].append({"section": section, "row": r, "label": label, "cells": cells})
+    d["errors"] = error_runs(errs)
     d["notes_omitted"] = 0
     for r, c, v, text in notes:
         if is_mod and c > 3 and c not in keep:
@@ -243,7 +266,10 @@ def bulk_line(b):
 
 def to_markdown(name, d):
     out = [f"## {name}{' (hidden)' if d['hidden'] else ''}", "", "### Text"]
-    out += [f"{k}: {v}" for k, v in d["text"].items()] or ["(none)"]
+    out += [f"{k}: {v}" for k, v in d["text"].items()]
+    if d["errors"]:
+        out.append("errors: " + ", ".join(d["errors"]))
+    out += [] if d["text"] or d["errors"] else ["(none)"]
     out += ["", "### Notes"]
     out += [f"{n['cell']} ({n['label']}) = {n['value']}: {n['note']}" for n in d["notes"]] or ["(none)"]
     if d["notes_omitted"]:
