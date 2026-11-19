@@ -17,6 +17,12 @@ fixture workbook (built in the anchors tests) must hold with exactly these value
 | r_roll | Valuation!C40 | 0.06 |
 | r_rev | Valuation!C41 | 0.08 |
 | r_rer | Valuation!C42 | 0.04 |
+| base_pe | Valuation!C13 | 28 |
+| base_p | Valuation!C15 | 0.5 |
+| bear_eps | Valuation!E12 | 2.60 |
+| bear_pe | Valuation!E13 | 22 |
+| bear_p | Valuation!E15 | 0.25 |
+| eps_26_ours | SUM!H12 | 2.85 |
 | eps_27_ours | SUM!J12 | 3.30 |
 | eps_27_street | SUM!K12 | 3.05 |
 | rev_26 | SUM!H8 | 1250 |

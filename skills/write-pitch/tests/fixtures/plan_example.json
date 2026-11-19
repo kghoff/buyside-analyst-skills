@@ -105,6 +105,36 @@
       "value": 0.15,
       "shown": "15%",
       "anchor": "Earnings Calls/_md/2026 Q3 XYZ call.md:214"
+    },
+    "base_pe": {
+      "value": 28.0,
+      "shown": "28x",
+      "anchor": "Valuation!C13"
+    },
+    "base_p": {
+      "value": 0.5,
+      "shown": "50%",
+      "anchor": "Valuation!C15"
+    },
+    "bear_eps": {
+      "value": 2.6,
+      "shown": "2.60",
+      "anchor": "Valuation!E12"
+    },
+    "bear_pe": {
+      "value": 22.0,
+      "shown": "22x",
+      "anchor": "Valuation!E13"
+    },
+    "bear_p": {
+      "value": 0.25,
+      "shown": "25%",
+      "anchor": "Valuation!E15"
+    },
+    "eps_26_ours": {
+      "value": 2.85,
+      "shown": "2.85",
+      "anchor": "SUM!H12"
     }
   },
   "quotes": [
@@ -139,7 +169,8 @@
       "takeaway": "At {price} we see {base_ret} in twelve months against {risk_ret} of risk, and a {irr_3y} three-year IRR.",
       "bullets": [
         "Our 2027 EPS of {eps_27_ours} is above the Street's {eps_27_street}.",
-        "Management guides to {guide_growth} growth and has beaten it for four quarters."
+        "Management guides to {guide_growth} growth and has beaten it for four quarters.",
+        "The stock is flat while estimates rose."
       ],
       "notes": "Say it plainly and move on; the numbers are on the slide.",
       "source": "XYZ model, Valuation and SUM tabs"
@@ -150,7 +181,8 @@
       "takeaway": "The stock has lagged its peers while the numbers kept rising.",
       "bullets": [
         "Shares are flat over a year while estimates rose.",
-        "Sentiment is cautious after one soft quarter."
+        "Sentiment is cautious after one soft quarter.",
+        "Peers re-rated; XYZ did not."
       ],
       "notes": "Say it plainly and move on; the numbers are on the slide.",
       "source": "XYZ model, Valuation and SUM tabs"
@@ -184,7 +216,7 @@
         {
           "head": "Growth stalls",
           "prob": 0.25,
-          "if_hits": "Revenue growth drops under 8% and the multiple compresses.",
+          "if_hits": "Revenue growth drops well below guidance and the multiple compresses.",
           "mitigant": "Backlog and renewals cover most of next year."
         },
         {
@@ -195,8 +227,8 @@
         }
       ],
       "tripwires": [
-        "Two straight quarters under 10% growth.",
-        "Gross margin down more than 150 bps year over year."
+        "Two straight quarters of growth well under guidance.",
+        "Gross margin down sharply year over year."
       ],
       "notes": "Say it plainly and move on; the numbers are on the slide.",
       "source": "XYZ model, Valuation and SUM tabs"
@@ -207,7 +239,8 @@
       "takeaway": "Three catalysts land in the next two quarters.",
       "bullets": [
         "Q4 print resets 2027 estimates.",
-        "New product ships in the spring."
+        "New product ships in the spring.",
+        "Buyback pace steps up with free cash flow."
       ],
       "notes": "Say it plainly and move on; the numbers are on the slide.",
       "source": "XYZ model, Valuation and SUM tabs"
@@ -249,16 +282,16 @@
         {
           "name": "Base",
           "eps": "{eps_27_ours}",
-          "pe": "28x",
+          "pe": "{base_pe}",
           "ret": "{base_ret}",
-          "prob": "50%"
+          "prob": "{base_p}"
         },
         {
           "name": "Bear",
-          "eps": "2.60",
-          "pe": "22x",
+          "eps": "{bear_eps}",
+          "pe": "{bear_pe}",
           "ret": "{risk_ret}",
-          "prob": "25%"
+          "prob": "{bear_p}"
         }
       ],
       "ladder": "Valuation",
@@ -277,7 +310,8 @@
       "takeaway": "Near-term events that can move estimates.",
       "bullets": [
         "Q4 earnings in February.",
-        "Investor day in the spring."
+        "Investor day in the spring.",
+        "Product launch in the spring."
       ],
       "notes": "Say it plainly and move on; the numbers are on the slide.",
       "source": "XYZ model, Valuation and SUM tabs"
@@ -302,7 +336,7 @@
           ],
           [
             "EPS",
-            "2.85",
+            "{eps_26_ours}",
             "{eps_27_ours}"
           ]
         ]
@@ -324,6 +358,45 @@
       "source": "Filings Charts tab"
     },
     {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "thesis.3",
+      "title": "Buyback Capacity",
+      "takeaway": "Backs the point above.",
+      "bullets": [
+        "Free cash flow covers the buyback.",
+        "Net cash stays positive."
+      ],
+      "notes": "Walk the chart.",
+      "source": "Filings Charts tab"
+    },
+    {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "risks.1",
+      "title": "Growth Stall Test",
+      "takeaway": "Backs the point above.",
+      "bullets": [
+        "Backlog covers next year.",
+        "Renewals are sticky."
+      ],
+      "notes": "Walk the chart.",
+      "source": "Filings Charts tab"
+    },
+    {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "risks.2",
+      "title": "Price War Test",
+      "takeaway": "Backs the point above.",
+      "bullets": [
+        "Switching costs are high.",
+        "Rivals lack scale."
+      ],
+      "notes": "Walk the chart.",
+      "source": "Filings Charts tab"
+    },
+    {
       "type": "quote",
       "section": "appendix",
       "title": "Management On Growth",
@@ -337,8 +410,18 @@
   ],
   "pitch_sheet": {
     "script_3min": [
-      "Open with the call.",
-      "Say the price and the return."
+      "Step 1: one short paragraph.",
+      "Step 2: one short paragraph.",
+      "Step 3: one short paragraph.",
+      "Step 4: one short paragraph.",
+      "Step 5: one short paragraph.",
+      "Step 6: one short paragraph.",
+      "Step 7: one short paragraph.",
+      "Step 8: one short paragraph.",
+      "Step 9: one short paragraph.",
+      "Step 10: one short paragraph.",
+      "Step 11: one short paragraph.",
+      "Step 12: one short paragraph."
     ],
     "napkin": [
       "Long XYZ",
@@ -356,13 +439,17 @@
       },
       {
         "q": "What is the exit?",
-        "a": "Growth under 10% for two quarters."
+        "a": "Two soft quarters in a row."
       }
     ],
     "know_cold": [
       "price",
       "base_ret",
-      "irr_3y"
+      "risk_ret",
+      "irr_3y",
+      "buy_price",
+      "eps_27_ours",
+      "eps_27_street"
     ]
   },
   "sum_boxes": {

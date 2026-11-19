@@ -1,5 +1,6 @@
 import copy, json, subprocess, sys, pathlib
 from conftest import FIX
+import plan
 P = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "plan.py"
 BASE = json.loads((FIX / "plan_example.json").read_text())
 
@@ -52,11 +53,10 @@ def test_long_below_both_hurdles(tmp_path):
     p["call"] = "Watch"; p["override"] = {"reason": "r", "evidence": "e"}
     assert check(tmp_path, p, "--valuation-verdict", "Buy")[0] == 0
 
-def test_long_missing_hurdle_numbers(tmp_path):
-    p = copy.deepcopy(BASE); del p["numbers"]["risk_ret"]; p["slides"][1]["takeaway"] = "x"
-    p["slides"][8]["takeaway"] = "x"; p["slides"][8]["cases"][1]["ret"] = "x"; p["slides"][8]["cases"][2]["ret"] = "x"
-    p["slides"][2]["bullets"] = ["x"]
-    rc, out = check(tmp_path, p, "--valuation-verdict", "Buy"); assert rc == 1 and "hurdle check can't run" in out
+def test_long_missing_hurdle_numbers():
+    p = copy.deepcopy(BASE); del p["numbers"]["risk_ret"]
+    out = plan.check(p, "Buy")
+    assert "call is Long but numbers risk_ret are missing: the hurdle check can't run" in out
 
 def test_know_cold_key_missing(tmp_path):
     p = copy.deepcopy(BASE); p["pitch_sheet"]["know_cold"].append("ghost")
@@ -70,7 +70,7 @@ def test_budget_after_substitution(tmp_path):
     rc, out = check(tmp_path, p); assert rc == 1 and "takeaway" in out and "200" in out
 
 def test_unknown_quote_id(tmp_path):
-    p = copy.deepcopy(BASE); p["slides"][12]["quotes"] = ["q9"]
+    p = copy.deepcopy(BASE); p["slides"][15]["quotes"] = ["q9"]
     rc, out = check(tmp_path, p); assert rc == 1 and "q9" in out
 
 def test_number_needs_anchor(tmp_path):
@@ -92,3 +92,99 @@ def test_unknown_sum_box(tmp_path):
 def test_hard_questions_count(tmp_path):
     p = copy.deepcopy(BASE); p["pitch_sheet"]["hard_questions"] = p["pitch_sheet"]["hard_questions"][:2]
     rc, out = check(tmp_path, p); assert rc == 1 and "hard_questions" in out
+
+def at(p, kind):
+    return next(s for s in p["slides"] if s["type"] == kind)
+
+# why: a core type after slide 10 would be laid out as a support slide with no template
+def test_core_type_after_slide_10(tmp_path):
+    p = copy.deepcopy(BASE); p["slides"][14]["type"] = "thesis"
+    rc, out = check(tmp_path, p); assert rc == 1 and "support layout" in out
+
+def test_fewer_than_ten_slides(tmp_path):
+    p = copy.deepcopy(BASE); p["slides"] = p["slides"][:7]
+    rc, out = check(tmp_path, p); assert rc == 1 and "slide 8: expected the different slide" in out
+
+def test_three_risks(tmp_path):
+    p = copy.deepcopy(BASE); r = at(p, "risks")["risks"]; r.append(copy.deepcopy(r[0]))
+    rc, out = check(tmp_path, p); assert rc == 1 and "exactly 2 risks, has 3" in out
+
+# why: Short with the right verdict and an agreeing valuation Sell is the clean short path
+def test_short_with_alpha_short_passes(tmp_path):
+    p = copy.deepcopy(BASE); p["call"] = "Short"
+    assert check(tmp_path, p, "--valuation-verdict", "sell", "--short-verdict", "Alpha Short")[0] == 0
+
+def test_long_below_hurdles_with_override_passes():
+    p = copy.deepcopy(BASE); p["numbers"]["base_ret"]["value"] = 0.10
+    p["override"] = {"reason": "r", "evidence": "e"}
+    assert plan.check(p, "Buy") == []
+
+# why: every text kind is measured, not only takeaways
+def test_budgets_on_sum_box_notes_and_cell():
+    p = copy.deepcopy(BASE); p["sum_boxes"]["Trading Plan"] = "x" * 500
+    at(p, "title")["notes"] = "x" * 1600; at(p, "table")["table"]["rows"][0][0] = "x" * 30
+    out = "\n".join(plan.check(p, "Buy"))
+    assert "sum_boxes Trading Plan" in out and "title) notes" in out and "table cell" in out
+
+# why: a bare string would crash the builder that reads head and body
+def test_string_thesis_point():
+    p = copy.deepcopy(BASE); at(p, "thesis")["points"][0] = "just a string"
+    assert any("thesis point 1 must be an object" in l for l in plan.check(p, "Buy"))
+
+# why: thesis body is a box (420), risk sentences a bullet (170)
+def test_budget_kinds():
+    p = copy.deepcopy(BASE); at(p, "thesis")["points"][0]["body"] = "x" * 300
+    assert plan.check(p, "Buy") == []
+    at(p, "risks")["risks"][0]["mitigant"] = "x" * 200
+    assert any("risk 1 mitigant" in l for l in plan.check(p, "Buy"))
+
+# why: the pitch must not carry numbers the anchors never checked
+def test_typed_number_flagged_but_years_pass():
+    p = copy.deepcopy(BASE); at(p, "thesis")["points"][0]["body"] += " Up 15% by 2027E in Q3 26, 12x, 3.30."
+    out = plan.check(p, "Buy")
+    assert any("point 1 body: typed number '15%'" in l for l in out)
+    assert any("'12x'" in l for l in out) and any("'3.30'" in l for l in out)
+    assert not any("2027E" in l or "Q3" in l for l in out)
+
+def test_quote_text_may_hold_numbers():
+    p = copy.deepcopy(BASE); p["quotes"][0]["text"] = "We expect 15.5% growth."
+    assert plan.check(p, "Buy") == []
+
+def test_required_keys_and_supports():
+    p = copy.deepcopy(BASE); del p["numbers"]["nobrainer_price"]
+    p["slides"][12]["supports"] = "thesis.1"
+    out = "\n".join(plan.check(p, "Buy"))
+    assert "missing required keys nobrainer_price" in out and "none supports thesis.3" in out
+
+def test_script_must_have_12_paragraphs():
+    p = copy.deepcopy(BASE); p["pitch_sheet"]["script_3min"].pop()
+    assert any("exactly 12 paragraphs" in l for l in plan.check(p, "Buy"))
+
+# why: the lines go back to the agent, so a bad plan must produce lines, never a traceback
+MALFORMED = [
+    [], "text", 5, None,
+    {"slides": "x", "numbers": [], "pitch_sheet": 3, "sum_boxes": [], "starting_verdicts": 7, "override": "x", "call": []},
+    {"call": "Long", "numbers": {"irr_3y": 5, "base_ret": [], "risk_ret": "x"}, "slides": [1, None, []],
+     "quotes": [3, None, {"id": []}], "pitch_sheet": {"know_cold": [[], {}], "hard_questions": [1], "napkin": "s"}},
+    {"call": "Long", "starting_verdicts": {"valuation": [], "short": {}}, "override": [], "slides": [{"type": "thesis", "points": 4}],
+     "sum_boxes": {"Buy price": 5, "Mgmt contact": None}, "numbers": {"price": {"value": 1, "shown": 3}}},
+    {"slides": [{"type": "quote", "section": "support", "quotes": [[]], "supports": []},
+                {"type": "two_column", "left": 5, "right": [], "table": 5, "cases": 4, "three_rs": 3}],
+     "numbers": {"a": 1}},
+]
+
+def test_malformed_plans_never_traceback(tmp_path):
+    for bad in MALFORMED:
+        f = tmp_path / "bad.json"; f.write_text(json.dumps(bad))
+        r = subprocess.run([sys.executable, str(P), "--plan", str(f)], capture_output=True, text=True)
+        assert r.returncode == 1 and "Traceback" not in r.stderr, (bad, r.stderr)
+
+def test_invalid_json_file(tmp_path):
+    f = tmp_path / "bad.json"; f.write_text("{nope")
+    r = subprocess.run([sys.executable, str(P), "--plan", str(f)], capture_output=True, text=True)
+    assert r.returncode == 1 and "Traceback" not in r.stderr
+
+def test_no_numbers_reported_once():
+    p = copy.deepcopy(BASE); del p["numbers"]
+    out = plan.check(p, "Buy")
+    assert sum("numbers: missing" in l for l in out) == 1 and not any("is not defined in numbers" in l for l in out)
