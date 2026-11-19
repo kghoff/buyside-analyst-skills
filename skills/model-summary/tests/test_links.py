@@ -85,3 +85,48 @@ def test_missing_tab_names_the_skill(fixture_model, tmp_path):
     wb.save(m)
     with pytest.raises(SystemExit, match="/model-dcf"):
         links.collect(m)
+
+
+def _copy(fixture_model, tmp_path, name):
+    m = str(tmp_path / name)
+    shutil.copy(fixture_model, m)
+    return m, openpyxl.load_workbook(m)
+
+
+def test_blended_branch_has_no_case(fixture_model, tmp_path):
+    """A real model's tree links blended prices and typed targets; those branches must get no metric x multiple."""
+    m, wb = _copy(fixture_model, tmp_path, "blend.xlsx")
+    ws = wb["Valuation"]
+    ws["B118"] = "=$B$71"                               # Base now links a blended cell
+    ws["A119"], ws["B119"] = "Stall", 48.0              # a typed target
+    wb.save(m)
+    tree = links.collect(m)["val"]["tree"]
+    assert [b["name"] for b in tree] == ["Bull", "Base", "Stall", "Bear"]
+    assert [b["case"] for b in tree] == [None, None, None, None]
+
+
+def test_non_gaap_basis(fixture_model, tmp_path):
+    m, wb = _copy(fixture_model, tmp_path, "ng.xlsx")
+    wb["Px Data"]["C4"] = "P/E (non-GAAP EPS)"
+    wb["MOD"]["A14"], wb["MOD"]["B14"] = "NON-GAAP METRICS", "Non-GAAP EPS, Diluted"
+    wb.save(m)
+    md = links.collect(m)["mod"]
+    assert md["basis"] == "ng" and md["rows"]["eps"] == 14
+    m2, wb2 = _copy(fixture_model, tmp_path, "ng_missing.xlsx")
+    wb2["Px Data"]["C4"] = "P/E (non-GAAP EPS)"
+    wb2.save(m2)
+    with pytest.raises(SystemExit, match="model-kpis"):
+        links.collect(m2)
+
+
+def test_no_adv_on_comp_sheet(tmp_path):
+    import make_fixture
+    p = make_fixture.build(str(tmp_path / "noadv.xlsx"), multiples_adv=False)
+    assert links.collect(p)["mult"]["adv"] is None
+
+
+def test_blank_street_year_is_skipped(fixture_model, tmp_path):
+    m, wb = _copy(fixture_model, tmp_path, "street.xlsx")
+    wb["Multiples"]["C34"] = None
+    wb.save(m)
+    assert links.collect(m)["mult"]["street"] == {"2026E": "Multiples!$B$34"}

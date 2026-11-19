@@ -136,11 +136,13 @@ def multiples(g, kind):
     hdr = first(a, lambda t: t == "Metric")
     if hdr is None:
         stop("the Multiples ranges table ('Metric' header)", "model-multiples")
+    fwd = first(a, lambda t: t.startswith("FORWARD"))
+    stop_at = fwd if fwd else hdr + 20
     heads = {str(v).strip(): c for (r, c), v in g.items() if r == hdr and isinstance(v, str)}
     ranges = {}
     for key, test in (("abs", lambda t: t == kind), ("sp", lambda t: "S&P 500" in t),
                       ("peer", lambda t: "core-peer median" in t)):
-        r = first(a, test, hdr, hdr + 20)
+        r = first(a, test, hdr, stop_at)
         if r is None:
             ranges[key] = None
             continue
@@ -149,7 +151,6 @@ def multiples(g, kind):
                        **{f"{y} {s}": cells.get(f"{y} {s}") for y in ("1 year", "5 years", "10 years")
                           for s in ("min", "median", "max")}}
     street = {}
-    fwd = first(a, lambda t: t.startswith("FORWARD"))
     srow = first(a, lambda t: t.startswith("Street EPS"), fwd or 0) if fwd else None
     if srow:
         for (r, c), v in g.items():
@@ -191,9 +192,13 @@ def mod(model):
 
 def collect(model):
     wb = openpyxl.load_workbook(model, read_only=True)
-    for tab, skill in NEED.items():
-        if tab not in wb.sheetnames:
-            stop(f"the {tab} tab", skill)
-    v = valuation(grid(wb["Valuation"]))
-    return {"dcf": dcf(grid(wb["DCF"])), "val": v, "mult": multiples(grid(wb["Multiples"]), v["kind"]),
-            "mod": mod(model)}
+    try:
+        for tab, skill in NEED.items():
+            if tab not in wb.sheetnames:
+                stop(f"the {tab} tab", skill)
+        v = valuation(grid(wb["Valuation"]))
+        out = {"dcf": dcf(grid(wb["DCF"])), "val": v, "mult": multiples(grid(wb["Multiples"]), v["kind"])}
+    finally:
+        wb.close()
+    out["mod"] = mod(model)
+    return out

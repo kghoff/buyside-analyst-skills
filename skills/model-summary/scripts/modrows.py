@@ -44,7 +44,10 @@ def find_rows(mm):
 
 def eps_basis(model):
     """'ng' when Px Data's P/E header says non-GAAP, else 'gaap'."""
-    ws = openpyxl.load_workbook(model, read_only=True)["Px Data"]
-    hdr = next(ws.iter_rows(min_row=4, max_row=4, values_only=True))
+    wb = openpyxl.load_workbook(model, read_only=True)
+    try:
+        hdr = next(wb["Px Data"].iter_rows(min_row=4, max_row=4, values_only=True))
+    finally:
+        wb.close()
     pe = next((str(h) for h in hdr if h and str(h).startswith("P/E")), "")
     return "ng" if "non-gaap" in pe.lower() else "gaap"
