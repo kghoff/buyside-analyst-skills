@@ -22,3 +22,9 @@ def test_without_band_7_for_this_quarter_the_forecast_is_saved_first(tmp_path):
 def test_actual_vs_frozen_table_lines_up_by_label(model):
     rows = frozen.table(frozen.read(model, "Q3 26E", {}, None), {"L4": 140.0, "L7": 88.0, "L12": 1.2}, model, "L")
     assert rows[0] == {"label": "Revenue", "frozen": 132.0, "actual": 140.0, "diff": 8.0}
+
+
+def test_a_placeholder_is_not_shown_as_the_actual(model):
+    """A placeholder equals the forecast, so 'actual vs frozen' would show a zero surprise that never happened."""
+    rows = frozen.table(frozen.read(model, "Q3 26E", {}, None), {"L4": 132.0, "L7": 88.0}, model, "L", {"L4"})
+    assert rows[0] == {"label": "Revenue", "frozen": 132.0, "actual": None, "diff": None}

@@ -162,3 +162,28 @@ def test_segment_columns_and_year_to_date_only_tables_have_no_layout():
     ytd = ("(In millions)\n\n|  | Nine Months Ended Sep 30, |\n| --- | --- |\n|  | 2026 |  | 2025 |\n"
            "| Revenue | 380.0 |  | 350.0 |\n| Net income | 30.0 |  | 20.0 |\n")
     assert _lay(ytd) == ("unknown", [(None, None), (None, None)])
+
+
+def test_a_10k_three_year_table_reads_current_and_prior_year_as_annual():
+    """A 10-K prints 2026 | 2025 | 2024 under 'Year Ended': read as unknown, the Q4 10-K rerun matched almost
+    nothing. The current value is the YEAR's (it goes to the year column, never the quarter)."""
+    r = release.parse_text(mf.tenk_md(), "k.md")
+    assert r["tables"][0]["layout"] == "annual"
+    rev = next(l for l in r["lines"] if l["label"] == "Revenue")
+    assert (rev["cur_i"], rev["prior_i"], rev["fy_i"], rev["fy_prior_i"], rev["annual"]) == (0, 1, 0, 1, True)
+
+
+def test_cash_balances_inside_a_cash_flow_table_are_marked_point_in_time():
+    """Cash at the beginning / end of the period and the restricted cash of the end-of-period reconciliation are
+    balances; read as year-to-date flows they were written as '=0.1-<earlier quarters>'."""
+    text = "\n".join(["(In millions)", "", "|  | Nine Months EndedSeptember 30, |", "| --- | --- |",
+                      "|  | 2026 |  | 2025 |",
+                      "| Net cash provided by operating activities | 61.0 |  |  | 48.0 |  |",
+                      "| Cash, cash equivalents and restricted cash, beginning of period | 919.1 |  |  | 607.3 |  |",
+                      "| Reconciliation of cash, cash equivalents and restricted cash, end of period: |  |  |",
+                      "| Restricted cash | 0.1 |  |  | 1.2 |  |",
+                      "| Supplemental disclosure of non-cash investing activities: |  |  |",
+                      "| Acquisition of property and equipment included in accounts payable | 41.1 |  |  | 46.4 |  |"])
+    bal = {l["label"][:20]: l["balance"] for l in release.parse_text(text, "q.md")["lines"]}
+    assert bal == {"Net cash provided by": False, "Cash, cash equivalen": True, "Restricted cash": True,
+                   "Acquisition of prope": False}

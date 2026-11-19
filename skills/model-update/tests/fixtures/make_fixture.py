@@ -210,6 +210,30 @@ def values(neg_cost=False, actual_q3=False):
     return out
 
 
+def preprint():
+    """MOD's values in Q3 26E (L), Q4 26E (M) and 2026E (N) before the print: the forecast a placeholder keeps (what
+    a recalculation of the model returns there; an openpyxl fixture has no cached values)."""
+    leaf = {4: 132.0, 6: 52.8, 8: 35.7, 10: 0.0, 11: 31.0, 12: 1.24, 14: 79.0, 15: 15.5, 16: 6.5, 18: 36.0, 19: 65.0,
+            22: 31.0, 23: -6.6, 25: 3.0, 27: 1265.0}
+    out = {f"L{r}": v for r, v in leaf.items()}
+    out.update({f"M{r}": round(v * 1.05, 6) for r, v in leaf.items()})
+    out.update({f"N{r}": round(v * 4.1, 6) for r, v in leaf.items()})
+    return out
+
+
+def tenk_md():
+    """The 2026 10-K: a three-year statement of operations ('Year Ended', 2026 | 2025 | 2024): full-year values only."""
+    y26 = {k: DATA["Q1 26"][k] + DATA["Q2 26"][k] + REPORT[k] + Q4R[k] for k in Q4R}
+    y25 = {k: sum(DATA[q][k] for q in ("Q1 25", "Q2 25", "Q3 25", "Q4 25")) for k in Q4R}
+    row = lambda lab, k: f"| {lab} | {_n(y26[k])} |  |  | {_n(y25[k])} |  |  | {_n(y25[k] * 0.9)} |  |"
+    return "\n".join([f"# {TICKER} Form 10-K for the fiscal year ended December 31, 2026", "",
+                      "## Consolidated Statements of Operations", "",
+                      "|  | Year Ended December 31, |", "| --- | --- |",
+                      "| (In millions, except per share data) | 2026 |  | 2025 |  | 2024 |",
+                      row("Revenue", "rev"), row("Cost of sales", "cos"), row("Total operating expenses", "opex"),
+                      row("Net income", "ni"), ""])
+
+
 def release_q4_md():
     """The Q4 26 release: three months and twelve months (income statement), Dec 31 balance sheet, twelve-month cash
     flow, a three-month-only reconciliation (no full-year column: Q4 is typed and the year sums)."""

@@ -1,7 +1,8 @@
 """The pre-print forecast: Earnings band 7 (model-earnings-before) for this quarter, or preprint.json written here.
 
 usage: python3 frozen.py ensure --model MODEL --quarter "Q3 26E" --values values.json --work DIR
-       python3 frozen.py table --model MODEL --quarter "Q3 26E" --values values_after.json --work DIR --column L --out table.md"""
+       python3 frozen.py table --model MODEL --quarter "Q3 26E" --values values_after.json --work DIR --column L --out table.md [--state state.json]
+A forecast placeholder (state.json) is not an actual: its row shows no actual and no difference."""
 import argparse
 import json
 import os
@@ -55,7 +56,7 @@ def read(model, quarter, grid, work):
     return [{"label": k.split(" | ")[-1], "key": k, "q": v["q"]} for k, v in pre["rows"].items()]
 
 
-def table(rows, grid, model, col):
+def table(rows, grid, model, col, placeholders=()):
     m = ModMap(model)
     by_label = {}
     for r, k, _ in m.lines:
@@ -63,7 +64,7 @@ def table(rows, grid, model, col):
     out = []
     for x in rows:
         r = m.keys.get(x.get("key")) or by_label.get(str(x["label"]).strip().lower())
-        a = grid.get(f"{col}{r}") if r else None
+        a = grid.get(f"{col}{r}") if r and f"{col}{r}" not in placeholders else None
         f = x["q"]
         d = round(a - f, 6) if isinstance(a, (int, float)) and isinstance(f, (int, float)) else None
         out.append({"label": x["label"], "frozen": f, "actual": a, "diff": d})
@@ -73,14 +74,15 @@ def table(rows, grid, model, col):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["ensure", "table"])
-    for k in ("--model", "--quarter", "--values", "--work", "--column", "--out"):
+    for k in ("--model", "--quarter", "--values", "--work", "--column", "--out", "--state"):
         ap.add_argument(k)
     a = ap.parse_args()
     g = json.load(open(a.values))["MOD"]
     if a.cmd == "ensure":
         print(json.dumps(ensure(a.model, a.quarter, g, a.work)))
         return
-    rows = table(read(a.model, a.quarter, g, a.work), g, a.model, a.column)
+    ph = {p["ref"] for p in json.load(open(a.state)).get("placeholders", [])} if a.state else set()
+    rows = table(read(a.model, a.quarter, g, a.work), g, a.model, a.column, ph)
     L = ["| Line | Frozen forecast | Actual | Difference |", "|---|---|---|---|"]
     L += [f"| {x['label']} | {x['frozen']} | {x['actual']} | {x['diff']} |" for x in rows]
     open(a.out, "w").write("\n".join(L) + "\n")

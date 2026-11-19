@@ -213,3 +213,96 @@ def test_the_same_line_printed_twice_enters_once(model):
     md = _md([("Units", "1,500", "1,200"), ("Units", "1,500", "1,200")], title="Key metrics")
     res = match.match(release.parse_text(md, "r.md"), modmap.ModMap(model), mf.values(), "Q3 26E")
     assert [e["row"] for e in res["matched"]] == [27] and res["ambiguous"][0]["duplicate_of"] == "r.md:8"
+
+
+def _cf_rows(ws):
+    """Row 28 'Restricted cash' (a balance kept in the cash-flow section) and row 29 '(+/-) Other financing' (the sum
+    of two printed lines), both with history in D..G, J, K."""
+    ws["A28"], ws["B28"], ws["C28"] = "CASH FLOW STATEMENT", "Restricted cash", "$m"
+    ws["B29"], ws["C29"] = "(+/-) Other financing", "$m"
+    for c, rc, of in zip("DEFGJK", (1.0, 1.1, 1.2, 1.3, 1.4, 1.5), (1, 2, 3, 4, 2, 3)):
+        ws[f"{c}28"], ws[f"{c}29"] = rc, of
+    ws["L28"], ws["L29"] = "=K28", "=K29"
+
+
+def _cf_model(tmp_path):
+    p = mf.model(str(tmp_path / "m.xlsx"))
+    wb = openpyxl.load_workbook(p)
+    _cf_rows(wb["MOD"])
+    wb.save(p)
+    g = mf.values()
+    for c, rc, of in zip("DEFGJK", (1.0, 1.1, 1.2, 1.3, 1.4, 1.5), (1, 2, 3, 4, 2, 3)):
+        g[f"{c}28"], g[f"{c}29"] = rc, of
+    return p, g
+
+
+def _cf_release(extra):
+    t = mf.release_md("normal")
+    anchor = next(x for x in t.split("\n") if x.startswith("| Purchases of property"))
+    return t.replace(anchor, anchor + "\n" + "\n".join(extra))
+
+
+CF_EXTRA = ["| Proceeds from stock issuance | 15.0 |  |  | 10.0 |  |",
+            "| Taxes paid on vested awards | (5.0 | ) |  | (4.0 | ) |",
+            "| Reconciliation of cash, cash equivalents and restricted cash, end of period: |  |  |",
+            "| Restricted cash | 0.9 |  |  | 1.2 |  |"]
+
+
+def test_restricted_cash_in_a_cash_flow_table_is_a_balance_not_a_ytd_flow(tmp_path):
+    """Read as a nine-month flow, restricted cash 0.1 became '=0.1-<earlier quarters>'. A balance is compared with
+    the year-ago quarter end and typed as printed."""
+    p, g = _cf_model(tmp_path)
+    res = match.match(release.parse_text(_cf_release(CF_EXTRA), "rel.md"), modmap.ModMap(p), g, "Q3 26E")
+    e = _by_label(res, "matched")["Restricted cash"]
+    assert e["row"] == 28 and e["cur"] == 0.9 and e["ytd"] is False and e["basis"] == "Q3 25"
+
+
+def test_a_row_that_is_the_sum_of_two_printed_lines_is_matched_once_with_both_cited(tmp_path):
+    """The user's '(+/-) Other' adds two 10-Q lines; mapping only one types half the row. Their priors (10 - 4)
+    equal the row's year-to-date prior (1 + 2 + 3): one entry, cur = the sum less earlier quarters."""
+    p, g = _cf_model(tmp_path)
+    res = match.match(release.parse_text(_cf_release(CF_EXTRA), "rel.md"), modmap.ModMap(p), g, "Q3 26E")
+    e = next(x for x in res["matched"] if x["row"] == 29)
+    assert e["by"] == "sum" and e["cur"] == 5.0 and [x["lineno"] for x in e["lines"]] == [e["lineno"], e["lineno"] + 1]
+    assert not {l["label"] for l in res["leftover"]} & {"Proceeds from stock issuance", "Taxes paid on vested awards"}
+    import actuals
+    out, st = str(tmp_path / "o.xlsx"), str(tmp_path / "s.json")
+    actuals.build(p, "Q3 26E", res, out, st, grid=mf.preprint())
+    c = openpyxl.load_workbook(out)["MOD"]["L29"]
+    assert c.value == "=10-K29-J29" and f"rel.md lines {e['lineno']} + {e['lineno'] + 1}" in c.comment.text
+
+
+def test_a_sum_with_two_possible_sets_of_lines_goes_to_the_agent(tmp_path):
+    """{10, -4} and {2, 4} both add up to the row's 6: guessing would type the wrong pair half the time."""
+    p, g = _cf_model(tmp_path)
+    extra = CF_EXTRA[:2] + ["| Other financing A | 1.0 |  |  | 2.0 |  |", "| Other financing B | 1.0 |  |  | 4.0 |  |"]
+    res = match.match(release.parse_text(_cf_release(extra), "rel.md"), modmap.ModMap(p), g, "Q3 26E")
+    assert all(x["row"] != 29 for x in res["matched"])
+    assert {"Proceeds from stock issuance", "Other financing A"} <= {l["label"] for l in res["leftover"]}
+
+
+def test_a_change_in_a_balance_sheet_line_above_the_cash_balances_stays_a_flow(model):
+    """'Prepaid expenses' in the operating section is the CHANGE in prepaid expenses (a year-to-date flow); read as a
+    balance because the balance sheet has that row, the real model's 'Inventory' change was typed wrong. Only in the
+    tail below the cash balances does a balance-sheet name mean a balance."""
+    extra = ["| Prepaid expenses | (1.0 | ) |  | (2.0 | ) |"] + CF_EXTRA[2:] + ["| Prepaid expenses | 7.0 |  |  | 6.0 |  |"]
+    lines = [l for l in release.parse_text(_cf_release(extra), "rel.md")["lines"] if l["label"] == "Prepaid expenses" and l["kind"] == "cf"]
+    m = modmap.ModMap(model)
+    assert [match._as_balance(m, l) for l in lines] == [False, True]
+
+
+def test_one_line_never_fills_a_row_the_model_builds_from_two_printed_numbers_this_year(tmp_path):
+    """The real '(+/-) Other' was one line last year and two this year ('=(-37.6-3.8)-BR590'); the new line printed
+    '—' last year, so priors cannot see it and the old line alone matched: the quarter came out 35.7 instead of -3.5.
+    When this year's house form adds two printed numbers, a single line goes to the agent instead."""
+    p, g = _cf_model(tmp_path)
+    one = ["| Other financing activities | 9.0 |  |  | 6.0 |  |"]
+    rel = release.parse_text(_cf_release(one), "rel.md")
+    assert next(e for e in match.match(rel, modmap.ModMap(p), g, "Q3 26E", match.formulas(p))["matched"]
+                if e["row"] == 29)["label"] == "Other financing activities"
+    wb = openpyxl.load_workbook(p)
+    wb["MOD"]["K29"] = "=(4+1)-J29"
+    wb.save(p)
+    res = match.match(rel, modmap.ModMap(p), g, "Q3 26E", match.formulas(p))
+    assert all(e["row"] != 29 for e in res["matched"])
+    assert "Other financing activities" in {l["label"] for l in res["leftover"]}

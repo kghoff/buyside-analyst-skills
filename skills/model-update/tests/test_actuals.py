@@ -17,9 +17,10 @@ def _match(model, variant="normal"):
     return res
 
 
-def _build(model, tmp_path, variant="normal", restate=False):
+def _build(model, tmp_path, variant="normal", restate=False, grid=None):
     out, state = str(tmp_path / "out.xlsx"), str(tmp_path / "state.json")
-    rep = actuals.build(model, "Q3 26E", _match(model, variant), out, state, restate=restate)
+    rep = actuals.build(model, "Q3 26E", _match(model, variant), out, state, restate=restate,
+                        grid=mf.preprint() if grid is None else grid)
     return openpyxl.load_workbook(out)["MOD"], rep, json.load(open(state))
 
 
@@ -52,15 +53,48 @@ def test_cash_flow_is_the_printed_ytd_less_earlier_quarters_in_blue(model, tmp_p
     assert "YTD" in ws["L22"].comment.text and st["release_values"]["L22"] == 22.0
 
 
-def test_lines_the_release_does_not_print_are_blank_never_forecast(model, tmp_path):
-    """A forecast number left in an actual column would be read as reported."""
+ORANGE = "FFC65911"
+
+
+def test_unprinted_lines_keep_the_forecast_only_as_a_flagged_placeholder(model, tmp_path):
+    """A blank waiting cell broke every forecast formula reading it (Q4 25 rebuild: 35 -> 1,753 error cells), but a
+    forecast number that looks like an actual would be read as reported. So it stays, as a VALUE (never the forecast
+    formula), in orange, with a note saying it is a placeholder and what will replace it, and listed in state.json."""
     ws, rep, st = _build(model, tmp_path, "combined")
-    assert ws["L15"].value is None and ws["L16"].value is None
-    assert {a["ref"] for a in st["awaiting"]} >= {"L15", "L16"}
+    assert ws["L15"].value == 15.5 and ws["L16"].value == 6.5
+    assert ws["L15"].font.color.rgb == ORANGE
+    assert ws["L15"].comment.text == "Update: forecast placeholder (15.5), awaiting 10-Q; not reported"
+    assert {"ref": "L15", "key": "ASSETS: | Other current assets", "kind": "10-Q", "value": 15.5} in st["placeholders"]
+    assert "L15" not in st["release_values"] and {a["ref"] for a in st["awaiting"]} >= {"L15", "L16"}
+
+
+def test_a_placeholder_never_replaces_a_printed_value(model, tmp_path):
+    """The pre-print grid has a forecast for every line; only the lines the release did NOT print may keep it."""
+    ws, rep, st = _build(model, tmp_path, "combined")
+    assert ws["L4"].value == 140.0 and ws["L4"].font.color.rgb == "FF0000FF"
+    assert not {p["ref"] for p in st["placeholders"]} & set(st["release_values"])
+
+
+def test_a_waiting_cell_with_no_pre_print_value_stays_blank(model, tmp_path):
+    """No forecast to keep (an empty or error cell before the print): nothing is invented."""
+    g = {k: v for k, v in mf.preprint().items() if k != "L16"}
+    ws, rep, st = _build(model, tmp_path, "combined", grid=g)
+    assert ws["L16"].value is None and ws["L15"].value == 15.5
+    assert "L16" in {a["ref"] for a in st["awaiting"]} and "L16" not in {p["ref"] for p in st["placeholders"]}
+    assert rep["waiting_read_elsewhere"]["L16"] == ["M16"] and "L15" not in rep["waiting_read_elsewhere"]
+
+
+def test_a_typed_text_forecast_is_kept_as_text_and_an_error_is_not_kept(model, tmp_path):
+    """A ratio row typed 'n.a' keeps 'n.a' (blanking it changed what the user's model showed); an error value is no
+    forecast to keep."""
+    g = dict(mf.preprint(), L15="n.a", L16="#DIV/0!")
+    ws, rep, st = _build(model, tmp_path, "combined", grid=g)
+    assert ws["L15"].value == "n.a" and ws["L15"].font.color.rgb == ORANGE and ws["L16"].value is None
 
 
 def test_a_subtotal_over_a_waiting_line_is_typed_and_restorable(model, tmp_path):
-    """Total assets would add blanks; type the printed total until the 10-Q gives the parts."""
+    """Total assets would add forecast placeholders; the release PRINTS it, so type the printed total until the 10-Q
+    gives the parts."""
     ws, _, st = _build(model, tmp_path, "combined")
     assert ws["L17"].value == 103.0
     assert st["typed_subtotals"] == [{"ref": "L17", "formula": "SUM(L14:L16)"}]

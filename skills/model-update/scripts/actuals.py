@@ -1,21 +1,26 @@
 """Enter a reported quarter into a COPY of the model (MOD tab, raw XML). See the spec's 'Entering actuals'.
 
-usage: python3 actuals.py --model MODEL --quarter "Q3 26E" --match match.json --out OUT.xlsx --state state.json [--restate yes|no]
+usage: python3 actuals.py --model MODEL --quarter "Q3 26E" --match match.json --values values.json --out OUT.xlsx --state state.json [--restate yes|no]
        python3 actuals.py --model MODEL --quarter "Q3 26" --match match_10q.json --out OUT.xlsx --state state.json --tenq [--take-10q refs.json]
-Prints a JSON report: typed, formulas, awaiting (ref, key, kind: 10-Q / 10-K / driver / formula / manual), typed_subtotals,
-blanked, restated, restate_skipped, restate_knock_on, header, waiting_read_elsewhere (waiting cells that formulas in
-other columns read: they show errors or zeros there until the 10-Q or the forecast roll).
+--values: MOD's values before the print (the recalculated grid match.py used); without it the model's cached values.
+Prints a JSON report: typed, formulas, placeholders (ref, key, kind, value), awaiting (ref, key, kind: 10-Q / 10-K /
+driver / manual), typed_subtotals, restated, restate_skipped, restate_knock_on, header, waiting_read_elsewhere
+(blank waiting cells that formulas in other columns read: they show errors or zeros there until the filing).
 
 What goes in the reported quarter (and on a Q4 the year column), row by row, following the year-ago column:
-- a pure same-column formula there (=L4-L6, SUM(L14:L16)) is STRUCTURE: copied. Anything else (plugs, constants
-  inside formulas, absolute references, other columns or tabs) is an INPUT: the release value if the row is
-  mapped, else the cell waits (blank; never a forecast number).
+- STRUCTURE there is copied: a formula with no constant and no absolute reference whose references are all in its
+  own column or earlier ones (=L4-L6, SUM(L14:L16), a TTM sum, beginning cash = last quarter's ending cash).
+  Anything else (plugs reading the year column, constants inside formulas, absolute references, other tabs) is an
+  INPUT: the release value if the row is mapped, else the cell waits.
+- A waiting cell keeps the pre-print forecast VALUE (from --values, never a formula) as a constant in ORANGE with the
+  note 'Update: forecast placeholder (<value>), awaiting <10-Q|10-K|driver|manual>; not reported', so the formulas
+  that read it keep working. No pre-print value: it stays blank. A placeholder is never a reported value.
 - Q2/Q3 cash flow from a year-to-date release: '=<printed YTD in model sign>-<earlier quarters>', blue.
 - Q4: where last year's Q4 is 'FY less Q1-Q3' (or '= FY' for a balance), the year column is typed from the
   release's full-year value and Q4 is that plug; with no full-year value Q4 is typed and the year sums (flows) or
   links (balances); a per-share / share-count / rate line waits instead of summing.
-- A structure formula over a waiting cell is typed from the release if mapped (typed_subtotals) or blanked
-  (blanked); both are saved in state.json and the 10-Q rerun (fill_tenq) puts the formula back."""
+- Structure formulas over a placeholder stay formulas; only where the release PRINTS the subtotal is the printed
+  value typed (typed_subtotals, saved in state.json; the filing rerun (fill_tenq) puts the formula back)."""
 import argparse
 import json
 import os
@@ -34,10 +39,11 @@ from xlsx import Package, Styles               # noqa: E402
 import mnotes                                  # noqa: E402
 
 TAB = "MOD"
-BLUE, BLACK = "FF0000FF", "FF000000"
+BLUE, BLACK, ORANGE = "FF0000FF", "FF000000", "FFC65911"
 CELL = re.compile(r"^(\$?)([A-Z]{1,3})(\$?)(\d+)$")
 NOT_ADDITIVE = re.compile(r"shares|per share|\beps\b|rate|ratio|margin|%|average|price", re.I)
 MAX_RANGE = 20000
+ERRORS = ("#REF!", "#DIV/0!", "#VALUE!", "#NAME?", "#N/A", "#NUM!", "#NULL!")
 
 
 def refs(formula):
@@ -73,10 +79,13 @@ def deps(formula):
 
 
 def structure(formula, col):
-    """A pure same-column formula (=L4-L6, SUM(L14:L16), =L387): no numeric constant, no absolute reference, nothing
-    from another column or tab. Only such a formula is copied from the year-ago column; anything else is an input."""
+    """A formula that only arranges numbers already in the model: no numeric constant, no absolute reference, nothing
+    from another tab, and every reference in this column or an EARLIER one (=L4-L6, SUM(L14:L16), a TTM
+    SUM(I386:L386), an average of earlier quarters, beginning cash = last quarter's ending cash). Only such a formula
+    is copied from the year-ago column. Anything else is an input: a constant inside, an absolute reference, or a
+    later column (a Q4 plug reads the year column to its right)."""
     rs, num, other = refs(formula)
-    return bool(rs) and not num and not other and all(c == col and not a for c, _, a in rs)
+    return bool(rs) and not num and not other and all(cnum(c) <= cnum(col) and not a for c, _, a in rs)
 
 
 def _within(formula, row, cols, need=None):
@@ -131,7 +140,10 @@ def _note(e, earlier=True, value=None, what=""):
     v = _fmt(v) if v is not None else ""
     ytd = " YTD" if e.get("ytd") and earlier else ""
     tail = " less earlier quarters in MOD" if e.get("ytd") and earlier else ""
-    return f"{mnotes.NOTE}{e['label']}{what}{ytd} {v}{tail} - {e['file']} line {e['lineno']}"
+    src = f"{e['file']} line {e['lineno']}"
+    if e.get("lines"):                                # a row that is the sum of printed lines cites each one
+        src = f"{e['file']} lines " + " + ".join(str(x["lineno"]) for x in e["lines"])
+    return f"{mnotes.NOTE}{e['label']}{what}{ytd} {v}{tail} - {src}"
 
 
 def _input(m, e, row, q, qc):
@@ -150,7 +162,7 @@ STATEMENTS = ("INCOME STATEMENT", "BALANCE SHEET", "ASSETS", "LIABILITIES", "CAS
 
 def _kind_of(m, row, key, formulas, values, q, year_ago=None):
     """Why a cell waits: 'driver' (a DRIVERS section, or a row with no history: model-forecast's); 'manual' (an
-    analysis row whose year-ago formula reads other columns, constants or absolute cells, e.g. TTM sums or averages:
+    analysis row whose year-ago formula is not structure (a constant, an absolute cell, a later column, e.g. =L11*4):
     no filing prints it, the user re-enters it); else the filing that will print it: '10-Q', or '10-K' for a Q4."""
     sec = key.split(" | ")[0].upper()
     if "DRIVERS" in sec:
@@ -189,7 +201,13 @@ def _knock_on(m, diffs, formulas, values):
     return out
 
 
-def build(model, quarter, res, out, state_path, restate=False):
+def _cached(model):
+    """MOD's cached values (what Excel last calculated): the pre-print forecast a placeholder keeps."""
+    ws = openpyxl.load_workbook(model, data_only=True)[TAB]
+    return {c.coordinate: c.value for row in ws.iter_rows() for c in row if c.value is not None}
+
+
+def build(model, quarter, res, out, state_path, restate=False, grid=None):
     m = ModMap(model)
     q, py = quarter, m.pyq(quarter)
     qc, pc = m.col(q), m.col(py)
@@ -204,12 +222,16 @@ def build(model, quarter, res, out, state_path, restate=False):
     xml = unshare(pkg.text(part), TAB, TAB)
     st = Styles(pkg.text("xl/styles.xml"))
     combined_rows = {r for c in res["combined"] for r in c["rows"]}
-    mapped = {e["row"]: e for e in res["matched"] if e.get("cur") is not None and e["row"] not in combined_rows}
+    mapped = {e["row"]: e for e in res["matched"] if e["row"] not in combined_rows
+              and (e.get("cur") is not None or (q4 and e.get("fy_cur") is not None))}   # annual: the year only
+    if grid is None:
+        grid = _cached(model)
     has = lambda ref: ref in formulas or ref in values
     plan = {}                                         # ref -> {k: n | fi | fs | '', v, c, note, alt}
 
     def quarter_cell(row, e):
         ref, pref = f"{qc}{row}", f"{pc}{row}"
+        e = e if e and e.get("cur") is not None else None     # an annual line prints no quarter
         pf = formulas.get(pref)
         if pf is not None and structure(pf, pc) and (e or has(ref)):     # never new content in an empty cell
             return {"k": "fs", "v": _tr(pf, pref, ref), "alt": _input(m, e, row, q, qc) if e else None}
@@ -253,6 +275,8 @@ def build(model, quarter, res, out, state_path, restate=False):
                              "note": f"{mnotes.NOTE}{label} " + ("year-end balance (= the year column)" if link else
                                                                   "= the full year less Q1-Q3 in MOD")
                                      + f" - {e['file']} line {e['lineno']}"}}
+            if e and e.get("cur") is None:             # an annual line, no plug possible: the year typed, Q4 waits
+                return {rf: fy_cell(row, e, fyv, label), r4: {"k": ""} if has(r4) else None}
             if e:                                      # no full-year value printed: type Q4, the year follows it
                 return {r4: {"k": "n", "v": float(e["cur"]), "c": BLUE, "note": _note(e, False)},
                         rf: fy_cell(row, e, None, label)}
@@ -269,33 +293,52 @@ def build(model, quarter, res, out, state_path, restate=False):
         cells_ = year_cells(row, e) if q4 else {f"{qc}{row}": quarter_cell(row, e)}
         plan.update({r: p for r, p in cells_.items() if p is not None})
     waiting = {r for r, p in plan.items() if p["k"] == ""}
-    typed_sub, blanked = [], []
-    changed = True
-    while changed:                                    # a structure formula over a waiting cell can't stand
+    typed_sub, tainted, changed = [], set(waiting), True
+    while changed:
+        # a structure formula over a placeholder stays a formula (the placeholder holds a number), unless the release
+        # PRINTS its value: then the printed subtotal is typed (restored by the filing rerun)
         changed = False
         for ref, p in list(plan.items()):
-            if p["k"] != "fs" or not deps(p["v"]) & waiting:
+            if p["k"] != "fs" or ref in tainted or not deps(p["v"]) & tainted:
                 continue
             if p.get("alt"):
                 k, v, note = p["alt"]
                 plan[ref] = {"k": k, "v": v, "c": BLUE, "note": note}
                 typed_sub.append({"ref": ref, "formula": p["v"]})
             else:
-                plan[ref] = {"k": ""}
-                blanked.append({"ref": ref, "formula": p["v"]})
-                waiting.add(ref)
+                tainted.add(ref)
             changed = True
-    cells, notes, typed = {}, {}, {}
+    key_of = {}
+    for r, k, _ in m.lines:
+        key_of[f"{qc}{r}"] = key_of[f"{fc}{r}"] = (r, k)
     row_of = lambda ref: int(re.match(r"[A-Z]+(\d+)$", ref).group(1))
+
+    def why(ref):
+        r, k = key_of.get(ref, (row_of(ref), None))
+        yr = f"{pfc if ref.startswith(fc) and re.match(rf'{fc}\d+$', ref) else pc}{r}"
+        return _kind_of(m, r, k or "", formulas, values, q, yr)
+    kinds = {r: why(r) for r in waiting}
+    placeholders = []
+    for ref in sorted(waiting):                       # the pre-print forecast VALUE, flagged; never a formula
+        v = grid.get(ref)
+        if isinstance(v, bool) or not isinstance(v, (int, float, str)) or v in ERRORS or v == "":
+            continue                                  # nothing to keep (no value, or an error): stays blank
+        v = float(v) if not isinstance(v, str) else v  # a typed 'n.a' is kept as the text it was
+        plan[ref] = {"k": "p", "v": v, "note": f"{mnotes.NOTE}forecast placeholder ({_fmt(v) if not isinstance(v, str) else v}),"
+                                               f" awaiting {kinds[ref]}; not reported"}
+        placeholders.append({"ref": ref, "key": key_of.get(ref, (0, None))[1], "kind": kinds[ref], "value": v})
+    cells, notes, typed = {}, {}, {}
     for ref, p in plan.items():
         s = _style_of(xml, ref)
         if p["k"] == "n":
             cells[ref] = ("n", p["v"], st.recolor(s, BLUE))
             typed[ref] = p["v"]
+        elif p["k"] == "p":
+            cells[ref] = ("s" if isinstance(p["v"], str) else "n", p["v"], st.recolor(s, ORANGE))
         elif p["k"] == "fi":
             cells[ref] = ("f", p["v"], st.recolor(s, p.get("c", BLUE)))
             e = mapped.get(row_of(ref))
-            if e and re.match(rf"{qc}\d+$", ref):
+            if e and e.get("cur") is not None and re.match(rf"{qc}\d+$", ref):
                 typed[ref] = float(e["cur"])          # the discrete quarter, for the 10-Q comparison
         elif p["k"] == "fs":
             cells[ref] = ("f", p["v"], st.recolor(s, p.get("c", BLACK)))
@@ -332,38 +375,30 @@ def build(model, quarter, res, out, state_path, restate=False):
     pkg.save(out)
     import modfill; modfill.fix(out, out)
     import notebox; notebox.fix(out, out)
-    key_of = {}
-    for r, k, _ in m.lines:
-        key_of[f"{qc}{r}"] = key_of[f"{fc}{r}"] = (r, k)
-    blank_refs = {b["ref"] for b in blanked}
-
-    def why(ref):
-        r, k = key_of.get(ref, (row_of(ref), None))
-        if ref in blank_refs:
-            return "formula"
-        yr = f"{pfc if ref.startswith(fc) and re.match(rf'{fc}\d+$', ref) else pc}{r}"
-        return _kind_of(m, r, k or "", formulas, values, q, yr)
     state = {"quarter": q.rstrip("E"), "column": qc, "fy_column": fc if q4 else None,
-             "awaiting": [{"ref": r, "key": key_of.get(r, (0, None))[1], "kind": why(r)} for r in sorted(waiting)],
-             "typed_subtotals": typed_sub, "blanked": blanked, "release_values": typed,
+             "awaiting": [{"ref": r, "key": key_of.get(r, (0, None))[1], "kind": kinds[r]} for r in sorted(waiting)],
+             "placeholders": placeholders, "typed_subtotals": typed_sub, "release_values": typed,
              "combined": res["combined"], "tenq_checked": False}
     json.dump(state, open(state_path, "w"), indent=1)
     written = {qc, fc} if q4 else {qc}
-    readers = {}                                      # waiting cells other columns' formulas read (forecast errors)
+    blank = waiting - {p["ref"] for p in placeholders}
+    readers = {}                                      # blank waiting cells other columns' formulas read (errors there)
     for ref, f in formulas.items():
         if re.match(r"[A-Z]+", ref).group(0) not in written:
-            for d in deps(f) & waiting:
+            for d in deps(f) & blank:
                 readers.setdefault(d, []).append(ref)
-    return {"typed": sum(1 for k, *_ in (cells[r] for r in rewritten) if k == "n"),
+    return {"typed": sum(1 for r in rewritten if plan[r]["k"] == "n"),
             "formulas": sum(1 for k, *_ in (cells[r] for r in rewritten) if k == "f"),
-            "awaiting": state["awaiting"], "typed_subtotals": typed_sub, "blanked": blanked, "restated": restated,
+            "placeholders": placeholders, "awaiting": state["awaiting"], "typed_subtotals": typed_sub, "restated": restated,
             "restate_skipped": skipped, "restate_knock_on": knock, "header": header,
             "waiting_read_elsewhere": {d: sorted(r) for d, r in sorted(readers.items())}}
 
 
 def fill_tenq(model, res, out, state_path, take=None):
-    """10-Q (or 10-K) rerun: fill the waiting cells it prints, list where it differs from the release, and bring back
-    every saved structure formula (typed subtotals, blanked formulas) once none of the cells it reads waits."""
+    """10-Q (or 10-K) rerun: replace the waiting cells it prints (placeholders and blanks: blue, with a note), list
+    where it differs from the release (never from a placeholder: that is a forecast, not a reported value), and bring
+    back every typed subtotal's formula once none of the cells it reads waits. A 10-K's annual line fills the year
+    column only; Q4 follows it where print night kept last year's plug ('FY less Q1-Q3')."""
     state = json.load(open(state_path))
     qc, fc = state["column"], state.get("fy_column")
     m = ModMap(model)
@@ -373,38 +408,48 @@ def fill_tenq(model, res, out, state_path, take=None):
     xml = unshare(pkg.text(part), TAB, TAB)
     st = Styles(pkg.text("xl/styles.xml"))
     waiting = {a["ref"] for a in state["awaiting"]}
-    saved = {t["ref"]: t["formula"] for t in state["typed_subtotals"] + state.get("blanked", [])}
+    saved = {t["ref"]: t["formula"] for t in state["typed_subtotals"]}
+    rv = state["release_values"]
     cells, notes, diffs, filled = {}, {}, [], []
     new = {}
     q_label = next(p for p in m.order if p.rstrip("E") == q)
+
+    def differs(ref, e, value):
+        if ref in rv and abs(rv[ref] - value) > e["tol"]:
+            diffs.append({"ref": ref, "key": e["key"], "release": rv[ref], "tenq": value, "file": e["file"],
+                          "lineno": e["lineno"]})
+            return True
+        return False
     for e in res["matched"]:
-        if e.get("cur") is None:
+        row = e["row"]
+        if fc and e.get("fy_cur") is not None:
+            r = f"{fc}{row}"
+            if r in waiting and r not in saved:
+                cells[r] = ("n", float(e["fy_cur"]), st.recolor(_style_of(xml, r), BLUE))
+                notes[r] = _note(e, False, e["fy_cur"], f" {m.fy_of(q_label).rstrip('E')}")
+                filled.append(r)
+            elif differs(r, e, e["fy_cur"]) and take and r in take and r not in saved:
+                cells[r] = ("n", float(e["fy_cur"]), st.recolor(_style_of(xml, r), BLUE))
+                notes[r] = _note(e, False, e["fy_cur"], f" {m.fy_of(q_label).rstrip('E')}") + f" (release said {rv[r]})"
+        ref = f"{qc}{row}"
+        if e.get("cur") is None:                     # an annual line: the year column only (Q4 is its plug)
             continue
-        ref = f"{qc}{e['row']}"
         new[ref] = e
-        if fc and e.get("fy_cur") is not None and f"{fc}{e['row']}" in waiting and f"{fc}{e['row']}" not in saved:
-            r = f"{fc}{e['row']}"
-            cells[r] = ("n", float(e["fy_cur"]), st.recolor(_style_of(xml, r), BLUE))
-            notes[r] = _note(e, False, e["fy_cur"])
-            filled.append(r)
         if ref in saved:
             pass                                      # a structure formula comes back below, never a typed value
         elif ref in waiting:
-            k, v, note = _input(m, e, e["row"], q_label, qc)
+            k, v, note = _input(m, e, row, q_label, qc)
             cells[ref] = ("f" if k == "fi" else "n", v, st.recolor(_style_of(xml, ref), BLUE))
             notes[ref] = note
             filled.append(ref)
             continue
-        if ref in state["release_values"] and abs(state["release_values"][ref] - e["cur"]) > e["tol"]:
-            diffs.append({"ref": ref, "key": e["key"], "release": state["release_values"][ref], "tenq": e["cur"],
-                          "file": e["file"], "lineno": e["lineno"]})
-            if take and ref in take and ref not in saved:
-                k, v, note = _input(m, e, e["row"], q_label, qc)
-                cells[ref] = ("f" if k == "fi" else "n", v, st.recolor(_style_of(xml, ref), BLUE))
-                notes[ref] = note + f" (release said {state['release_values'][ref]})"
+        if differs(ref, e, e["cur"]) and take and ref in take and ref not in saved:
+            k, v, note = _input(m, e, row, q_label, qc)
+            cells[ref] = ("f" if k == "fi" else "n", v, st.recolor(_style_of(xml, ref), BLUE))
+            notes[ref] = note + f" (release said {rv[ref]})"
     for c in state["combined"]:
         parts = [new.get(f"{qc}{r}") for r in c["rows"]]
-        if all(parts) and abs(sum(p["cur"] for p in parts) - c["cur"]) > c["tol"] * len(parts):
+        if c.get("cur") is not None and all(parts) and abs(sum(p["cur"] for p in parts) - c["cur"]) > c["tol"] * len(parts):
             diffs.append({"ref": None, "key": " + ".join(c["keys"]), "release": c["cur"],
                           "tenq": sum(p["cur"] for p in parts), "file": c["file"], "lineno": c["lineno"], "combined": True})
     waiting -= set(filled)
@@ -429,11 +474,12 @@ def fill_tenq(model, res, out, state_path, take=None):
     import modfill; modfill.fix(out, out)
     import notebox; notebox.fix(out, out)
     state["awaiting"] = [a for a in state["awaiting"] if a["ref"] in waiting]
+    state["placeholders"] = [p for p in state.get("placeholders", []) if p["ref"] in waiting]
     state["typed_subtotals"] = [t for t in state["typed_subtotals"] if t["ref"] in pending]
-    state["blanked"] = [t for t in state.get("blanked", []) if t["ref"] in pending]
     state["tenq_checked"] = not diffs or take is not None
     json.dump(state, open(state_path, "w"), indent=1)
-    return {"filled": filled, "restored": restored, "differences": diffs, "awaiting": state["awaiting"]}
+    return {"filled": filled, "restored": restored, "differences": diffs, "awaiting": state["awaiting"],
+            "placeholders": state["placeholders"]}
 
 
 def main():
@@ -441,7 +487,7 @@ def main():
     ap.add_argument("--model", required=True), ap.add_argument("--quarter", required=True)
     ap.add_argument("--match", required=True), ap.add_argument("--out", required=True)
     ap.add_argument("--state", required=True), ap.add_argument("--restate", default="no")
-    ap.add_argument("--tenq", action="store_true"), ap.add_argument("--take-10q")
+    ap.add_argument("--tenq", action="store_true"), ap.add_argument("--take-10q"), ap.add_argument("--values")
     a = ap.parse_args()
     if os.path.abspath(a.out) == os.path.abspath(a.model):
         sys.exit("--out must be a new file, not the model itself")
@@ -450,7 +496,8 @@ def main():
         take = json.load(open(a.take_10q)) if a.take_10q else None
         print(json.dumps(fill_tenq(a.model, res, a.out, a.state, take), indent=1))
     else:
-        print(json.dumps(build(a.model, a.quarter, res, a.out, a.state, a.restate == "yes"), indent=1))
+        grid = json.load(open(a.values))["MOD"] if a.values else None
+        print(json.dumps(build(a.model, a.quarter, res, a.out, a.state, a.restate == "yes", grid), indent=1))
 
 
 if __name__ == "__main__":

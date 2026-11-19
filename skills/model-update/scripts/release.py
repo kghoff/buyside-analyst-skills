@@ -6,12 +6,17 @@ factor (to the model's millions; 1 for per-share lines), kind (is / bs / cf / re
 Each table: kind, ytd (a cash-flow table without a three-month column), header, scale, scale_known (False = no
 "(In millions...)" found in the caption, the header rows or an earlier table of the file: 1.0 assumed, warn the user),
 bad (rows dropped because a number-looking cell could not be read; dropped rather than let later values slide),
-layout ("years": period columns read from the header years; "assumed": no years in the header, a two-value line is
-read as current, prior; "unknown": more value columns than the header's periods explain, e.g. segment columns) and
+layout ("years": period columns read from the header years; "annual": a full-year-only table, e.g. a 10-K's
+2025 | 2024 | 2023, read as current year, prior year (the oldest is not read); "assumed": no years in the header, a
+two-value line is read as current, prior; "unknown": more value columns than the header's periods explain, e.g.
+segment columns) and
 periods (the header years in column order).
 Each line also has cur_i / prior_i: which of its values is the current period and which the year-ago one (None when
 the table's layout can't say; match.py reports such lines, never guesses), and fy_i / fy_prior_i: the current and year-ago full-year values ('Twelve Months Ended' / 'Year Ended'
-group) when the table prints them, else None."""
+group) when the table prints them, else None. annual: the line is from an annual table (its current value is the
+full year: fy_i = cur_i). balance: a cash-flow line that is a point-in-time balance (cash at the beginning / end of
+the period, restricted cash in the end-of-period reconciliation), never a year-to-date flow; below_balance: a
+cash-flow line below the first such balance (the supplemental tail)."""
 import json
 import os
 import re
@@ -117,14 +122,16 @@ def _layout(head_rows, kind, ytd):
     """(layout, years, (cur, prior) column of the current-period group or None, full-year column or None) from the
     header rows above the data.
     Years: the header row with the most year cells. Groups ('Three Months Ended' / 'Nine Months Ended'): the
-    quarterly group is current (the year-to-date one for a year-to-date cash flow); a non-cash-flow table with no
-    quarterly group has no quarter to enter. In the group, the latest year is current and the year before it prior."""
+    quarterly group is current (the year-to-date one for a year-to-date cash flow); a table whose only group is a full
+    year ('Year Ended', a 10-K) is 'annual': its current value is the year's, never a quarter's. Any other table with
+    no quarterly group has no quarter to enter. In the group, the latest year is current and the year before it prior
+    (a 10-K's three-year tables: the oldest year is not read)."""
     rows = [[c for c in _cells(r) if c] for r in head_rows]
     years = max(([int(YEAR_IN.search(c).group(1)) for c in r if YEAR_IN.search(c)] for r in rows), key=len, default=[])
     if not years:
         return "assumed", [], None, None
     groups = max(([c for c in r if GROUP.search(c)] for r in rows), key=len, default=[])
-    g, size = 0, len(years)
+    g, size, annual = 0, len(years), False
     if groups:
         if len(years) % len(groups):
             return "unknown", years, None, None
@@ -134,13 +141,45 @@ def _layout(head_rows, kind, ytd):
             g = 0
         elif quarterly:
             g = quarterly[0]
+        elif len(groups) == 1 and FULL_YEAR.search(groups[0]):
+            annual = True                                # full-year values only (a 10-K): they go to the year column
         else:
             return "unknown", years, None, None
     ys = years[g * size:(g + 1) * size]
+    if len(ys) == 3 and groups and len(set(ys)) == 3 and max(ys) - 1 in ys and (ytd or annual):
+        # a 10-K's three-year table (2025 | 2024 | 2023, 'Year Ended'): current year and the year before it
+        cur, prior = ys.index(max(ys)), ys.index(max(ys) - 1)
+        cp = (g * size + cur, g * size + prior)
+        return "annual", years, cp, cp if annual else None
     if len(ys) != 2 or ys[0] == ys[1]:
         return "unknown", years, None, None
     cur = ys.index(max(ys))
     return "years", years, (g * size + cur, g * size + 1 - cur), _full_year(groups, size, years) if groups else None
+
+
+POINT = re.compile(r"\bbeginning of\b|\bend of\b|\bbalances?\b", re.I)
+RECON_BLOCK = re.compile(r"\breconciliation\b|\bend of\b|\bbeginning of\b", re.I)
+
+
+def _balances(rows):
+    """(point-in-time lines, lines below the first one) of a cash-flow table, as Markdown line indexes (0-based).
+    Point in time: cash at the beginning / end of the period, a 'balance', and every line of the block under a
+    label-only row like 'Reconciliation of cash ... end of period:' (cash, restricted cash) until the next label-only
+    row. Balances are never year-to-date flows. 'Below' is the supplemental tail, where a line named like a balance
+    sheet row is a balance too (above it, 'Inventory' is the change in inventory: a flow)."""
+    out, below, block, seen = set(), set(), False, False
+    for k, (lab, v, d, raw) in rows:
+        if not lab:
+            continue
+        if not v:                                        # a label-only row starts a new block
+            block = bool(RECON_BLOCK.search(lab))
+            continue
+        if seen:
+            below.add(k)
+        if block or POINT.search(lab):
+            out.add(k)
+            seen = True
+    return out, below
 
 
 def _mode(ds):
@@ -187,20 +226,23 @@ def parse_text(text, name):
         ytd = kind == "cf" and not re.search(r"three months", header, re.I)
         common = _mode([d for _, _, _, d in data])
         layout, years, cp, fyi = _layout(head_rows, kind, ytd)
+        balances, below = _balances(rows) if kind == "cf" else (set(), set())
         t = len(out_t)
         out_t.append({"kind": kind, "ytd": ytd, "header": header, "scale": scale, "scale_known": known,
                       "bad": bad, "start": start + 1, "layout": layout, "periods": years})
         for k, lab, v, d in data:
-            if layout == "years" and len(v) == len(years):
+            if layout in ("years", "annual") and len(v) == len(years):
                 ci, pi = cp
             elif layout == "assumed" and len(v) == 2:
                 ci, pi = 0, 1                            # no header years: releases print current first
             else:
                 ci = pi = None
-            fy_i, fy_pi = fyi if layout == "years" and len(v) == len(years) and fyi else (None, None)
+            fy_i, fy_pi = fyi if layout in ("years", "annual") and len(v) == len(years) and fyi else (None, None)
             out_l.append({"id": f"{name}:{k + 1}", "file": name, "line": k + 1, "label": lab, "values": v,
                           "decimals": common if d is None else d, "factor": 1.0 if per_share(lab) else scale,
-                          "kind": kind, "table": t, "cur_i": ci, "prior_i": pi, "fy_i": fy_i, "fy_prior_i": fy_pi})
+                          "kind": kind, "table": t, "cur_i": ci, "prior_i": pi, "fy_i": fy_i, "fy_prior_i": fy_pi,
+                          "annual": layout == "annual" and not ytd and ci is not None,
+                          "balance": kind == "cf" and k in balances, "below_balance": k in below})
     return {"tables": out_t, "lines": out_l}
 
 

@@ -81,6 +81,22 @@ def test_two_answers_on_one_row_are_refused(model, research):
     assert probs == [f"rel.md:900: INCOME STATEMENT | Restructuring already has a value ({a[0]['line']})"]
 
 
+def test_lines_the_agent_marks_as_a_sum_become_one_row_citing_both(model, research):
+    """The user's '(+/-) Other' adds two printed lines, one of them with a dash last year (so no prior can prove it);
+    the agent says so explicitly ('sum': true on each answer) and the row gets their sum, both lines cited."""
+    res, m = _res(model, research)
+    res = _free_row_10(res)
+    extra = dict(res["leftover"][0], line="rel.md:900", label="Other income again")
+    res["leftover"].append(extra)
+    a = _ans(res, action="map", key="INCOME STATEMENT | Restructuring", sum=True)
+    a.append(dict(a[0], line="rel.md:900"))
+    import unittest.mock as um
+    with um.patch.object(match, "check_anchor", return_value=None):
+        out, probs = _apply(res, a, m, research)
+    e = next(x for x in out["matched"] if x["row"] == 10)
+    assert probs == [] and e["cur"] == 4.0 and [x["line"] for x in e["lines"]] == [a[0]["line"], "rel.md:900"]
+
+
 def test_agent_map_gets_the_models_sign_and_the_discrete_cash_flow_quarter(model, research):
     """The agent names the row; code still does the arithmetic: YTD less earlier quarters, sign as the model keeps it."""
     res, m = _res(model, research)

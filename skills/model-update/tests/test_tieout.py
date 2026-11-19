@@ -38,3 +38,11 @@ def test_a_cell_that_waits_for_the_10q_is_not_a_miss():
     res = _res()
     res["matched"][0]["fy_cur"] = 500.0
     assert tieout.check(res, {"L7": 88.0}, "L", "N", waiting={"L4", "N4"}) == []
+
+
+def test_a_forecast_placeholder_is_never_tied_to_the_release():
+    """A placeholder holds the pre-print forecast on purpose; tying it to a printed number would either fail every
+    print night or, worse, pass by chance and look reported."""
+    res = _res()
+    state = {"awaiting": [{"ref": "L4"}], "placeholders": [{"ref": "L4", "value": 132.0}]}
+    assert tieout.check(res, {"L4": 132.0, "L7": 88.0}, "L", waiting=tieout.skip_refs(state)) == []
