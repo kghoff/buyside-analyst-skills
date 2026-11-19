@@ -204,9 +204,12 @@ def mod(model):
 def collect(model):
     wb = openpyxl.load_workbook(model, read_only=True)
     try:
-        for tab, skill in NEED.items():
-            if tab not in wb.sheetnames:
-                stop(f"the {tab} tab", skill)
+        missing = [(t, k) for t, k in NEED.items() if t not in wb.sheetnames]
+        if missing:
+            lines = [f"/{k}" + (" (after /model-forecast)" if t == "DCF" else "") + f" for the {t} tab"
+                     for t, k in missing]
+            raise SystemExit("model-summary: tabs not found. Run " + "; ".join(lines) + ", in that order, "
+                             "then /model-summary.")
         v = valuation(grid(wb["Valuation"]))
         out = {"dcf": dcf(grid(wb["DCF"])), "val": v, "mult": multiples(grid(wb["Multiples"]), v["kind"])}
     finally:

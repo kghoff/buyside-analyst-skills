@@ -145,3 +145,18 @@ def test_dcf_period_and_position(fixture_model, tmp_path):
     L = links.collect(fixture_model)
     assert L["dcf"]["period"] == "Q4 25"
     assert L["val"]["position"] == {"ref": "Valuation!$B$14", "value": "long"}
+
+
+def test_all_missing_tabs_are_named_in_one_stop(fixture_model, tmp_path):
+    """The user should rerun every missing skill in one pass, not discover them one stop at a time."""
+    m = str(tmp_path / "three_missing.xlsx")
+    shutil.copy(fixture_model, m)
+    wb = openpyxl.load_workbook(m)
+    for t in ("DCF", "Multiples", "Valuation"):
+        del wb[t]
+    wb.save(m)
+    with pytest.raises(SystemExit) as e:
+        links.collect(m)
+    msg = str(e.value)
+    assert all(s in msg for s in ("/model-dcf", "/model-multiples", "/model-valuation", "/model-forecast"))
+    assert msg.index("/model-dcf") < msg.index("/model-multiples") < msg.index("/model-valuation")

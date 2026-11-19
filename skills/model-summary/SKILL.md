@@ -1,9 +1,14 @@
 ---
 name: model-summary
-description: Add the SUM tab to a company model (TICKER_model.xlsx) as its first sheet, left of MOD - the PM's one-page view from the course: ticker and action (linked to Valuation's verdict), cap table (price, diluted shares, market cap, debt, cash, net debt, EV, cash per share, 3-month ADV), Buy and No-brainer price boxes, NTM free cash flow and yield on our own estimates, the 3-year target and IRR, the 12-month base target and risk case on the primary multiple, blended R/R, internal estimates for the last 4 actual and up to 5 forecast years against the Street with Expected Delta and valuation on each year, Valuation's probability tree row for row, the multiple's own, S&P-relative and peer-relative ranges, and the tactical R/R ladder. Every number links to the tab it comes from; the thesis summary, trading plan, valuation thoughts, action prices and management contact are empty yellow boxes for write-pitch; conditional formatting on returns, IRR vs hurdle, R/R and Street variance. Code only, no agent. A rerun keeps what was typed. Works for any listed company. Run after /model-valuation (and /model-earnings-before if run); rerun each print. Use when the user runs /model-summary TICKER or asks for a summary tab, a SUM tab or a PM one-pager in the model.
+description: Add the SUM tab to a company model (TICKER_model.xlsx) as its first sheet, left of MOD - the PM's one-page view from the course: ticker and action (linked to Valuation's verdict), cap table (price, diluted shares, market cap, debt, cash, net debt, EV, cash per share, 3-month ADV), Buy and No-brainer price boxes, NTM free cash flow and yield on our own estimates, the 3-year target and IRR, the 12-month base target and risk case on the primary multiple, blended R/R, internal estimates for the last 4 actual and up to 5 forecast years against the Street with Expected Delta and valuation on each year, Valuation's probability tree row for row, the multiple's own, S&P-relative and peer-relative ranges, and the tactical R/R ladder. Every number links to the tab it comes from; the thesis summary, trading plan, valuation thoughts, action prices and management contact are empty yellow boxes for write-pitch; conditional formatting on returns, IRR vs hurdle, R/R and Street variance. Code only, no agent. A rerun keeps what was typed. Works for any listed company. Run after /model-valuation; rerun each print. Use when the user runs /model-summary TICKER or asks for a summary tab, a SUM tab or a PM one-pager in the model.
 ---
 
 # /model-summary
+
+```bash
+SK="<this skill's base directory>/scripts"      # the base directory is shown when the skill loads
+SKILLS="<this skill's base directory>/.."
+```
 
 Adds one tab, **SUM**, as the first sheet. It **sets the table**: it links what the other tabs already worked out and
 leaves the judgment boxes empty for write-pitch. Code only, no agent, no web search except the ADV fallback.
@@ -19,8 +24,7 @@ build.py stops and names the skill to run.
 3. `SHA=$(shasum -a 256 "$M" | cut -d' ' -f1)`. Never write to `M` before Step 4; keep no backup copies.
 
 ## Step 2: Build
-`python3 "$SK/build.py" --model "$M" --work "$W" --ticker <T> --out "$W/out.xlsx"` (`SK` = this skill's scripts
-folder). It prints the report's facts as JSON. If it stops, tell the user exactly what it says (which tab or row is
+`python3 "$SK/build.py" --model "$M" --work "$W" --ticker <T> --out "$W/out.xlsx"`. It prints the report's facts as JSON. If it stops, tell the user exactly what it says (which tab or row is
 missing, and the skill to rerun) and stop.
 
 If it stops on **no 3-month ADV**, it names the file it wants in `$W`. Tell the user. The message says why each route failed (file missing, fewer than 63 trading days, or stale). Put a daily CSV with that name
