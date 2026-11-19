@@ -88,3 +88,31 @@ def test_newest_note_by_date_decides(tmp_path):
     (tmp_path / "R" / "Valuation" / "2026-11-08 XYZ Valuation Note.md").write_text("# x\n")
     j = run(m, tmp_path / "R")
     assert j["status"] == "ok" and j["stale"] is None
+
+
+# why: the skill runs every script with python3 -I, which hides `pip install --user` packages; without this check the
+# run would get through the agents (an hour of work) and die at the deck build on a missing python-pptx
+def test_missing_package_stops_before_anything_else(tmp_path):
+    import preflight
+    m = mk(tmp_path, ALL, REQ)
+
+    def importer(name):
+        if name in ("pptx", "fitz"):
+            raise ImportError(name)
+    out = preflight.check("XYZ", str(m), str(tmp_path / "R"), importer)
+    assert out["status"] == "stop"
+    assert [x["what"] for x in out["missing"]] == ["python-pptx", "pymupdf"]
+    fix = out["missing"][0]["fix"]
+    assert fix.startswith("python3 -m pip install") and "python-pptx" in fix and "--user" not in fix
+    assert preflight.check("XYZ", str(m), str(tmp_path / "R"), lambda n: None)["status"] == "ok"
+
+
+# why: the same, end to end through the real import machinery: a package that won't import names itself
+def test_hidden_package_cli(tmp_path):
+    m = mk(tmp_path, ALL, REQ)
+    code = ("import sys, runpy; sys.modules['docx'] = None; sys.argv = sys.argv[1:];"
+            " runpy.run_path(sys.argv[0], run_name='__main__')")
+    out = subprocess.run([sys.executable, "-c", code, str(PF), "--model", str(m), "--research", str(tmp_path / "R"),
+                          "--ticker", "XYZ"], capture_output=True, text=True)
+    res = json.loads(out.stdout)
+    assert res["status"] == "stop" and [x["what"] for x in res["missing"]] == ["python-docx"]

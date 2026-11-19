@@ -50,7 +50,7 @@ def expected(research, model_dir, work):
         one("Valuation plan (the valuation analyst's choices and reasons)", MW("model-valuation", "valuation_plan.json")),
         one("Short check plan (the short analyst's answers)", MW("model-short", "short_plan.json")),
         one("Earnings preview plan", MW("model-earnings-before", "earnings_plan.json")),
-        glob_one("After-print plan", MW("model-earnings-after", "*plan*.json")),
+        one("After-print plan", MW("model-earnings-after", "after_plan.json")),
         glob_one("Valuation note", R("Valuation", "*.md")),
         glob_one("Short check note", R("Short Check", "*.md")),
         glob_one("Earnings preview note", R("Earnings Previews", "*.md")),

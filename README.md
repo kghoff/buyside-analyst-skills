@@ -89,7 +89,8 @@ Commands are `/buyside:<skill> TICKER`, e.g. `/buyside:collect-documents DXCM`.
 
 ### One-time setup
 
-1. Python packages: `pip install -r requirements.txt`
+1. Python packages: `pip install -r requirements.txt`, for the system `python3` (not `--user`: the scripts run
+   with `python3 -I`, which ignores the user site-packages)
 2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus`,
    `skills/model-short`, `skills/model-price-history`, `skills/model-multiples`, `skills/model-earnings-before`,
    `skills/model-earnings-after` and `skills/model-summary` in the installed plugin folder (`/plugin` shows where it

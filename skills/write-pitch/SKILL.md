@@ -12,8 +12,6 @@ nothing here is specific to one stock. Explain everything in plain English, and 
 ```bash
 SK="<this skill's base directory>/scripts"      # the base directory is shown when the skill loads
 SKILL="<this skill's base directory>"           # absolute: it fills {SKILL} in the assignments
-SKILLS="<this skill's base directory>/.."
-RD=$(python3 "$SKILLS/../lib/settings.py" research_dir)   # your research folder: research_dir in the settings file
 ```
 Skills and agents are named here without a prefix. Installed as a plugin, Claude Code lists them as `buyside:<name>`.
 
@@ -21,19 +19,27 @@ There is **no approval pause**: the analyst decides, a PM agent attacks it, code
 tells the user every call. The only change to the model is SUM's write-pitch boxes, and only the ones that are empty
 or still hold what the last run wrote; anything the user typed stays.
 
+**Keep no model copies.** From Step 4 on, the run holds copies of the model (`$W/values`, later `$W/out.xlsx`, and
+`$W/build` with the decks drawn from them). On every stop or abort after Step 4, for any reason (a failed check, a
+verify problem, a changed checksum, the user calling it off, a look-step fault you can't fix), first run
+`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`, then tell the user.
+
 ## Requirements
-- Python 3 with openpyxl, python-pptx, python-docx and PyMuPDF; pytest to run the tests.
+- Python 3 with openpyxl, python-pptx, python-docx, PyMuPDF and Pillow, installed for the system `python3` (every
+  script runs with `python3 -I`, which ignores `pip install --user` packages); pytest to run the tests.
 - LibreOffice for the recalculation, the tab pictures and the PDFs (`brew install --cask libreoffice`).
 - The model needs MOD with a forecast, DCF, Multiples, Valuation and SUM; the research folder needs the filings and
   street research reports. Short Check (needed for a short call), Earnings, Consensus, the industry tabs, Filings
   Charts, Idio Chart and the valuation / short / preview / after-print notes are used when present.
 
 ## Step 1: Preflight
-`python3 -I "$SK/preflight.py" --ticker <T>` (add `--model <path>` if the user names one). It prints JSON. Set
+`python3 -I "$SK/preflight.py" --ticker <T>` (add `--model <path>` if the user names a model, `--research <dir>` if
+the research folder is not `research_dir/<T>` from the settings file). It prints JSON. Set
 `M` = `model`, `MD` = the model's folder, `R` = `research`, `P` = `pitch_dir`, `W` = `work`, `MODE` = `mode`
 (`first`, or `rerun` when `$W/plate.md` exists) and keep `optional_missing` and `warnings`.
 `mkdir -p "$W" "$MD/_model_work/write-pitch"`.
-- `status` = `stop`: tell the user, in plain English, each `missing` item and its `fix` (the skill to run), and the
+- `status` = `stop`: tell the user, in plain English, each `missing` item and its `fix` (the skill to run, or the
+  `python3 -m pip install ...` line for a Python package that does not import under `-I`), and the
   `stale` quarter if set (a quarter was reported after the last valuation note or SUM build: rerun /model-valuation,
   then /model-summary). Stop.
 - Tell the user every `warnings` line (e.g. freshness could not be checked) and the `optional_missing` list.
@@ -110,18 +116,20 @@ and `$W/tabs/index.md`. `$V` stays until Step 10 (the checks read it); then it i
    assignment." and paste every line of both. Wait for `PLAN REVISED`; run both again. At most 2 rounds.
 4. After round 2:
    - plan.py problems stop the run: tell the user each one in plain English and build nothing. The model is
-     untouched. Delete the model copy: `rm -rf "$W/values"`.
-   - anchors.py problems: `cp "$W/anchor_problems.json" "$W/unverified.json"`. The deck marks those numbers and quotes
-     UNVERIFIED in red, and the report lists every one. With none, make sure no old file is left:
+     untouched. Delete the model copies: `rm -rf "$W/values" "$W/out.xlsx" "$W/build"`.
+   - anchors.py problems: `cp "$W/anchor_problems.json" "$W/unverified.json"`. build_deck.py names each one as
+     UNVERIFIED in the speaker notes of the slides that use it (nowhere on the slide face), and the report lists
+     every one. With none, make sure no old file is left:
      `rm -f "$W/unverified.json" "$W/anchor_problems.json"`.
 
 ## Step 8: Build
 1. Names: `python3 -I "$SK/names.py" --pitch-dir "$P" --ticker <T>` prints `long`, `core`, `sheet`, `md`:
    `<date> <T> Pitch.pptx`, `<date> <T> Pitch (core).pptx`, `<date> <T> Pitch Sheet.docx`, `<date> <T> Pitch.md`. If
    any file of that set exists it adds ` (2)`, ` (3)`… to every name: never overwrite an earlier pitch. Build into
-   `B="$W/build"` under those file names; Step 9 moves them into `$P`.
+   `$B` under those file names; Step 9 moves them into `$P`.
 2. Build:
    ```bash
+   B="$W/build"; mkdir -p "$B"
    python3 -I "$SK/build_deck.py" --plan "$W/pitch_plan.json" --template "$SKILL/assets/pitch_template.pptx" \
        --values "$V" --research "$R" --tabs "$W/tabs" --out-long "$B/<long name>" --out-core "$B/<core name>"     # add --unverified "$W/unverified.json" if it exists
    python3 -I "$SK/build_sheet.py" --plan "$W/pitch_plan.json" --out "$B/<sheet name>"
@@ -136,10 +144,11 @@ and `$W/tabs/index.md`. `$V` stays until Step 10 (the checks read it); then it i
 2. Look for text running out of its box, tables cut off, empty or unreadable charts, a picture in the wrong place, a
    sheet longer than 2 pages. Fix the cause: text too long goes back to the analyst (SendMessage the slide and what
    to shorten; then Step 7 again on the changed plan); a layout fault is the builder's to fix. Rebuild (Step 8.2)
-   and look again. Never hand-edit an output.
-3. When it looks right, `mv` each file of `$B` (decks, sheet, Markdown, PDFs) into `$P`, checking first that no file
-   of that name exists there (names.py checked; a same-moment run is the only way to collide: then rerun names.py
-   and rename).
+   and look again. Never hand-edit an output. If you cannot make it right, stop: delete the model copies
+   (`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`) and tell the user what is wrong and on which slide.
+3. When it looks right, `mkdir -p "$P"` and `mv -n` each file of `$B` (decks, sheet, Markdown, PDFs) into `$P`; then
+   check `$B` is empty. `-n` never overwrites: a file left behind means one of that name appeared since names.py ran,
+   so rerun names.py and move it under the new name.
 
 ## Step 10: SUM boxes
 ```bash
@@ -149,10 +158,11 @@ python3 -I "$SK/verify.py" --before "$M" --after "$W/out.xlsx" --expect "$W/sum_
 ```
 sum_boxes.py edits the XML of a copy (never openpyxl's save): a box is written only if empty or still equal to what
 the last run wrote; anything else is the user's and stays. verify.py must print `verify OK` and exit 0: it proves
-every other part of the workbook is byte-identical. Any problem: stop, tell the user, and do not copy.
+every other part of the workbook is byte-identical. Any problem: stop, do not copy, delete the model copies
+(`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`) and tell the user the problems in plain English.
 1. If `written` is empty, the model needs no change: skip to 4.
 2. `shasum -a 256 "$M"` again: if it differs from `SHA`, the user saved meanwhile: stop, delete the copies
-   (`rm -rf "$W/values" "$W/out.xlsx"`) and tell the user to rerun /write-pitch.
+   (`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`) and tell the user to rerun /write-pitch.
 3. Check `~$<model file name>` again (ask the user to close Excel). Then `cp "$W/out.xlsx" "$M"`.
 4. `mv "$MD/_model_work/write-pitch/sum_written.next.json" "$MD/_model_work/write-pitch/sum_written.json"` (the record
    of what this run wrote, so the next run can tell the user's changes from its own).

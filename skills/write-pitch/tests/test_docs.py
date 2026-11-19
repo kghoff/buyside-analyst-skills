@@ -86,15 +86,20 @@ def test_skill_md_runs_every_script_and_house_rules():
     skill = R.parent / "SKILL.md"
     text = skill.read_text()
     flat = re.sub(r"\s+", " ", text)
-    library = {"__init__", "common", "fill", "xlsx", "make_template", "lo"}   # imported by others, or a one-off tool
+    library = {"__init__", "common", "fill", "xlsx", "model_reads", "make_template", "lo"}   # imported by others, or a one-off tool
     for p in sorted((R.parent / "scripts").glob("*.py")):
         if p.stem not in library:
             assert f'"$SK/{p.stem}.py"' in text, p.name
     assert "build_deck.py" in text and "import lo" in text and "lo.recalc" in text
     assert text.startswith("---\nname: write-pitch\n")
     for must in ("shasum -a 256", "~$", "model opus", "never overwrite", "`{SKILL}`", "AskUserQuestion",
-                 "UNVERIFIED", "sum_written.next.json", "verify OK", "plain English", "judgment call"):
+                 "UNVERIFIED", "sum_written.next.json", "verify OK", "plain English", "judgment call",
+                 "speaker notes", "mv -n", "--research <dir>", "python3 -m pip install"):
         assert must in text, must
+    # the model copies are deleted on every stop after Step 4 (house rule: keep no copies), not just on success
+    assert text.count('rm -rf "$W/values" "$W/out.xlsx" "$W/build"') >= 5
+    # UNVERIFIED items go in the speaker notes and the report, never in red on the slide face
+    assert "in red" not in text
     # every assignment fill is named, so none reaches the agent as a raw {KEY}
     for key in KNOWN:
         assert f"`{{{key}}}`" in text, key

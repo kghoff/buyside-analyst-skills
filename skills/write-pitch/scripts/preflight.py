@@ -2,16 +2,17 @@
 
 usage: python3 preflight.py --ticker XYZ [--model PATH] [--research DIR]
 Prints JSON {"status": "ok"|"stop", "model", "research", "pitch_dir", "work", "mode": "first"|"rerun",
-"optional_missing", "missing": [{"what", "fix"}], "stale": null|{...}, "warnings"} and exits 0. Read-only."""
+"optional_missing", "missing": [{"what", "fix"}], "stale": null|{...}, "warnings"} and exits 0. Read-only.
+First it checks that the Python packages the run needs import in this interpreter (the skill runs every script with
+python3 -I, which hides the user site-packages, so a `pip install --user` package counts as missing)."""
 import argparse
 import datetime
 import glob
+import importlib
 import json
 import os
 import re
 import sys
-
-import openpyxl
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 REQUIRED = {"MOD": "/model-historicals", "DCF": "/model-dcf", "Multiples": "/model-multiples",
@@ -20,6 +21,22 @@ OPTIONAL_TABS = ["Short Check", "Earnings", "Consensus", "Industry P&L", "Indust
                  "Idio Chart"]
 OPTIONAL_NOTES = ["Valuation", "Short Check", "Earnings Previews", "Earnings Reviews"]
 QUARTER = re.compile(r"^Q[1-4] \d\d$")
+
+
+# import name -> pip package name; openpyxl is imported only after this check passes
+PACKAGES = {"pptx": "python-pptx", "docx": "python-docx", "fitz": "pymupdf", "openpyxl": "openpyxl", "PIL": "pillow"}
+INSTALL = "python3 -m pip install " + " ".join(PACKAGES.values())
+
+
+def deps(importer=importlib.import_module):
+    """[{"what", "fix"}] for each package that does not import (importer is injectable for tests)."""
+    out = []
+    for mod, pkg in PACKAGES.items():
+        try:
+            importer(mod)
+        except ImportError:
+            out.append({"what": pkg, "fix": INSTALL})
+    return out
 
 
 def _row2(ws):
@@ -82,17 +99,22 @@ def note_date(path):
     return datetime.date.fromisoformat(m.group(1)) if m else None
 
 
-def check(ticker, model, research):
+def check(ticker, model, research, importer=importlib.import_module):
     pitch = os.path.join(research, "Pitch")
     out = {"status": "ok", "model": model, "research": research, "pitch_dir": pitch,
            "work": os.path.join(pitch, "_work"), "mode": "first", "optional_missing": [], "missing": [],
            "stale": None, "warnings": []}
     if os.path.exists(os.path.join(pitch, "_work", "plate.md")):
         out["mode"] = "rerun"
+    out["missing"] = deps(importer)
+    if out["missing"]:
+        out["status"] = "stop"
+        return out
     if not model or not os.path.exists(model):
         out["missing"].append({"what": "model", "fix": "run /model-historicals"})
         out["status"] = "stop"
         return out
+    import openpyxl
     wb = openpyxl.load_workbook(model, read_only=True)
     try:
         return _check_open(wb, out, research, model)
