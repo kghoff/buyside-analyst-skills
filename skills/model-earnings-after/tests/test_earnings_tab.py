@@ -108,6 +108,17 @@ def test_rerun_replaces_only_the_after_rows(model, tmp_path):
     assert _kept(x, s) == _kept(old, s)
 
 
+def test_the_title_row_above_band_9_belongs_to_the_after_rows(model, tmp_path):
+    """build.py writes a title row, then band 9's header. A rerun must replace the title too: if the title counted
+    as part of bands 1-8, every rerun would leave the old title behind and push the bands down a row."""
+    s = et.read(model)["start"]
+    first = _splice(model, str(tmp_path / "first.xlsx"), s,
+                    {f"A{s}": "TEST after the print: Q4 26 (model-earnings-after, 2027-02-28)",
+                     f"A{s + 1}": "9. ACTUAL VS FROZEN: Q4 26"}, {})
+    t = et.read(first)
+    assert t["after_start"] == s and t["start"] == s and t["end"] < s
+
+
 def test_splice_adds_notes_to_a_tab_that_had_none(tmp_path):
     """A user may have deleted every preview note; the after-print notes still need a comments part of their own."""
     src = str(tmp_path / "plain.xlsx")

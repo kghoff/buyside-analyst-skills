@@ -352,6 +352,18 @@ def house(wb):
     return H
 
 
+def earnings_values(wb, refs):
+    """{key: value} of the band 1-8 cells bands 9-15 read (earnings_tab refs: price, expected move, move up / down,
+    implied move...), from the values copy: build.py's expected values for its same-tab formulas. None = blank or
+    not recalculated (build.py then leaves the cell unchecked and warns)."""
+    g = grid(wb[et.TAB])
+    out = {}
+    for k, ref in refs.items():
+        m = re.fullmatch(r"\$?([A-Z]+)\$?(\d+)", ref)
+        out[k] = g.get((int(m.group(2)), ci(m.group(1))))
+    return out
+
+
 def history(model):
     """The last 4 Call Notes columns, newest first (needs callnotes.read: until then, none)."""
     if not hasattr(callnotes, "read"):
@@ -393,6 +405,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
             _stop(f"the model has no {t} tab. Run /{skill} first.")
     g = {t: grid(wb[t]) for t in REQUIRED}
     H = house(wb)
+    ev = earnings_values(wb, tab["refs"])
     wb.close()
     mm = ModMap(values)                           # the values copy, as the sibling reads it
     warnings = []
@@ -430,7 +443,8 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
            "quarter": q, "quarter_e": qe, "fy": mm.fy_of(q), "mode": mode, "drift_ready": mv["drift"] is not None,
            "frozen": {"quarter": tab["frozen"]["quarter"], "date": tab["frozen"]["date"], "fy": tab["frozen"]["fy"],
                       "rows": fz},
-           "earnings_refs": tab["refs"], "earnings_start": tab["start"], "after_start": tab["after_start"],
+           "earnings_refs": tab["refs"], "earnings_values": ev, "earnings_start": tab["start"],
+           "after_start": tab["after_start"],
            "move": mv, "estimates": est, "valuation": val, "irr_now": ir, "fade": fade,
            "latest_close": {"value": lc["close"], "date": lc["date"].isoformat(), "ref": close_ref},
            "docs": dd, "topics": callnotes.topics([d["name"] for d in drv]),

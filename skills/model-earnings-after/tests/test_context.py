@@ -232,6 +232,17 @@ def test_topics_with_and_without_a_forecast_plan(model, fixture_research, work, 
     assert any(e["kind"] == "driver" and e["label"] == mf.PLACEHOLDER_KEY for e in c["estimates"])
 
 
+def test_earnings_values_give_build_its_same_tab_numbers(ctx):
+    """Bands 9-15 compare with band 1's expected move, band 2's up / down moves and band 5's implied move: build.py
+    needs those cells' values to know what its formulas should recalculate to. Typed cells read as typed; formulas
+    in a copy that was never recalculated read None (unknown, so build.py leaves them unchecked), never 0."""
+    ev = ctx["earnings_values"]
+    assert set(ev) == set(ctx["earnings_refs"])
+    assert ev["expected_move"] == 0.05 and ev["price"] == 51
+    assert ev["up"] is None and ev["down"] is None          # formulas: no cached value in the fixture
+    assert ev["implied"] == "n/a"                           # band 5 wrote text: no implied move
+
+
 def test_docs_mode_and_house(ctx, model, fixture_research, work):
     """The agent gets relative paths to read; a saved plan for the same quarter makes this a rerun; the in-line
     band is the house 1% until the tab holds the user's own."""

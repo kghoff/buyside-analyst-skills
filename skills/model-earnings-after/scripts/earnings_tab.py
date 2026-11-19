@@ -15,6 +15,7 @@ from xlsx import CT, NS_REL, colnum, esc, relpath_of, resolve
 TAB = "Earnings"
 FROZEN_RE = re.compile(r"^7\. FROZEN FORECAST: (.+?), frozen (\d{4}-\d{2}-\d{2})")   # model-earnings-before build.py
 AFTER_RE = re.compile(r"^9\. ACTUAL VS FROZEN")
+TITLE_RE = re.compile(r"^\S+ after the print: ")             # build.py's title row, just above band 9
 BAND_RE = re.compile(r"^(\d+)\. [A-Z][A-Z0-9 ,/-]{3}")        # band headers: "1. PRINT SNAPSHOT AND THE CALL"
 ROW_RE = re.compile(r'<row r="(\d+)"[^>]*?(?:/>|>.*?</row>)', re.S)
 LABELS = {  # key: (exact label or prefix, prefix?, band) -- model-earnings-before build.py INPUTS and band texts
@@ -39,7 +40,8 @@ def _bands(a):
 
 def read(path):
     """None if there is no Earnings tab, else {refs: {key: "$B$n"}, frozen: {quarter, date, fy, rows: [{label, row,
-    q, fy}]} or None, bands: {n: (header row, last row)}, after_start: band 9's row or None, end: last row of bands
+    q, fy}]} or None, bands: {n: (header row, last row)}, after_start: band 9's row (its title row when build.py
+    wrote one above it) or None, end: last row of bands
     1-8, start: where band 9 goes, labels: {row: column-A text}}."""
     wb = openpyxl.load_workbook(path, read_only=True)
     if TAB not in wb.sheetnames:
@@ -53,6 +55,8 @@ def read(path):
     g = {k: v for k, v in full.items() if k[1] <= 3}
     a = {r: v for (r, c), v in g.items() if c == 1 and isinstance(v, str)}
     after = next((r for r, v in sorted(a.items()) if AFTER_RE.match(v)), None)
+    if after and TITLE_RE.match(a.get(after - 1, "")):
+        after -= 1                                            # the title belongs to bands 9-15: replaced with them
     bands = _bands(a)
     refs = {}
     for k, (lab, pre, band) in LABELS.items():
