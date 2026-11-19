@@ -1,0 +1,65 @@
+{
+ "quarter": "Q4 26",
+ "sfot": {
+  "surprise": {"value": "positive", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:3",
+               "quote": "Revenue grew 14% in the fourth quarter",
+               "reason": "Revenue came in four percent above our frozen forecast, enough to lift the year."},
+  "fundamentals": {"value": "positive", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:9",
+                   "quote": "Units should grow faster than revenue as the new product ramps",
+                   "reason": "The key driver is accelerating as the new product ramps into next year."},
+  "outlook": {"value": "positive", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:4",
+              "quote": "For 2027 we expect revenue of $640 million to $650 million.",
+              "reason": "The first 2027 revenue guide was given and it implies continued double-digit growth."},
+  "tone": {"value": "positive", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:10",
+           "quote": "We feel better about the business than at any time in the last two years.",
+           "reason": "Management sounded more confident than at any point in the last two years."}
+ },
+ "call_notes": {
+  "Guidance (near-term)": [
+   {"text": "2027 revenue guided to $640-650 million.", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:4",
+    "quote": "For 2027 we expect revenue of $640 million to $650 million."}],
+  "Long-term targets": [
+   {"text": "Reiterated a 20% operating margin by 2028.", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:6",
+    "quote": "We remain committed to a 20% operating margin by 2028."}],
+  "Margins and costs": [
+   {"text": "Operating margin 16.5%, down on launch costs.", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:5",
+    "quote": "Operating margin was 16.5%, below last year because of launch costs."}],
+  "Capital allocation": [
+   {"text": "Bought back $50 million of stock in the quarter.", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:7",
+    "quote": "We bought back $50 million of stock in the quarter."}],
+  "Q&A theme 1": [
+   {"text": "Units: expected to grow faster than revenue as the new product ramps.",
+    "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:9",
+    "quote": "Units should grow faster than revenue as the new product ramps."}],
+  "Q&A theme 2": [], "Q&A theme 3": [], "Q&A theme 4": [], "Q&A theme 5": [],
+  "Tone": [
+   {"text": "Most confident in two years.", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:10",
+    "quote": "We feel better about the business than at any time in the last two years."}],
+  "Read-throughs mentioned": [
+   {"text": "A competitor's recall helped December new-patient adds.",
+    "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:11",
+    "quote": "A competitor's recall helped our new-patient adds in December."}]
+ },
+ "guidance": [
+  {"item": "2027 revenue", "before": "No 2027 guide before this call", "now": "$640-650 million",
+   "change": "initiate", "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:4",
+   "quote": "For 2027 we expect revenue of $640 million to $650 million."}
+ ],
+ "lt_target": {"metric": "Operating margin", "num": "INCOME STATEMENT | Operating Income",
+               "den": "INCOME STATEMENT | Revenue", "target": 0.20, "year": 2028,
+               "anchor": "Earnings Calls/_md/2026 Q4 TEST call.md:6", "anchor_value": 0.20,
+               "quote": "We remain committed to a 20% operating margin by 2028."},
+ "checkpoint": {"value": "yellow",
+                "reason": "Growth is on track, but launch costs pushed margin further from the 2028 target."},
+ "react": {"call": "hold", "pattern": "none",
+           "reason": "An eight percent move fits a revenue beat and a first guide, offset by the operating income miss.",
+           "wrong_if": "units slow before the new product ramps",
+           "watch": "the drift to T+7 and the next conference commentary on margins"},
+ "catalysts": [{"text": "First-quarter print: does the units ramp show up?", "when": "May 2027"}],
+ "controversies": ["How much of December's strength came from the competitor's recall and will it last?"],
+ "headline": "Revenue beat and a first 2027 guide; margin missed on launch costs.",
+ "quarter_thoughts": "A good revenue quarter with a confident tone, but the margin path to 2028 got harder.",
+ "played_out": null,
+ "judgment_calls": ["Called tone positive from one line of the CEO's prepared remarks.",
+                    "Read the competitor's recall as a read-through and a controversy, not as lasting share gain."]
+}
