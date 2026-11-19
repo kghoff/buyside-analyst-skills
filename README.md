@@ -1,7 +1,8 @@
 # buyside-analyst-skills
 
 Claude Code skills for fundamental equity research. They collect a company's documents, build its Excel model, write
-research reports from its filings and from the Street, forecast the business and value the stock.
+research reports from its filings and from the Street, forecast the business, value the stock, check it as a short,
+work each earnings print and sum it all up on one page for the PM.
 
 ## Why
 
@@ -89,8 +90,9 @@ Commands are `/buyside:<skill> TICKER`, e.g. `/buyside:collect-documents DXCM`.
 
 1. Python packages: `pip install -r requirements.txt`
 2. Node packages: run `npm install` inside `skills/collect-documents`, `skills/model-consensus`,
-   `skills/model-short`, `skills/model-price-history`, `skills/model-multiples`, `skills/model-earnings-before` and
-   `skills/model-earnings-after` in the installed plugin folder (`/plugin` shows where it is).
+   `skills/model-short`, `skills/model-price-history`, `skills/model-multiples`, `skills/model-earnings-before`,
+   `skills/model-earnings-after` and `skills/model-summary` in the installed plugin folder (`/plugin` shows where it
+   is).
 3. LibreOffice (recalculates and renders the workbooks): `brew install --cask libreoffice`
 4. PDF, OCR and report tools: `brew install poppler tesseract pango` (pango is needed by WeasyPrint)
 5. Google Chrome, used to save web pages as PDFs.
@@ -149,6 +151,8 @@ Every skill asks you to close the model in Excel if it is open.
 
 - `write-pitch-deck`: turn the model and research into a pitch deck.
 - `write-thesis`: write the investment thesis.
+- Margin consensus in `model-consensus`, for companies the Street follows on margins. model-summary picks up any new
+  Street metric through its mapping table.
 
 ## About
 
