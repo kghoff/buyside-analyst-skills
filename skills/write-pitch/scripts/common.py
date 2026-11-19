@@ -14,3 +14,7 @@ CALLS = ["Long", "Short", "Watch"]
 
 def load(p): return json.loads(pathlib.Path(p).read_text())
 def save(p, obj): pathlib.Path(p).write_text(json.dumps(obj, indent=2))
+
+# the look of the deck (navy banker style); make_template.py draws the template from it and the builder imports it
+THEME = {"navy": "0B2545", "band": "E8EEF6", "line": "C9D6E8", "good": "0A7D2C", "bad": "B3261E",
+         "amber": "D07A00", "grey": "888888", "text": "1D1D1D", "strip": "F4F4F4", "font": "Arial"}
