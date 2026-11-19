@@ -78,3 +78,35 @@ def test_schema_rule_ids_match_plan_py():
     listed = re.findall(r"\*\*\[R(\d+)\]\*\*", s12)
     assert len(listed) == len(set(listed)), "an id is listed twice"
     assert set(listed) == code
+
+
+# why: SKILL.md is what Claude follows; a script it never names is a step the run silently skips (and a house rule it
+# never states, such as the checksum before the copy-over, is one Claude never follows)
+def test_skill_md_runs_every_script_and_house_rules():
+    skill = R.parent / "SKILL.md"
+    text = skill.read_text()
+    flat = re.sub(r"\s+", " ", text)
+    library = {"__init__", "common", "fill", "xlsx", "make_template", "lo"}   # imported by others, or a one-off tool
+    for p in sorted((R.parent / "scripts").glob("*.py")):
+        if p.stem not in library:
+            assert f'"$SK/{p.stem}.py"' in text, p.name
+    assert "build_deck.py" in text and "import lo" in text and "lo.recalc" in text
+    assert text.startswith("---\nname: write-pitch\n")
+    for must in ("shasum -a 256", "~$", "model opus", "never overwrite", "`{SKILL}`", "AskUserQuestion",
+                 "UNVERIFIED", "sum_written.next.json", "verify OK", "plain English", "judgment call"):
+        assert must in text, must
+    # every assignment fill is named, so none reaches the agent as a raw {KEY}
+    for key in KNOWN:
+        assert f"`{{{key}}}`" in text, key
+    for lab in ("Overall verdict (the agent's call: Buy / Hold / Sell)", "Verdict (agent's call)",
+                "Verdict (the rule)", "IRR hurdle", "Buy at R/R", "Table-pound at R/R"):
+        assert f'"{lab}"' in flat, lab
+
+
+# why: labels.py reads the verdicts and hurdles by these exact labels; if it drifts from the brief's wording, the call
+# the analyst makes and the call plan.py checks come from different rows
+def test_labels_py_matches_brief():
+    import labels
+    brief = re.sub(r"\s+", " ", (R / "pitch_brief.md").read_text())
+    for lab in (labels.VAL_VERDICT, labels.SHORT_AGENT, labels.SHORT_RULE, *labels.HURDLE_LABELS.values()):
+        assert f'"{lab}"' in brief, lab
