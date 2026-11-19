@@ -1,0 +1,380 @@
+{
+  "ticker": "XYZ",
+  "as_of": "2026-11-19",
+  "call": "Long",
+  "action": "Buy",
+  "starting_verdicts": {
+    "valuation": "Buy",
+    "short": "no short"
+  },
+  "override": null,
+  "most_important_thing": "Guidance is conservative and the Street has not caught up.",
+  "pitch_20s": "XYZ grows faster than guided, the Street is behind, and at {price} we get {base_ret} with {risk_ret} of risk.",
+  "numbers": {
+    "price": {
+      "value": 72.4,
+      "shown": "$72.40",
+      "anchor": "Valuation!C5"
+    },
+    "target_3y": {
+      "value": 120.0,
+      "shown": "$120",
+      "anchor": "Valuation!C30"
+    },
+    "base_ret": {
+      "value": 0.31,
+      "shown": "+31%",
+      "anchor": "Valuation!F20"
+    },
+    "risk_ret": {
+      "value": -0.15,
+      "shown": "-15%",
+      "anchor": "Valuation!F21"
+    },
+    "irr_3y": {
+      "value": 0.1834,
+      "shown": "18.3%",
+      "anchor": "calc: (target_3y/price)^(1/3)-1"
+    },
+    "buy_price": {
+      "value": 69.44,
+      "shown": "$69.44",
+      "anchor": "calc: target_3y/1.2^3"
+    },
+    "nobrainer_price": {
+      "value": 55.0,
+      "shown": "$55.00",
+      "anchor": "Valuation!C32"
+    },
+    "bull_eps": {
+      "value": 4.1,
+      "shown": "4.10",
+      "anchor": "Valuation!D12"
+    },
+    "bull_pe": {
+      "value": 32.0,
+      "shown": "32x",
+      "anchor": "Valuation!D13"
+    },
+    "bull_ret": {
+      "value": 0.81,
+      "shown": "+81%",
+      "anchor": "Valuation!D14"
+    },
+    "bull_p": {
+      "value": 0.25,
+      "shown": "25%",
+      "anchor": "Valuation!D15"
+    },
+    "r_roll": {
+      "value": 0.06,
+      "shown": "+6%",
+      "anchor": "Valuation!C40"
+    },
+    "r_rev": {
+      "value": 0.08,
+      "shown": "+8%",
+      "anchor": "Valuation!C41"
+    },
+    "r_rer": {
+      "value": 0.04,
+      "shown": "+4%",
+      "anchor": "Valuation!C42"
+    },
+    "eps_27_ours": {
+      "value": 3.3,
+      "shown": "3.30",
+      "anchor": "SUM!J12"
+    },
+    "eps_27_street": {
+      "value": 3.05,
+      "shown": "3.05",
+      "anchor": "SUM!K12"
+    },
+    "rev_26": {
+      "value": 1250.0,
+      "shown": "1,250",
+      "anchor": "SUM!H8"
+    },
+    "rev_27": {
+      "value": 1420.0,
+      "shown": "1,420",
+      "anchor": "SUM!J8"
+    },
+    "guide_growth": {
+      "value": 0.15,
+      "shown": "15%",
+      "anchor": "Earnings Calls/_md/2026 Q3 XYZ call.md:214"
+    }
+  },
+  "quotes": [
+    {
+      "id": "q1",
+      "text": "We expect to grow 15% next year.",
+      "file": "Earnings Calls/_md/2026 Q3 XYZ call.md",
+      "line": 214
+    }
+  ],
+  "slides": [
+    {
+      "type": "title",
+      "title": "LONG XYZ",
+      "takeaway": "A durable compounder priced for far less growth than it will deliver.",
+      "image": {
+        "pdf": "Investor Decks/2026 Q3 XYZ deck.pdf",
+        "page": 4,
+        "crop": [
+          0.1,
+          0.2,
+          0.9,
+          0.8
+        ]
+      },
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "summary",
+      "title": "Summary",
+      "takeaway": "At {price} we see {base_ret} in twelve months against {risk_ret} of risk, and a {irr_3y} three-year IRR.",
+      "bullets": [
+        "Our 2027 EPS of {eps_27_ours} is above the Street's {eps_27_street}.",
+        "Management guides to {guide_growth} growth and has beaten it for four quarters."
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "setup",
+      "title": "The Set-Up",
+      "takeaway": "The stock has lagged its peers while the numbers kept rising.",
+      "bullets": [
+        "Shares are flat over a year while estimates rose.",
+        "Sentiment is cautious after one soft quarter."
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "thesis",
+      "title": "Three Thesis Points",
+      "takeaway": "Three things drive the earnings gap to the Street.",
+      "points": [
+        {
+          "head": "Growth holds",
+          "body": "Guidance of {guide_growth} growth is conservative; we model 2027 EPS of {eps_27_ours}."
+        },
+        {
+          "head": "Margins expand",
+          "body": "Scale and mix lift operating margin each year."
+        },
+        {
+          "head": "Cash returns",
+          "body": "Free cash flow funds buybacks at a rising rate."
+        }
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "risks",
+      "title": "Two Key Risks",
+      "takeaway": "The thesis breaks on a growth stall or a price war.",
+      "risks": [
+        {
+          "head": "Growth stalls",
+          "prob": 0.25,
+          "if_hits": "Revenue growth drops under 8% and the multiple compresses.",
+          "mitigant": "Backlog and renewals cover most of next year."
+        },
+        {
+          "head": "Price war",
+          "prob": 0.15,
+          "if_hits": "A rival cuts price and margin falls two points.",
+          "mitigant": "Switching costs keep most customers in place."
+        }
+      ],
+      "tripwires": [
+        "Two straight quarters under 10% growth.",
+        "Gross margin down more than 150 bps year over year."
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "why_now",
+      "title": "Why Now",
+      "takeaway": "Three catalysts land in the next two quarters.",
+      "bullets": [
+        "Q4 print resets 2027 estimates.",
+        "New product ships in the spring."
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "valuation",
+      "title": "Valuation",
+      "takeaway": "On our numbers the stock trades well under its own history.",
+      "bullets": [
+        "The stock is at {price}; our three-year target is {target_3y}.",
+        "Buy below {buy_price}; add hard at {nobrainer_price}."
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "different",
+      "title": "What We See Differently",
+      "takeaway": "We expect {eps_27_ours} of 2027 EPS; the Street has {eps_27_street}.",
+      "bullets": [
+        "The Street models the new product late.",
+        "The Street holds margins flat."
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "risk_reward",
+      "title": "Risk / Reward",
+      "takeaway": "Upside of {base_ret} against {risk_ret} clears our bar of two to one.",
+      "cases": [
+        {
+          "name": "Bull",
+          "eps": "{bull_eps}",
+          "pe": "{bull_pe}",
+          "ret": "{bull_ret}",
+          "prob": "{bull_p}"
+        },
+        {
+          "name": "Base",
+          "eps": "{eps_27_ours}",
+          "pe": "28x",
+          "ret": "{base_ret}",
+          "prob": "50%"
+        },
+        {
+          "name": "Bear",
+          "eps": "2.60",
+          "pe": "22x",
+          "ret": "{risk_ret}",
+          "prob": "25%"
+        }
+      ],
+      "ladder": "Valuation",
+      "irr": "{irr_3y}",
+      "three_rs": {
+        "roll": "{r_roll}",
+        "revisions": "{r_rev}",
+        "rerating": "{r_rer}"
+      },
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "catalysts",
+      "title": "Catalysts",
+      "takeaway": "Near-term events that can move estimates.",
+      "bullets": [
+        "Q4 earnings in February.",
+        "Investor day in the spring."
+      ],
+      "notes": "Say it plainly and move on; the numbers are on the slide.",
+      "source": "XYZ model, Valuation and SUM tabs"
+    },
+    {
+      "type": "table",
+      "section": "support",
+      "supports": "thesis.1",
+      "title": "Revenue Path",
+      "takeaway": "Revenue grows from {rev_26} to {rev_27}.",
+      "table": {
+        "header": [
+          "",
+          "2026E",
+          "2027E"
+        ],
+        "rows": [
+          [
+            "Revenue",
+            "{rev_26}",
+            "{rev_27}"
+          ],
+          [
+            "EPS",
+            "2.85",
+            "{eps_27_ours}"
+          ]
+        ]
+      },
+      "notes": "Walk the two years left to right.",
+      "source": "SUM tab"
+    },
+    {
+      "type": "text_chart",
+      "section": "support",
+      "supports": "thesis.2",
+      "title": "Margin Bridge",
+      "takeaway": "Mix and scale add margin every year.",
+      "bullets": [
+        "Mix adds most of the gain.",
+        "Scale adds the rest."
+      ],
+      "notes": "Point at the bridge chart.",
+      "source": "Filings Charts tab"
+    },
+    {
+      "type": "quote",
+      "section": "appendix",
+      "title": "Management On Growth",
+      "takeaway": "Management repeated its growth guide on the Q3 call.",
+      "quotes": [
+        "q1"
+      ],
+      "notes": "Read the quote once.",
+      "source": "Q3 2026 call"
+    }
+  ],
+  "pitch_sheet": {
+    "script_3min": [
+      "Open with the call.",
+      "Say the price and the return."
+    ],
+    "napkin": [
+      "Long XYZ",
+      "Buy below {buy_price}",
+      "Target {target_3y}"
+    ],
+    "hard_questions": [
+      {
+        "q": "What if growth stalls?",
+        "a": "Backlog covers next year; the tripwire is two soft quarters."
+      },
+      {
+        "q": "Why is the Street wrong?",
+        "a": "It models the new product late."
+      },
+      {
+        "q": "What is the exit?",
+        "a": "Growth under 10% for two quarters."
+      }
+    ],
+    "know_cold": [
+      "price",
+      "base_ret",
+      "irr_3y"
+    ]
+  },
+  "sum_boxes": {
+    "Thesis Summary": "Growth holds, margins expand, cash returns rise.",
+    "Trading Plan": "Buy below {buy_price}; add hard at {nobrainer_price}.",
+    "Valuation Thoughts": "Target {target_3y} in three years, IRR {irr_3y}.",
+    "Buy price": "{buy_price}",
+    "No-brainer price": "{nobrainer_price}",
+    "Mgmt contact": null
+  },
+  "notes": [
+    "Chose a Long because Valuation says Buy and R/R clears 2 to 1.",
+    "IRR is under the 20% hurdle, so the call rests on the R/R test."
+  ]
+}
