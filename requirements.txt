@@ -7,3 +7,5 @@ markdown
 matplotlib
 numpy
 pandas
+python-pptx
+python-docx
