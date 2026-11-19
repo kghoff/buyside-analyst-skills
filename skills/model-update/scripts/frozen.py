@@ -64,7 +64,10 @@ def table(rows, grid, model, col, placeholders=()):
     out = []
     for x in rows:
         r = m.keys.get(x.get("key")) or by_label.get(str(x["label"]).strip().lower())
-        a = grid.get(f"{col}{r}") if r and f"{col}{r}" not in placeholders else None
+        if not r:                                 # a band-7 label MOD no longer has: said, not a silent blank
+            out.append({"label": x["label"], "frozen": x["q"], "actual": "no MOD row", "diff": None})
+            continue
+        a = grid.get(f"{col}{r}") if f"{col}{r}" not in placeholders else None
         f = x["q"]
         d = round(a - f, 6) if isinstance(a, (int, float)) and isinstance(f, (int, float)) else None
         out.append({"label": x["label"], "frozen": f, "actual": a, "diff": d})

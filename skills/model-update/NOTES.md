@@ -53,6 +53,10 @@ Why things are the way they are. Read before changing scripts.
   total that moves with each restated quarter) because a restated Q2 silently moves a `FY less Q1-Q3` Q4.
 - **New lines are reported, never inserted.** Row inserts shift every reference in the workbook and belong to
   model-historicals / model-kpis.
+- **The 10-Q rerun checks rows first.** Every awaiting cell, placeholder and typed subtotal is saved with its row key;
+  fill_tenq stops before writing if any key is no longer on its row (a /model-forecast insert since print night).
+  Structural forecast changes belong after the 10-Q rerun. A difference on a typed subtotal or a combined line has
+  `can_take` false: the subtotal's formula comes back instead of the filing's number.
 - **state.json is written into `$TMP` and copied with the model.** actuals.py writes it as it builds the copy; a run
   that stops later must not leave a state describing cells the user's file doesn't have (the 10-Q rerun would skip
   them). The 10-Q pass is run twice when the user answers the differences question, each time from the saved state.
@@ -61,8 +65,16 @@ Why things are the way they are. Read before changing scripts.
 - **Guidance blocks show completed years only** (research-filings `block_guidance`). On Q1–Q3 prints the guides are
   only recorded (`Filings Research/_work/readers/update_<quarter>/guidance.csv`); on a Q4 print the closed year is
   added to model_series.csv, `last_year` is bumped and Filings Charts is rebuilt with `handoff.py --charts-only` (the
-  one change made to research-filings). close-year writes research-filings' data before verify; if the run stops
-  after it, a rerun skips the rows already added.
+  one change made to research-filings).
+- **close-year rebuilds model_series.csv, never remaps it.** The csv's `MOD!<col><row>` sources go stale whenever MOD
+  rows move; on the real DXCM data 8,084 of 8,106 were stale (Revenue pointed at a '% yoy' row), so remapping a
+  column letter wrote the wrong lines and handoff.py's check_rows stopped the run. close-year runs research-filings'
+  own `modeldata.extract` on the finished copy (the closed year's header has no E, so it is included).
+- **Staged, copied back after the model.** record, close-year and the charts rebuild work on a copy of
+  `model_handoff.json`, `drivers_math.json`, `model_series.csv` and `readers/*/guidance.csv` in `$TMP/fr` (all that
+  `handoff.py --charts-only` reads); only changed files go back, after the model copy. A stopped run leaves
+  research-filings' data as it was. verify.py skips Filings Charts in its link check with `--charts`: the rebuild
+  adds a row per guidance block, and check_rows already proved its sources.
 
 ## Forecast roll
 - **Targeted roll is enforced by code.** plandiff.py fails if any plan entry changed without a changes.json entry, or

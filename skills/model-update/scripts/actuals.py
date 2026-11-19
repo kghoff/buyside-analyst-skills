@@ -375,6 +375,7 @@ def build(model, quarter, res, out, state_path, restate=False, grid=None):
     pkg.save(out)
     import modfill; modfill.fix(out, out)
     import notebox; notebox.fix(out, out)
+    typed_sub = [{**t, "key": key_of.get(t["ref"], (0, None))[1]} for t in typed_sub]   # fill_tenq's row check
     state = {"quarter": q.rstrip("E"), "column": qc, "fy_column": fc if q4 else None,
              "awaiting": [{"ref": r, "key": key_of.get(r, (0, None))[1], "kind": kinds[r]} for r in sorted(waiting)],
              "placeholders": placeholders, "typed_subtotals": typed_sub, "release_values": typed,
@@ -394,14 +395,37 @@ def build(model, quarter, res, out, state_path, restate=False, grid=None):
             "waiting_read_elsewhere": {d: sorted(r) for d, r in sorted(readers.items())}}
 
 
+def moved_rows(m, state):
+    """Every awaiting cell, placeholder and typed subtotal whose MOD line is no longer on the row state.json names
+    (a /model-forecast run between print night and the 10-Q can insert or move rows): ['key: row a -> b']."""
+    out = []
+    for e in state.get("awaiting", []) + state.get("placeholders", []) + state.get("typed_subtotals", []):
+        if not e.get("key"):
+            continue
+        was = int(re.match(r"[A-Z]+(\d+)$", e["ref"]).group(1))
+        now = m.keys.get(e["key"])
+        if now != was:
+            out.append(f"{e['key']}: row {was} -> {'gone' if now is None else f'row {now}'}")
+    return list(dict.fromkeys(out))
+
+
 def fill_tenq(model, res, out, state_path, take=None):
     """10-Q (or 10-K) rerun: replace the waiting cells it prints (placeholders and blanks: blue, with a note), list
     where it differs from the release (never from a placeholder: that is a forecast, not a reported value), and bring
     back every typed subtotal's formula once none of the cells it reads waits. A 10-K's annual line fills the year
-    column only; Q4 follows it where print night kept last year's plug ('FY less Q1-Q3')."""
+    column only; Q4 follows it where print night kept last year's plug ('FY less Q1-Q3').
+    A difference with can_take false cannot be taken: a typed subtotal (its formula comes back instead) or a
+    combined line (no single cell). Stops before writing anything if a MOD row moved since print night."""
     state = json.load(open(state_path))
     qc, fc = state["column"], state.get("fy_column")
     m = ModMap(model)
+    mv = moved_rows(m, state)
+    if mv:
+        raise SystemExit(
+            f"MOD rows moved since print night ({'; '.join(mv[:10])}): state.json names the waiting cells, placeholders "
+            "and typed subtotals by cell, so this rerun would write into the wrong rows. Nothing was written. Undo the "
+            "row changes (or restore the model from before them), rerun /model-update for the 10-Q, then make the "
+            "structural /model-forecast changes again.")
     q = state["quarter"]
     pkg = Package(model)
     part = _part(pkg)
@@ -417,7 +441,7 @@ def fill_tenq(model, res, out, state_path, take=None):
     def differs(ref, e, value):
         if ref in rv and abs(rv[ref] - value) > e["tol"]:
             diffs.append({"ref": ref, "key": e["key"], "release": rv[ref], "tenq": value, "file": e["file"],
-                          "lineno": e["lineno"]})
+                          "lineno": e["lineno"], "can_take": ref not in saved})   # a typed subtotal gets its formula back
             return True
         return False
     for e in res["matched"]:
@@ -451,7 +475,8 @@ def fill_tenq(model, res, out, state_path, take=None):
         parts = [new.get(f"{qc}{r}") for r in c["rows"]]
         if c.get("cur") is not None and all(parts) and abs(sum(p["cur"] for p in parts) - c["cur"]) > c["tol"] * len(parts):
             diffs.append({"ref": None, "key": " + ".join(c["keys"]), "release": c["cur"],
-                          "tenq": sum(p["cur"] for p in parts), "file": c["file"], "lineno": c["lineno"], "combined": True})
+                          "tenq": sum(p["cur"] for p in parts), "file": c["file"], "lineno": c["lineno"], "combined": True,
+                          "can_take": False})
     waiting -= set(filled)
     restored, pending, changed = [], dict(saved), True
     while changed:                                    # restoring one can free another (NI -> EPS)

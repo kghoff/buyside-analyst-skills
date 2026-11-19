@@ -28,7 +28,12 @@ def changed(old, new):
 
 
 def check(old, new, changes):
-    probs = []
+    probs = [f"changes.json entry {i + 1} has no key: name the plan entry it changes" for i, c in enumerate(changes)
+             if not isinstance(c, dict) or not c.get("key")]
+    probs += [f"forecast_plan.json rows entry {i + 1} has no key: put back the key it had" for i, e in
+              enumerate(new.get("rows", [])) if not isinstance(e, dict) or not e.get("key")]
+    if probs:
+        return probs                            # the agent fixes these first; the comparison needs every key
     diff = changed(old, new)
     listed = [c["key"] for c in changes]
     probs += [f"{k} changed with no entry in changes.json" for k in diff if k not in listed]

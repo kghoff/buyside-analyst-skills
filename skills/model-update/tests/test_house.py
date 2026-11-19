@@ -133,7 +133,7 @@ def test_a_range_reads_its_middle_cells(tmp_path):
     text = "\n".join(x for x in mf.release_md("normal").split("\n") if not x.startswith("| Other current assets"))
     ws, _, st, _, _ = _q3(tmp_path, text=text)
     assert ws["L15"].value == 15.5 and ws["L17"].value == 103.0      # a placeholder in the middle: the total is typed
-    assert {"ref": "L17", "formula": "SUM(L14:L16)"} in st["typed_subtotals"]
+    assert {"ref": "L17", "formula": "SUM(L14:L16)", "key": "ASSETS: | Total assets"} in st["typed_subtotals"]
 
 
 def test_refs_expand_ranges_and_ignore_function_names():

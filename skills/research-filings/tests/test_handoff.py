@@ -136,6 +136,7 @@ def test_stock_blocks_read_the_stock_from_the_column_they_are_given(tmp_path):
 def test_charts_only_leaves_idio_chart_alone_so_a_q4_refresh_cannot_touch_price_history(tmp_path, monkeypatch, capsys):
     # /model-update refreshes Filings Charts after a Q4; the user's Idio Chart and Px Events must not be looked at
     import json, sys
+    TAB = handoff.TAB
     work = tmp_path / "_work"
     work.mkdir()
     json.dump({"config": {"revenue": 1, "cogs": 2, "operating_income": 3}}, open(work / "drivers_math.json", "w"))
@@ -165,7 +166,8 @@ def test_charts_only_leaves_idio_chart_alone_so_a_q4_refresh_cannot_touch_price_
     monkeypatch.setattr(handoff, "Package", FakePkg)
     monkeypatch.setattr(handoff, "Styles", FakeStyles)
     monkeypatch.setattr(handoff, "Tab", FakeTab)
-    monkeypatch.setattr(handoff, "write_tab", lambda *a: None)
+    wrote = []
+    monkeypatch.setattr(handoff, "write_tab", lambda *a: wrote.append(TAB))
     monkeypatch.setattr(handoff, "block_fixed_variable", lambda *a: False)
     monkeypatch.setattr(handoff, "block_profit_bridge", lambda *a: False)
     monkeypatch.setattr(handoff, "block_price_volume", lambda *a: False)
@@ -177,3 +179,4 @@ def test_charts_only_leaves_idio_chart_alone_so_a_q4_refresh_cannot_touch_price_
     handoff.main()
     assert "Idio Chart" not in asked
     assert "idio" not in json.loads(capsys.readouterr().out)
+    assert wrote == [TAB]                         # the point of the Q4 refresh: Filings Charts is still rebuilt

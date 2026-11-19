@@ -40,3 +40,12 @@ def test_thesis_must_be_one_of_three_and_undercuts_go_first_in_bold():
     page = plandiff.page(ch, "| h |", "| h2 |", "Revenue $520-530M")
     assert page.index("**A**") < page.index("| B |")
     assert plandiff.check(OLD, new, [dict(ch[0], thesis="maybe"), ch[1]]) == ["B: thesis must be none, supports or undercuts"]
+
+
+def test_an_entry_without_a_key_is_a_problem_the_agent_fixes_not_a_crash():
+    """The agent writes changes.json and the plan by hand; a missing key would crash the guard with a traceback
+    instead of going back to the agent as a problem it can fix."""
+    probs = plandiff.check(OLD, OLD, [{"was": "1", "now": "2", "anchor": "x", "reason": "y", "thesis": "none"}])
+    assert probs == ["changes.json entry 1 has no key: name the plan entry it changes"]
+    new = {"rows": [{"growth": 0.10}, {"key": "B", "pct": 0.4}], "layout": [1]}
+    assert plandiff.check(OLD, new, []) == ["forecast_plan.json rows entry 1 has no key: put back the key it had"]

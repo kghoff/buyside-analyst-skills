@@ -26,6 +26,10 @@ Skills and agents are named here without a prefix. Installed as a plugin, Claude
   note, so the forecast formulas reading it keep working until the filing prints the real one.
 - `state.json` lives in `$TMP` while the run works and is copied to `$QW` only together with the model: a stopped
   run must not leave a state that says cells were filled.
+- research-filings' data (`$SRC/Filings Research/_work`) is changed only through a staged copy in `$TMP/fr`, copied
+  back in step 7 after the model copy: a stopped run leaves it as it was.
+- Every stop once `$TMP` exists removes it first (`rm -rf "$TMP"`): it holds copies of the model, and the house rule
+  is to keep no backup copies.
 - Every python call below is logged (command and one-line result) to `$QW/update_log.md`.
 
 Create a task list with these steps.
@@ -106,9 +110,13 @@ sits on the wrong row or a subtotal formula disagrees with the release: show the
 stop (`rm -rf "$TMP"`; their file was never touched).
 
 ## 5. Guidance
-If `$SRC/Filings Research/_work/model_handoff.json` exists:
+If `$SRC/Filings Research/_work/model_handoff.json` exists, stage research-filings' data in `$TMP` and record there
+(the real folder changes only in step 7, after the model copy):
 ```bash
-python3 "$SK/guidance.py" record --work "$SRC/Filings Research/_work" --answers "$QW/guidance_answers.json" --quarter "$QN"
+FRW="$SRC/Filings Research/_work"; FW="$TMP/fr/Filings Research/_work"; mkdir -p "$FW"
+cp "$FRW/model_handoff.json" "$FRW/drivers_math.json" "$FRW/model_series.csv" "$FW/"
+(cd "$FRW" && for f in readers/*/guidance.csv; do [ -f "$f" ] && mkdir -p "$FW/$(dirname "$f")" && cp "$f" "$FW/$f"; done)
+python3 "$SK/guidance.py" record --work "$FW" --answers "$QW/guidance_answers.json" --quarter "$QN"
 ```
 It records each guided metric's new guide; `no_block` lists metrics the company guides that have no Filings Charts
 block (reported, not added). Filings Charts shows completed years only, so on Q1–Q3 the tab does not change. Without
@@ -151,23 +159,24 @@ yet: tell the user the forecast columns were left as they were).
    ```
    Any build error, `check.py` exit 1, layout exit 1, `rows_inserted` in the build report, or a moved line (the last
    command prints anything but `[]`) goes back to the agent; then 5 and 6 again. After two rounds that still fail,
-   stop and tell the user (their file was never touched). Copy `$R/forecast_headlines.md` to `$QW/headlines.after.md`.
+   stop (`rm -rf "$TMP"`) and tell the user (their file was never touched). Copy `$R/forecast_headlines.md` to `$QW/headlines.after.md`.
 7. `python3 "$SK/plandiff.py" page --changes "$QW/changes.json" --old-head "$QW/headlines.before.md" --new-head "$QW/headlines.after.md" --guide "<the new guidance, one line per metric>" --out "$QW/approval.md"`.
    Show the user the path, paste the changes table (undercutting changes first, in bold) and the two headline tables,
    and ask ONE AskUserQuestion: approve / change (notes). Notes go to the same agent, then 5–7 again. With no changes
    at all (`changes.json` is `[]`), say so, show the headline tables (they still move with the actual quarter) and do
    not ask: the plan is the one the user already approved.
-8. On approval `cp "$R/laid.xlsx" "$TMP/f.xlsx"`.
+8. On approval, or with no changes (`changes.json` is `[]`), `cp "$R/laid.xlsx" "$TMP/f.xlsx"`.
 
 ## 6b. Q4 only: close the year on Filings Charts
 When `is_q4` and step 5 ran:
 ```bash
-python3 "$SK/grid.py" "$TMP/f.xlsx" "$QW/values_f.json" --recalc "$TMP/rc2"
-python3 "$SK/guidance.py" close-year --work "$SRC/Filings Research/_work" --year <fy without E> --cols '{"<prior year column>": "<fy_column>"}' --values "$QW/values_f.json"
-python3 "$RF/handoff.py" --src "$SRC" --model "$TMP/f.xlsx" --out "$TMP/g.xlsx" --charts-only && mv "$TMP/g.xlsx" "$TMP/f.xlsx"
+python3 "$SK/guidance.py" close-year --work "$FW" --year <fy without E> --model "$TMP/f.xlsx" --rf "$RF"
+python3 "$RF/handoff.py" --src "$TMP/fr" --model "$TMP/f.xlsx" --out "$TMP/g.xlsx" --charts-only && mv "$TMP/g.xlsx" "$TMP/f.xlsx"
 ```
-The prior year column is the year column just before `fy_column` in MOD row 2. `--charts-only` rebuilds Filings
-Charts and leaves Idio Chart and Px Events as they are.
+close-year rebuilds the staged `model_series.csv` from the finished copy with research-filings' own extractor (its
+MOD rows go stale whenever rows move; the closed year's header has no E now, so it is included) and bumps
+`last_year`. `--charts-only` rebuilds Filings Charts from the staged data and leaves Idio Chart and Px Events as they
+are. A handoff.py error: stop (`rm -rf "$TMP"`) and show it.
 
 ## 7. Verify and replace the model
 ```bash
@@ -180,7 +189,11 @@ their file was never touched). Then:
    the user saved meanwhile: stop, `rm -rf "$TMP"`, tell them, and rerun from step 0.
 2. `cp "$TMP/f.xlsx" "$MODEL"`, `cp "$TMP/state.json" "$QW/state.json"`; if the roll ran,
    `cp "$QW/forecast_plan.json" "$MWF/forecast_plan.json"` and `cp "$QW/headlines.after.md" "$MWF/forecast_headlines.md"`.
-3. `rm -rf "$TMP"`.
+3. If step 5 ran, copy back only the staged research-filings files that changed:
+   ```bash
+   (cd "$FW" && find . -type f | while read -r f; do cmp -s "$f" "$FRW/$f" || { mkdir -p "$FRW/$(dirname "$f")"; cp "$f" "$FRW/$f"; }; done)
+   ```
+4. `rm -rf "$TMP"`.
 
 ## 8. Report
 Tell the user, in plain English:
@@ -201,37 +214,52 @@ Tell the user, in plain English:
    metrics reported but not added, `no_layout` / `no_prior` / `zero_skipped` lines, tables with an assumed scale,
    discontinued metrics (keys awaiting now that also awaited in the previous quarter's `state.json`), the frozen-copy
    source, whether the call was read, guided metrics with no Filings Charts block, structural changes the roll agent
-   suggested for /model-forecast, and that the forecast write-up (`$MWF/forecast_writeup.md`) predates the roll.
+   suggested for /model-forecast (tell the user to make them AFTER the 10-Q rerun: a row inserted or moved before
+   it makes the rerun stop, because state.json names the waiting cells by row), and that the forecast write-up (`$MWF/forecast_writeup.md`) predates the roll.
 5. Rerun, in order: /model-price-history, /model-consensus, /model-dcf, /model-multiples, /model-valuation,
    /model-short (if short), model-earnings-after (once it exists), /model-earnings-before about two weeks before the
    next print.
 
 ## 10-Q rerun
-locate printed `tenq`: `Q` = its `quarter` (no E now: the column holds actuals), `QW` as above, `TMP=$(mktemp -d)`;
-the filing is `filing` (the 10-Q, or the 10-K for a Q4). Preflight 1–3 as above.
+locate printed `tenq`: steps 0.1–0.4 have already run (the filing is collected, `SHA0` is taken, and locate is what
+sent you here). `Q` = its `quarter` (no E now: the column holds actuals), `QW` as above, `TMP=$(mktemp -d)`; the
+filing is `filing` (the 10-Q, or the 10-K for a Q4). Every file this pass writes in `$QW` has a `_10q` name, so
+print night's files stay as they were.
 ```bash
 python3 "$SK/grid.py" "$MODEL" "$QW/values_10q.json" --recalc "$TMP/rc0"
 python3 "$SK/release.py" "<filing>" --root "$SRC" --out "$QW/filing_lines.json"
 python3 "$SK/match.py" match --release "$QW/filing_lines.json" --model "$MODEL" --values "$QW/values_10q.json" --quarter "$Q" --out "$QW/match_10q.json"
 ```
-Open lines go to the reader agent as in step 2 (`{GUIDED}` = `skip`, `{DOCS}` = the filing), then `match.py apply`
-with `--match`/`--out` `"$QW/match_10q.json"` and the same `--values` and `--quarter`. Then:
+Open lines go to the reader agent as in step 2, with `{OPEN_LINES}` = `$QW/open_lines_10q.json`, the assignment in
+`$QW/reader_10q.assignment.md`, `{ANSWERS}` = `$QW/reader_answers_10q.json`, `{GUIDANCE}` =
+`$QW/guidance_answers_10q.json`, `{GUIDED}` = `skip` and `{DOCS}` = the filing; then `match.py apply` with
+`--answers "$QW/reader_answers_10q.json"`, `--match`/`--out` `"$QW/match_10q.json"` and the same `--values` and
+`--quarter`. Then:
 ```bash
 cp "$QW/state.json" "$TMP/state.json"
 python3 "$SK/actuals.py" --model "$MODEL" --quarter "$Q" --match "$QW/match_10q.json" --out "$TMP/a.xlsx" --state "$TMP/state.json" --tenq > "$QW/tenq_report.json"
 ```
-If `differences` is not empty, show them (line, release, filing, file:line; `combined` rows compare a combined line
-with its rows' sum) and ask ONE AskUserQuestion: keep the release values / take the filing's (all, or the cells the
-user names). Write the refs to take to `$QW/take.json` (`[]` keeps the release values), then
-`cp "$QW/state.json" "$TMP/state.json"` again (the first pass updated it) and rerun the command with
-`--take-10q "$QW/take.json"`. Then:
+It stops with "MOD rows moved since print night" when a line state.json names is no longer on its row (a
+/model-forecast run since print night inserted or moved rows): stop (`rm -rf "$TMP"`), show the message and tell the
+user to undo the row change (or restore the model from before it), rerun /model-update for the filing, and make the
+structural change after it.
+
+`differences`: show them all (line, release, filing, file:line; `combined` rows compare a combined line with its
+rows' sum). Only the ones with `can_take` true can take the filing's number; the others are typed subtotals (their
+formula comes back once their parts are filled) or combined lines (no single cell): say so. If any has `can_take`
+true, ask ONE AskUserQuestion: keep the release values / take the filing's (all, or the cells the user names). Write
+the refs to take to `$QW/take.json` (`[]` keeps the release values), then `cp "$QW/state.json" "$TMP/state.json"`
+again (the first pass updated it) and rerun the command with `--take-10q "$QW/take.json"`. Then write
+`$QW/kept.json` (`[]` when nothing is kept): the refs of every `can_take` difference the user kept (the cell holds
+the release's number on purpose) plus every typed-subtotal difference not in the report's `restored` (its typed
+release number stays until its formula can come back). Then:
 ```bash
 python3 "$SK/grid.py" "$TMP/a.xlsx" "$QW/values_a10q.json" --recalc "$TMP/rc1"
 python3 "$SK/tieout.py" --match "$QW/match_10q.json" --values "$QW/values_a10q.json" --column <col> --state "$TMP/state.json" --awaiting "$QW/kept.json" [--fy-column <fy col>]
 python3 "$SK/verify.py" --before "$MODEL" --after "$TMP/a.xlsx" --state "$TMP/state.json" --work "$TMP/v" --before-values "$QW/values_10q.json"
 ```
-`$QW/kept.json` = the refs of the differences the user kept (the cell holds the release's number on purpose; `[]` if
-none). Then step 7's checksum and copy with `$TMP/a.xlsx` as the finished copy (`cp "$TMP/a.xlsx" "$TMP/f.xlsx"`
+tieout or verify exit 1: show the problems in plain English and stop (`rm -rf "$TMP"`; their file was never
+touched). Then step 7's checksum and copy with `$TMP/a.xlsx` as the finished copy (`cp "$TMP/a.xlsx" "$TMP/f.xlsx"`
 first), and report: cells filled, formulas restored (`restored`), differences and the user's answer, placeholders
 still waiting (and why: `driver` / `manual` never come from a filing). If a filled or changed line feeds the forecast
-plan, say so and offer the roll (step 6).
+plan, say so: the next print's roll or /model-forecast picks it up.

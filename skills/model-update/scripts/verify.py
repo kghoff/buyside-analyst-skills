@@ -21,7 +21,7 @@ Checks:
    the user's own note, 'Update: ' appended after it); every placeholder is
    orange; every cell carrying a placeholder note is listed in state.json's placeholders;
 6. every formula on another tab that refers to MOD!<col><row> points at a row with the same column-B label and a
-   column with the same period header (E dropped) as before;
+   column with the same period header (E dropped) as before (with --charts, not on Filings Charts: rebuilt whole);
 7. (with --mid) no MOD line moved in the roll: model-forecast's layout.py / build.py / move_rows.py can move rows when
    a plan adds rows or changes its layout, and then every ref in state.json (awaiting cells, placeholders, typed
    subtotals and their saved formulas) would point at the wrong row on the 10-Q rerun. A targeted roll changes
@@ -152,14 +152,16 @@ def roll(mid, after, state):
     return static(mid, after, state, forecast_cols(mid))
 
 
-def links(before, after):
+def links(before, after, charts=False):
+    """Check 6. With charts (a Q4 rebuilt Filings Charts whole) that tab is skipped: a closed year adds a row to every
+    guidance block, so its cells shift legitimately, and handoff.py's check_rows already proved its MOD sources."""
     fa, fb = _book(before)[0], _book(after)[0]
     la, lb = fa[TAB], fb[TAB]
     label = lambda g, r: g.get(f"B{r}")
     period = lambda g, c: str(g.get(f"{c}2", "")).strip().rstrip("E")
     probs = []
     for s in fa:
-        if s == TAB or s not in fb:
+        if s == TAB or s not in fb or (charts and s == "Filings Charts"):
             continue
         for ref, f in fa[s].items():
             g = fb[s].get(ref)
@@ -206,7 +208,7 @@ def check(before, after, state, after_grid, before_grid, restated=(), charts=Fal
     if mid:
         probs += roll(mid, after, state)
     probs += balance(after_grid.get(TAB, {}), after, state["column"])
-    probs += links(before, after)
+    probs += links(before, after, charts)
     return probs
 
 

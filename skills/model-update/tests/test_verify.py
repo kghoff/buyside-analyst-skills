@@ -107,6 +107,28 @@ def test_a_link_that_now_points_at_another_line_is_caught(model, tmp_path):
     assert verify.links(model, out) == ["Valuation!B3 -> MOD!N4: was 'Revenue', now 'Cost of sales'"]
 
 
+def _charts_tab(model, out, years):
+    """A Filings Charts tab with two guidance blocks of MOD links, one row per year (handoff.py's layout)."""
+    def add(wb):
+        fc = wb.create_sheet("Filings Charts")
+        r = 3
+        for block in ("Revenue", "Gross profit"):
+            for y, col in years:
+                fc[f"B{r}"], fc[f"C{r}"] = y, f"=MOD!{col}{4 if block == 'Revenue' else 7}"
+                r += 1
+    return _edit(model, out, add)
+
+
+def test_a_q4_charts_rebuild_that_adds_a_year_to_each_guidance_block_is_not_a_broken_link(model, tmp_path):
+    """On a Q4 the closed year adds a row to every guidance block, so the second block's cells shift down a row. That
+    is the rebuild working, not a broken link; reporting it would stop every Q4 print. Without --charts (no rebuild)
+    the same shift is still caught."""
+    before = _charts_tab(model, str(tmp_path / "b.xlsx"), [("2025", "H")])
+    after = _charts_tab(model, str(tmp_path / "a.xlsx"), [("2025", "H"), ("2026", "N")])
+    assert verify.links(before, after, charts=True) == []
+    assert verify.links(before, after) != []
+
+
 def test_a_changed_part_on_another_tab_is_caught_but_mods_own_parts_are_not(model, tmp_path):
     """Other tabs (Earnings band 7, Valuation...) must be byte-identical; MOD's sheet, rels and notes may change."""
     out, _ = _built(model, tmp_path)

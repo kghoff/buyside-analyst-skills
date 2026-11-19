@@ -53,3 +53,60 @@ def test_the_placeholders_are_explained_to_the_user():
     """Orange cells hold the old forecast, not reported numbers; a user who isn't told reads them as actuals."""
     rep = SKILL[SKILL.index("## 8. Report"):]
     assert "placeholder" in rep and "orange" in rep.lower() and "not reported numbers" in rep
+
+
+def _commands(text):
+    """Every shell line SKILL.md runs: lines inside code blocks and inline `python3 ...` / `cp ...` commands."""
+    out, code = [], False
+    for line in text.splitlines():
+        if "```" in line:                             # fences, also "2. ```bash" in a numbered step
+            code = not code
+            continue
+        if code:
+            out.append(line)
+        out += re.findall(r"`((?:python3|cp|mv) [^`]+)`", line)
+    return out
+
+
+def test_nothing_is_written_to_research_filings_data_before_the_model_copy():
+    """Guidance is recorded on every print and the closed year rebuilt on a Q4, before verify and the checksum. Written
+    straight into research-filings' folder, a run that stops later would leave guides and a bumped last_year for a
+    print the model never got; so they go to a staged copy that is copied back only after the model copy."""
+    copy = SKILL.index('cp "$TMP/f.xlsx" "$MODEL"')
+    pre = _commands(SKILL[:copy])
+    real = ('"$FRW', '"$SRC/Filings Research', 'handoff.py" --src "$SRC"')
+    for line in pre:
+        if not any(r in line for r in real) or line.startswith("FRW="):
+            continue
+        assert line.startswith("cp ") and line.rstrip().endswith('"$FW/"') or line.startswith('(cd "$FRW" &&'), line
+        assert "$FW/" in line, line
+    assert any('--work "$FW"' in x and "guidance.py\" record" in x for x in pre)
+    assert any('handoff.py" --src "$TMP/fr"' in x for x in pre)
+    back = SKILL.index('cp "$f" "$FRW/$f"')
+    assert back > copy and SKILL.index('rm -rf "$TMP"', back) > back
+
+
+def test_every_stop_once_tmp_exists_removes_it():
+    """$TMP holds copies of the user's model; the house rule is to keep no backup copies, so no stop may leave it."""
+    body = SKILL[SKILL.index("TMP=$(mktemp -d)"):]
+    body = body[:body.index("## 8. Report")] + body[body.index("## 10-Q rerun"):]   # the report gives no stops
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if re.search(r"\bstop\b", line) and "Every stop" not in line:
+            near = " ".join(lines[max(0, i - 1):i + 3])
+            assert 'rm -rf "$TMP"' in near, line
+
+
+def test_the_10q_rerun_keeps_print_nights_files():
+    """The 10-Q pass must not overwrite print night's open lines, answers or match: they are the record of what was
+    typed and why."""
+    tenq = SKILL[SKILL.index("## 10-Q rerun"):]
+    for name in ("open_lines", "reader_answers", "match"):
+        assert f"$QW/{name}_10q.json" in tenq and f"$QW/{name}.json" not in tenq, name
+    assert "$QW/reader_10q.assignment.md" in tenq and "$QW/reader.assignment.md" not in tenq
+
+
+def test_kept_json_is_written_before_the_tieout_that_reads_it():
+    """tieout reads kept.json; a missing file is a crash, a stale one skips the wrong cells."""
+    tenq = SKILL[SKILL.index("## 10-Q rerun"):]
+    assert tenq.index("`$QW/kept.json` (`[]`") < tenq.index('--awaiting "$QW/kept.json"')

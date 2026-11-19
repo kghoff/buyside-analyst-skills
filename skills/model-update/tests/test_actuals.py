@@ -97,7 +97,7 @@ def test_a_subtotal_over_a_waiting_line_is_typed_and_restorable(model, tmp_path)
     gives the parts."""
     ws, _, st = _build(model, tmp_path, "combined")
     assert ws["L17"].value == 103.0
-    assert st["typed_subtotals"] == [{"ref": "L17", "formula": "SUM(L14:L16)"}]
+    assert st["typed_subtotals"] == [{"ref": "L17", "formula": "SUM(L14:L16)", "key": "ASSETS: | Total assets"}]
 
 
 def test_recasts_change_history_only_with_a_yes(model, tmp_path):

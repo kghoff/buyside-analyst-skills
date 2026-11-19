@@ -28,3 +28,10 @@ def test_a_placeholder_is_not_shown_as_the_actual(model):
     """A placeholder equals the forecast, so 'actual vs frozen' would show a zero surprise that never happened."""
     rows = frozen.table(frozen.read(model, "Q3 26E", {}, None), {"L4": 132.0, "L7": 88.0}, model, "L", {"L4"})
     assert rows[0] == {"label": "Revenue", "frozen": 132.0, "actual": None, "diff": None}
+
+
+def test_a_band_7_line_with_no_mod_row_says_so_instead_of_a_blank(model):
+    """A blank actual reads as 'not reported yet'; a band-7 label MOD no longer has (renamed since the preview) is a
+    different thing the user should see, so the table names it."""
+    rows = frozen.table([{"label": "Billings", "q": 150.0}], {"L4": 140.0}, model, "L")
+    assert rows == [{"label": "Billings", "frozen": 150.0, "actual": "no MOD row", "diff": None}]
