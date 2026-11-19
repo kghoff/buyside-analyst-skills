@@ -4,8 +4,11 @@ and after. The stop messages name the skill to run, because the user fixes the o
 
 The fixture has no cached formula values (openpyxl saved it), so values=model reads formulas as None: these tests
 assert only what comes from typed cells."""
+import datetime as dt
 import json
 import os
+import shutil
+import statistics
 import subprocess
 import sys
 
@@ -60,30 +63,60 @@ def test_placeholder_is_flagged_not_scored(ctx):
     assert not next(r for r in ctx["frozen"]["rows"] if r["label"].endswith("| Revenue"))["placeholder"]
 
 
-def test_move_and_drift(ctx):
-    """The move is read in daily sigmas from the 252 returns before the reaction day (the print itself excluded),
-    and the drift fills once T+7 is in Px Data."""
+def _px(path):
+    """Px Data's daily rows straight from the workbook: [(row, date, close, return)], independent of context.py."""
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    out = [(r[0].row, r[0].value.date(), r[1].value, r[3].value) for r in wb["Px Data"].iter_rows(min_row=1)
+           if isinstance(r[0].value, dt.datetime) and r[1].value is not None]
+    wb.close()
+    return out
+
+
+def test_move_and_drift(ctx, model):
+    """The move is read in daily sigmas from exactly the 252 returns before the reaction day (the print itself
+    excluded: it would inflate its own yardstick); run-up is T-8 to T-1 and drift T to T+7, as in the preview."""
     m = ctx["move"]
     assert m["release_day"] == str(mf.RELEASE_DAY) and m["reaction_day"] == str(mf.REACTION_DAY)
     assert m["day"] == pytest.approx(mf.DAY_MOVE) and m["idio"] == pytest.approx(mf.IDIO)
-    assert m["daily_sigma"] < 0.01 and m["sigma_n"] == 252          # the 8% print is not in its own sigma
+    px = _px(model)
+    i = next(k for k, x in enumerate(px) if x[1] == mf.REACTION_DAY)
+    win = px[i - 252:i]
+    assert m["daily_sigma"] == pytest.approx(statistics.stdev(x[3] for x in win), rel=1e-12) and m["sigma_n"] == 252
+    assert m["sigma_formula"] == f"IFERROR(STDEV('Px Data'!$D${win[0][0]}:$D${win[-1][0]}),NA())"
     assert m["sigmas"] == pytest.approx(mf.DAY_MOVE / m["daily_sigma"])
-    assert m["sigma_formula"].startswith("IFERROR(STDEV('Px Data'!$D$")
-    assert m["drift"] is not None and ctx["drift_ready"] and "'Px Data'!$B$" in m["drift_formula"]
+    ref = lambda k: f"'Px Data'!$B${px[k][0]}"   # noqa: E731
+    assert m["run_up_formula"] == f"IFERROR({ref(i - 1)}/{ref(i - 8)}-1,NA())"
+    assert m["run_up"] == pytest.approx(px[i - 1][2] / px[i - 8][2] - 1, rel=1e-12)
+    assert m["drift_formula"] == f"IFERROR({ref(i + 7)}/{ref(i)}-1,NA())"
+    assert m["drift"] == pytest.approx(px[i + 7][2] / px[i][2] - 1, rel=1e-12) and ctx["drift_ready"]
+    assert m["drift_day"] == px[i + 7][1].isoformat()
     assert m["open"] == 55.0 and m["gap"] is None        # the fixture's Yahoo has no previous close
 
 
-def test_no_drift_before_t_plus_7(model, fixture_research, work):
-    """Before seven trading days have passed the drift is None and the rerun question is not asked."""
+def _keep_days_after(model, n):
+    """Px Data cut to n trading days after the reaction day."""
     def cut(wb):
         px = wb["Px Data"]
-        rows = [r for r in range(5, px.max_row + 1) if px.cell(r, 1).value]
-        for r in rows[-5:]:
+        rows = [r for r in range(1, px.max_row + 1) if isinstance(px.cell(r, 1).value, dt.datetime)]
+        k = next(j for j, r in enumerate(rows) if px.cell(r, 1).value.date() == mf.REACTION_DAY)
+        for r in rows[k + n + 1:]:
             for c in range(1, 5):
                 px.cell(r, c).value = None
     _edit(model, cut)
+
+
+def test_drift_needs_exactly_t_plus_7(model, fixture_research, work):
+    """Seven trading days after the reaction day are enough for the drift; six are not, and once T+7 is due the
+    user is told to refresh Px Data rather than left with a silent blank."""
+    _keep_days_after(model, 7)
     c = _run(model, fixture_research, work)
-    assert c["move"]["drift"] is None and not c["drift_ready"]
+    assert c["drift_ready"] and c["move"]["drift"] is not None
+    _keep_days_after(model, 6)
+    c = _run(model, fixture_research, work)
+    assert c["move"]["drift"] is None and not c["drift_ready"] and c["move"]["drift_formula"] is None
+    assert any("rerun /model-price-history for the drift" in w for w in c["warnings"])
+    c = context.run(model, work, "TEST", values=model, research=fixture_research, today="2027-02-19")
+    assert not any("for the drift" in w for w in c["warnings"])          # T+7 (2027-02-22) not due yet
 
 
 def test_valuation_before_and_after(ctx):
@@ -92,17 +125,82 @@ def test_valuation_before_and_after(ctx):
     v = ctx["valuation"]
     assert v["before"]["values"]["IRR"]["value"] == pytest.approx(0.112)
     assert v["after"]["cells"]["IRR"]["value"] == pytest.approx(0.139)
-    assert "IRR" in v["labels"] and not any("rerun /model-valuation" in w for w in ctx["warnings"])
+    assert v["multiples"] == ["P/E"] and "IRR" in v["labels"]
     i = ctx["irr_now"]
     assert i["value"] == pytest.approx((140.0 / i["price"]) ** (1 / 3) - 1)
     assert len(ctx["fade"]) == 7 and ctx["fade"][0]["irr"] == pytest.approx(i["value"])
 
 
-def test_stale_valuation_tab_warns(model, fixture_research, work):
-    """A Valuation tab from before the reaction day is not the after-print valuation."""
-    _edit(model, lambda wb: wb["Valuation"].__setitem__("A1", "TEST valuation (model-valuation, 2026-11-17)"))
+def test_valuation_fresh_only_with_a_note_since_the_print(ctx, model, fixture_research, work, tmp_path):
+    """model-valuation's tab title has no date, but it writes a dated note every run: no note since the reaction
+    day means the tab may still hold the pre-print valuation."""
+    assert any("may predate the print" in w and "rerun /model-valuation" in w for w in ctx["warnings"])
+    root = str(tmp_path / "TEST")
+    shutil.copytree(fixture_research, root)
+    open(os.path.join(root, "Valuation", "2027-02-24 TEST Valuation Note.md"), "w").write("x")
+    c = _run(model, root, work)
+    assert c["valuation"]["after"]["fresh_note"] == "Valuation/2027-02-24 TEST Valuation Note.md"
+    assert not any("may predate the print" in w for w in c["warnings"])
+    assert c["valuation"]["before"]["path"] == mf.VALNOTE        # the after-print note is never the 'before'
+
+
+def test_multiples_union_note_then_tab(model, fixture_research, work):
+    """A multiple the after tab adds is compared too (before '?'), after the note's own, in that order."""
+    def add(wb):
+        v = wb["Valuation"]
+        v.cell(v.max_row + 1, 1, "EV/EBITDA: reward price")
+        v.cell(v.max_row, 2, 120.0)
+    _edit(model, add)
+    v = _run(model, fixture_research, work)["valuation"]
+    assert v["multiples"] == ["P/E", "EV/EBITDA"] and "EV/EBITDA: reward price" in v["labels"]
+
+
+def test_empty_values_fail_loud(model, fixture_research, work):
+    """A values copy that was never recalculated reads formulas as empty: say so rather than show silent '?'s."""
+    def blank(wb):
+        wb["MOD"]["AP3"] = None
+        for r in range(1, wb["Px Events"].max_row + 1):
+            if wb["Px Events"].cell(r, 1).value == mf.Q:
+                wb["Px Events"].cell(r, 17).value = None
+        for r in range(1, wb["Valuation"].max_row + 1):
+            if wb["Valuation"].cell(r, 1).value == "IRR":
+                wb["Valuation"].cell(r, 2).value = None
+    _edit(model, blank)
+    ws = _run(model, fixture_research, work)["warnings"]
+    assert any("AP3" in w and "Revenue" in w and "recalculated" in w for w in ws)
+    assert any("idio" in w and "recalculated" in w for w in ws)
+    assert any("Valuation tab has no value for IRR" in w for w in ws)
+    assert not any("Units" in w and "no value" in w for w in ws)     # the placeholder is not an empty actual
+
+
+def test_yahoo_for_another_day_is_dropped(model, fixture_research, work):
+    """Bars for the wrong day would put another day's gap on the print."""
+    json.dump({**mf.YAHOO, "reaction_day": "2027-02-12", "prev_close": 50.0, "close": 56.0},
+              open(os.path.join(work, "yahoo_after.json"), "w"))
     c = _run(model, fixture_research, work)
-    assert any("rerun /model-valuation" in w for w in c["warnings"])
+    assert c["move"]["gap"] is None and c["move"]["open_to_close"] is None
+    assert any("not the reaction day" in w for w in c["warnings"])
+    json.dump({**mf.YAHOO, "prev_close": 50.0, "close": 56.0}, open(os.path.join(work, "yahoo_after.json"), "w"))
+    m = _run(model, fixture_research, work)["move"]
+    assert m["gap"] == pytest.approx(0.1) and m["open_to_close"] == pytest.approx(56 / 55 - 1)
+
+
+def test_stale_px_data_warns(model, fixture_research, work):
+    """The IRR now uses Px Data's last close (the tab needs a cell): an old one is flagged, not passed as today's."""
+    c = context.run(model, work, "TEST", values=model, research=fixture_research, today="2027-03-15")
+    assert any("for today's price" in w for w in c["warnings"])
+    assert not any("for today's price" in w for w in _run(model, fixture_research, work)["warnings"])
+
+
+def test_modmap_reads_the_values_copy(model, fixture_research, work, monkeypatch):
+    """MOD's values and its row map must come from the same (recalculated) file."""
+    seen = []
+    real = context.ModMap
+    monkeypatch.setattr(context, "ModMap", lambda p, *a: seen.append(p) or real(p, *a))
+    vals = os.path.join(work, "values.xlsx")
+    shutil.copy(model, vals)
+    c = context.run(model, work, "TEST", values=vals, research=fixture_research, today="2027-02-28")
+    assert vals in seen and c["mod_periods"]["2026"] == "AQ" and c["mod_periods"]["Q4 26"] == "AP"
 
 
 def test_estimates_before_from_update_snapshot(ctx):
@@ -188,20 +286,23 @@ def test_stop_without_the_release_in_px_events(model, fixture_research, tmp_path
 
 
 def test_stop_when_px_data_ends_before_the_reaction_day(model, fixture_research, tmp_path):
-    def cut(wb):
-        px = wb["Px Data"]
-        for r in range(5, px.max_row + 1):
-            d = px.cell(r, 1).value
-            if d is not None and d.date() >= mf.REACTION_DAY:
-                for c in range(1, 5):
-                    px.cell(r, c).value = None
-    _edit(model, cut)
-    with pytest.raises(SystemExit, match="/model-price-history"):
+    _keep_days_after(model, -1)
+    with pytest.raises(SystemExit, match="ends .*before the reaction day.*/model-price-history"):
+        _run(model, fixture_research, str(tmp_path / "w"))
+
+
+def test_stop_when_px_data_has_no_row_for_the_reaction_day(model, fixture_research, tmp_path):
+    def weekend(wb):
+        ev = wb["Px Events"]
+        for r in range(1, ev.max_row + 1):
+            if ev.cell(r, 1).value == mf.Q:
+                ev.cell(r, 13).value = dt.datetime(2027, 2, 13)          # a Saturday: no trading row
+    _edit(model, weekend)
+    with pytest.raises(SystemExit, match="no row for the reaction day.*/model-price-history"):
         _run(model, fixture_research, str(tmp_path / "w"))
 
 
 def test_stop_without_a_transcript(model, fixture_research, tmp_path):
-    import shutil
     root = str(tmp_path / "TEST")
     shutil.copytree(fixture_research, root)
     os.remove(os.path.join(root, mf.TRANSCRIPT))

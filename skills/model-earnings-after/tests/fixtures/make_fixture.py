@@ -30,10 +30,9 @@ PLACEHOLDER_KEY = "KEY OPERATING METRICS | Units"
 TRANSCRIPT = f"Earnings Calls/_md/2026 Q4 {TICKER} call.md"
 RELEASE = f"Press Releases/_md/2026 Q4 {TICKER} release {RELEASE_DAY}.md"
 VALNOTE = f"Valuation/2026-11-17 {TICKER} Valuation Note.md"
-PREVIEW = f"Earnings Previews/{TICKER} 2026 Q4 earnings preview 2026-11-18.md"
+PREVIEW = f"Earnings Previews/{TICKER} {Q} earnings preview 2026-11-18.md"   # model-earnings-before note.py's name
 YAHOO = {"ticker": TICKER, "asof": "2027-02-25", "source": "Yahoo Finance chart (fixture)", "reaction_day":
          str(REACTION_DAY), "open": 55.0, "close": None, "prev_close": None, "price": None}
-VALUATION_DATE = "2027-02-24"                     # after the reaction day on purpose: an after-print Valuation tab
 VALUATION = {  # label: (before in the note, after on the tab)
     "P/E: reward price": (107.76, 118.00), "P/E: risk price": (59.80, 64.00), "P/E: reward / risk": (0.7, 1.1),
     "Blended reward price": (106.66, 116.00), "Blended risk price": (61.99, 66.00),
@@ -164,7 +163,7 @@ def _print(path):
         if isinstance(v, dt.date):
             ev.cell(r, c).number_format = "yyyy-mm-dd"
     v = wb.create_sheet("Valuation")
-    v["A1"] = f"{TICKER} valuation (model-valuation, {VALUATION_DATE})"
+    v["A1"] = f"{TICKER} valuation: what it's worth and whether the setup is worth owning"   # model-valuation's A1
     for i, (lab, (_, after)) in enumerate(VALUATION.items()):
         v.cell(4 + i, 1, lab)
         v.cell(4 + i, 2, after)

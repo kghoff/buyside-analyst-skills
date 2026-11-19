@@ -39,9 +39,11 @@ SKILL = "model-earnings-after"
 REQUIRED = {"MOD": "model-historicals", "Px Data": "model-price-history", "Px Events": "model-price-history"}
 IN_LINE_LABEL = "In-line band (±, for the beat / miss column)"     # band 9's input (build.py writes it)
 HOUSE = {"in_line": 0.01}
+EMPTY = ("likely the values copy was not recalculated (run without --values to recalculate in LibreOffice), or "
+         "the cell is blank in the model.")
 ESTIMATE_KEYS = (("Revenue", r"\| (total )?(net )?(revenues?|sales)$"), ("Gross profit", r"\| gross profit$"),
                  ("Operating income", r"\| operating income"), ("EPS, diluted", r"\| eps,? diluted"))
-TITLE_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})\)?\s*$")
+STALE_PX_DAYS = 5                       # calendar days: Px Data older than this is not today's price
 
 
 def _stop(msg):
@@ -114,11 +116,22 @@ def _yahoo(work):
     return json.load(open(p)) if os.path.exists(p) else {"error": "fetch_after.mjs was not run"}
 
 
-def move(g_ev, P, ticker, rel, rx, work, warnings):
+def add_trading_days(d, n):
+    """d plus n weekdays (holidays are not known here: close enough to say when T+7 is due)."""
+    while n:
+        d += dt.timedelta(days=1)
+        n -= d.weekday() < 5
+    return d
+
+
+def move(g_ev, P, ticker, rel, rx, work, today, warnings):
     idx = {x["date"]: i for i, x in enumerate(P["rows"])}
     day = rx["reaction_day"]
-    if day not in idx:
+    if P["rows"][-1]["date"] < day:
         _stop(f"Px Data ends {P['rows'][-1]['date']}, before the reaction day {day}. Rerun /model-price-history.")
+    if day not in idx:
+        _stop(f"Px Data has no row for the reaction day {day} (Px Events' date), though it runs past it. Rerun "
+              "/model-price-history.")
     pr = next((p for p in rates.prints(g_ev, P, ticker) if p["row"] == rx["row"]), None)
     if pr is None:
         _stop(f"Px Events' reaction row {rx['row']} has no day move. Rerun /model-price-history.")
@@ -127,10 +140,18 @@ def move(g_ev, P, ticker, rel, rx, work, warnings):
     ref = lambda k: f"'Px Data'!${c}${rows[k]['row']}"   # noqa: E731
     sg = sigma_before(P, i)
     run_ok, drift_ok = i - 1 - rates.RUN >= 0, i + rates.DRIFT < len(rows) and am._n(rows[i + rates.DRIFT]["close"])
+    due = add_trading_days(day, rates.DRIFT)
+    if not drift_ok and today >= due.isoformat():
+        warnings.append(f"The drift to T+7 ({due}) is due but Px Data ends {rows[-1]['date']}: rerun "
+                        "/model-price-history for the drift.")
     y = _yahoo(work)
     if y.get("error"):
         warnings.append(f"Yahoo's reaction-day bars failed ({y['error']}): the gap at the open and open-to-close "
                         "show '?'.")
+        y = {}
+    elif str(y.get("reaction_day")) != day.isoformat():
+        warnings.append(f"yahoo_after.json is for {y.get('reaction_day')}, not the reaction day {day}: the gap at "
+                        "the open and open-to-close show '?' (rerun fetch_after.mjs with the right day).")
         y = {}
     o, cl, pc = y.get("open"), y.get("close"), y.get("prev_close")
     return {"release_day": rel[0].isoformat(), "release_ref": rel[1], "reaction_day": day.isoformat(),
@@ -169,6 +190,8 @@ def frozen_rows(tab, mm, gm, q, state, band, warnings):
         a = a if am._n(a) else None
         fq = f["q"] if am._n(f["q"]) else None
         ph = bool(r) and (f"{col}{r}" in ph_refs or f["label"] in ph_keys)
+        if r and a is None and not ph:
+            warnings.append(f"MOD {col}{r} ({f['label']}, {q}) has no value: {EMPTY}")
         s = None if ph else am.surprise(a, fq)
         out.append({"label": f["label"], "row": f["row"], "frozen": fq, "frozen_ref": f"$B${f['row']}",
                     "frozen_fy": f["fy"] if am._n(f["fy"]) else None, "frozen_fy_ref": f"$C${f['row']}",
@@ -244,6 +267,15 @@ def estimates(mm, gm, q, frozen, drv, snap, snap_path, warnings):
 
 
 # ---------------------------------------------------------------- valuation, docs, house
+def _fresh_note(root, ticker, day):
+    """The newest '<date> <T> Valuation Note.md' dated on or after day (model-valuation writes one every run; its
+    tab title carries no date)."""
+    d = os.path.join(root, "Valuation")
+    got = sorted(f for f in (os.listdir(d) if os.path.isdir(d) else [])
+                 if (m := valnote.NOTE_RE.match(f)) and m.group(2) == ticker and m.group(1) >= day)
+    return f"Valuation/{got[-1]}" if got else None
+
+
 def valuation(root, ticker, release_day, reaction_day, values, warnings):
     p = valnote.latest_before(root, ticker, release_day)
     before = valnote.parse(p) if p else None
@@ -258,16 +290,21 @@ def valuation(root, ticker, release_day, reaction_day, values, warnings):
     if aft is None:
         warnings.append("The model has no Valuation tab: band 13's 'after' column shows '?'. Run /model-valuation.")
     else:
-        m = TITLE_DATE.search(str(aft["title"] or ""))
-        if not m:
-            warnings.append("The Valuation tab's title has no date: check it was rerun after the print "
-                            "(rerun /model-valuation if not).")
-        elif m.group(1) < reaction_day:
-            warnings.append(f"The Valuation tab is dated {m.group(1)}, before the reaction day {reaction_day}: its "
-                            "'after' values are pre-print: rerun /model-valuation, then this step.")
-        aft["date"] = m.group(1) if m else None
-    mults = (before or {}).get("multiples") or []
-    return {"before": before, "after": aft, "labels": valnote.labels(mults)}
+        aft["fresh_note"] = _fresh_note(root, ticker, reaction_day)
+        if not aft["fresh_note"]:
+            warnings.append(f"The Valuation tab may predate the print: no Valuation Note since {reaction_day}; "
+                            "rerun /model-valuation, then this step.")
+    mults = list((before or {}).get("multiples") or [])          # note order, then any the tab adds
+    for lab in (aft or {}).get("cells", {}):
+        m = re.fullmatch(r"(.+): reward price", lab)
+        if m and m.group(1) not in mults:
+            mults.append(m.group(1))
+    labels = valnote.labels(mults)
+    if aft:
+        empty = [lab for lab in labels if lab in aft["cells"] and aft["cells"][lab]["value"] is None]
+        if empty:
+            warnings.append(f"The Valuation tab has no value for {', '.join(empty)}: {EMPTY}")
+    return {"before": before, "after": aft, "multiples": mults, "labels": labels}
 
 
 def irr_now(aft, close, close_ref):
@@ -289,7 +326,7 @@ def docs(root, ticker, q, warnings):
         return os.path.relpath(got[-1], root) if got else None
     d = {"transcript": transcript.find(root, ticker, q),
          "release": newest(f"Press Releases/_md/{fy} {n} {ticker} release *.md"),
-         "preview": newest(f"Earnings Previews/{ticker} {fy} {n} earnings preview *.md")}
+         "preview": newest(f"Earnings Previews/{ticker} {q} earnings preview *.md")}   # model-earnings-before note.py
     if not d["transcript"]:
         _stop(f"no {q} call transcript at {root}/Earnings Calls/_md/{transcript.name(ticker, q)}.md. Run "
               f"/collect-documents {ticker}, or file the user's copy with: python3 transcript.py ingest --root "
@@ -357,10 +394,15 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
     g = {t: grid(wb[t]) for t in REQUIRED}
     H = house(wb)
     wb.close()
+    mm = ModMap(values)                           # the values copy, as the sibling reads it
     warnings = []
     rel, rx = release_and_reaction(g["Px Events"], q)
     P = rates.px_data(g["Px Data"], ticker)
-    mv = move(g["Px Events"], P, ticker, rel, rx, work, warnings)
+    mv = move(g["Px Events"], P, ticker, rel, rx, work, today, warnings)
+    for k, what in (("day", "the day move (Px Events)"), ("idio", "the idio move (Px Events)"),
+                    ("daily_sigma", "the daily sigma (Px Data returns)")):
+        if mv[k] is None:
+            warnings.append(f"No value for {what}: {EMPTY}")
     root = _research(ticker, research)
     dd = docs(root, ticker, q, warnings)
     upd, state = _state(model, q)
@@ -375,6 +417,9 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
     est = estimates(mm, g["MOD"], q, fz, drv, snap, sp, warnings)
     val = valuation(root, ticker, mv["release_day"], mv["reaction_day"], values, warnings)
     lc = rates.last_close(P)
+    if (dt.date.fromisoformat(today) - P["rows"][-1]["date"]).days > STALE_PX_DAYS:
+        warnings.append(f"Px Data ends {P['rows'][-1]['date']}; rerun /model-price-history for today's price (the "
+                        "IRR now uses that last close).")
     close_ref = f"'Px Data'!${P['cols']['close']}${lc['row']}"
     ir = irr_now(val["after"], lc["close"], close_ref)
     ir["price_date"] = lc["date"].isoformat()
@@ -390,7 +435,8 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
            "latest_close": {"value": lc["close"], "date": lc["date"].isoformat(), "ref": close_ref},
            "docs": dd, "topics": callnotes.topics([d["name"] for d in drv]),
            "drivers": [{"name": d["name"], "key": d["key"], "row": d["row"]} for d in drv],
-           "history": history(model), "mod_keys": [k for _, k, _ in mm.lines], "house": H,
+           "history": history(model), "mod_keys": [k for _, k, _ in mm.lines], "mod_periods": dict(mm.labels),
+           "house": H,
            "update": {"dir": upd, "snapshot": sp if snap is not None else None, "state": state},
            "warnings": warnings}
     json.dump(ctx, open(os.path.join(work, "context.json"), "w"), indent=1, default=str)
@@ -439,7 +485,8 @@ def _md(c):
                 L.append(f"| {e['name']} ({_c(e['label'])}) | {x['period']} | {_f(x['before'])} | {_f(x['now'])} | "
                          f"{_f(x['change'], 'pct')} |")
     b, a = v["before"] or {}, v["after"] or {}
-    L += ["", f"## Valuation (before: {b.get('path') or '?'}; after: the Valuation tab, {a.get('date') or '?'})", "",
+    L += ["", f"## Valuation (before: {b.get('path') or '?'}; after: the Valuation tab, "
+              f"{'note ' + a['fresh_note'] if a.get('fresh_note') else 'no note since the print'})", "",
           "| Label | Before | After |", "|---|---|---|"]
     for lab in v["labels"]:
         bv = (b.get("values") or {}).get(lab, {}).get("value")
