@@ -48,26 +48,43 @@ def test_blank_tile_is_detected_and_ink_is_not():
 
 
 def test_tall_page_is_cut_into_tiles_not_one_image():
-    rects = render_tabs.tile_rects(600, 600 * 1.3 * 20)
-    assert len(rects) == 20
-    assert all(r[2] == 600 and r[3] - r[1] <= 600 * 1.3 + 1e-6 for r in rects)
-    assert rects[-1][3] == 600 * 1.3 * 20            # the cut covers the whole page
+    tiles = render_tabs.tile_rects(600, 600 * 1.3 * 20)
+    assert len(tiles) == 20 and all(c == 1 for _, c, _ in tiles)     # narrow page: one column of its own width
+    assert all(r[2] == 600 and r[3] - r[1] <= 600 * 1.3 + 1e-6 for _, _, r in tiles)
+    assert tiles[-1][2][3] == 600 * 1.3 * 20                        # the cut covers the whole page
     assert len(render_tabs.tile_rects(600, 700)) == 1
 
 
-def test_cap_of_eight_and_truncated_flag():
-    rects = render_tabs.tile_rects(600, 600 * 1.3 * 20)
-    keep, truncated = render_tabs.pick_tiles(rects, lambda r: False)
-    assert len(keep) == 8 and truncated and keep[0] == rects[0]    # the top is kept
-    keep, truncated = render_tabs.pick_tiles(rects[:8], lambda r: False)
-    assert len(keep) == 8 and not truncated                        # exactly 8 is not truncation
+def test_wide_page_gets_columns_so_text_stays_legible():
+    # a 5000 pt wide tab squeezed into 1600 px is unreadable (the Multiples tab): it needs several columns
+    tiles = render_tabs.tile_rects(2500, 1000)
+    assert [(r, c) for r, c, _ in tiles] == [(1, 1), (1, 2), (1, 3)]
+    assert [t[2][0] for t in tiles] == [0, 1000, 2000] and tiles[-1][2][2] == 2500
+
+
+def test_tiles_are_row_major_from_the_top_left():
+    tiles = render_tabs.tile_rects(2000, 2600)
+    assert [(r, c) for r, c, _ in tiles] == [(1, 1), (1, 2), (2, 1), (2, 2)]
+
+
+def test_cap_of_twelve_and_truncated_flag():
+    tiles = render_tabs.tile_rects(3000, 1300 * 8)               # 3 x 8 = 24 tiles
+    keep, truncated = render_tabs.pick_tiles(tiles, lambda t: False)
+    assert len(keep) == 12 and truncated and keep == tiles[:12]   # the top-left is kept
+    keep, truncated = render_tabs.pick_tiles(tiles[:12], lambda t: False)
+    assert len(keep) == 12 and not truncated                      # exactly 12 is not truncation
 
 
 def test_blank_tiles_do_not_count_toward_the_cap():
-    rects = render_tabs.tile_rects(600, 600 * 1.3 * 20)
-    blank = lambda r: r != rects[0] and r != rects[19]
-    keep, truncated = render_tabs.pick_tiles(rects, blank)
-    assert keep == [rects[0], rects[19]] and not truncated
+    tiles = render_tabs.tile_rects(600, 600 * 1.3 * 20)
+    keep, truncated = render_tabs.pick_tiles(tiles, lambda t: t not in (tiles[0], tiles[19]))
+    assert keep == [tiles[0], tiles[19]] and not truncated
+
+
+def test_clipped_title_still_matches_its_page():
+    # a centred title wider than its column prints without its first and last letters; that must not flag the mapping
+    assert render_tabs._on_page("CAPITAL ASSET PRICING MODEL (CAPM)", "APITAL ASSET PRICING MODEL (CAPM\nWACC")
+    assert not render_tabs._on_page("CAPITAL ASSET PRICING MODEL (CAPM)", "Revenue growth by segment")
 
 
 @pytest.mark.slow
