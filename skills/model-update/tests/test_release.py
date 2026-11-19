@@ -132,3 +132,33 @@ def test_a_dash_only_row_gets_the_tables_precision_not_a_half_unit_tolerance():
     """Decimals 0 on a '—' row meant +/-0.5 million: a 0.3 model value would wrongly match zero."""
     rel = release.parse_text(TENQ_IS, "q.md")
     assert _get(rel, "Restructuring")["decimals"] == 1
+
+
+def _lay(md):
+    rel = release.parse_text(md, "q.md")
+    return rel["tables"][0]["layout"], [(l["cur_i"], l["prior_i"]) for l in rel["lines"]]
+
+
+def test_the_current_and_prior_columns_come_from_the_header_years():
+    """Most releases print this year first; some print last year first. The header says which."""
+    assert _lay("(In millions)\n\n| | 2026 | | 2025 |\n| --- | --- |\n| Revenue | 140.0 |  | 120.0 |\n") == ("years", [(0, 1)])
+    assert _lay("(In millions)\n\n| | 2025 | | 2026 |\n| --- | --- |\n| Revenue | 120.0 |  | 140.0 |\n") == ("years", [(1, 0)])
+
+
+def test_the_quarter_columns_are_found_whichever_group_comes_first():
+    """'Nine Months | Three Months': the quarter is columns 2-3, not the year-to-date columns 0-1."""
+    md = ("(In millions)\n\n|  | Nine Months Ended Sep 30, |  | Three Months Ended Sep 30, |\n| --- | --- | --- |\n"
+          "|  | 2026 |  | 2025 |  | 2026 |  | 2025 |\n| Revenue | 380.0 |  | 350.0 |  | 140.0 |  | 120.0 |\n")
+    assert _lay(md) == ("years", [(2, 3)])
+
+
+def test_segment_columns_and_year_to_date_only_tables_have_no_layout():
+    """Six values under two years are segment columns; an income statement with only nine-month columns has no
+    quarter in it. Either way the matcher must not read values[0] / values[1] as current / prior."""
+    seg = ("(In millions)\n\n|  | Three Months Ended Sep 30, |\n| --- | --- |\n| 2026 |  | 2025 |\n"
+           "| (In millions) | US |  | Intl |  | Total |  | US |  | Intl |  | Total |\n"
+           "| Revenue | 100.0 |  | 40.0 |  | 140.0 |  | 85.0 |  | 35.0 |  | 120.0 |\n")
+    assert _lay(seg)[1] == [(None, None)]
+    ytd = ("(In millions)\n\n|  | Nine Months Ended Sep 30, |\n| --- | --- |\n|  | 2026 |  | 2025 |\n"
+           "| Revenue | 380.0 |  | 350.0 |\n| Net income | 30.0 |  | 20.0 |\n")
+    assert _lay(ytd) == ("unknown", [(None, None), (None, None)])

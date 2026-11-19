@@ -5,7 +5,12 @@ Each line: id (file:line), file, line (1-based), label, values (as printed, sign
 factor (to the model's millions; 1 for per-share lines), kind (is / bs / cf / recon / other), table.
 Each table: kind, ytd (a cash-flow table without a three-month column), header, scale, scale_known (False = no
 "(In millions...)" found in the caption, the header rows or an earlier table of the file: 1.0 assumed, warn the user),
-bad (rows dropped because a number-looking cell could not be read; dropped rather than let later values slide)."""
+bad (rows dropped because a number-looking cell could not be read; dropped rather than let later values slide),
+layout ("years": period columns read from the header years; "assumed": no years in the header, a two-value line is
+read as current, prior; "unknown": more value columns than the header's periods explain, e.g. segment columns) and
+periods (the header years in column order).
+Each line also has cur_i / prior_i: which of its values is the current period and which the year-ago one (None when
+the table's layout can't say; match.py reports such lines, never guesses)."""
 import json
 import os
 import re
@@ -16,6 +21,9 @@ NUMLIKE = re.compile(r"^[($-]*[\d][\d,.]*\)?$")          # looks like a number, 
 HEADER_LABEL = re.compile(r"^\((in|dollars|amounts)\b", re.I)
 YEAR = re.compile(r"^(19[9]\d|20\d\d|2100)$")
 DASH = {"—", "-", "–"}
+YEAR_IN = re.compile(r"\b(19\d\d|20\d\d)\b")
+GROUP = re.compile(r"\b(three|six|nine|twelve)\s+months|\b(quarter|year|weeks)\s+ended", re.I)
+QUARTERLY = re.compile(r"\bthree\s+months|\bquarter\s+ended|\b1[2-4]\s+weeks", re.I)
 SCALE = [(re.compile(r"in thousands", re.I), 0.001), (re.compile(r"in billions", re.I), 1000.0),
          (re.compile(r"in millions", re.I), 1.0)]
 PER_SHARE = re.compile(r"per share|\bEPS\b", re.I)
@@ -91,6 +99,35 @@ def _kind(labels, caption):
     return "other"
 
 
+def _layout(head_rows, kind, ytd):
+    """(layout, years, (cur, prior) column of the current-period group or None) from the header rows above the data.
+    Years: the header row with the most year cells. Groups ('Three Months Ended' / 'Nine Months Ended'): the
+    quarterly group is current (the year-to-date one for a year-to-date cash flow); a non-cash-flow table with no
+    quarterly group has no quarter to enter. In the group, the latest year is current and the year before it prior."""
+    rows = [[c for c in _cells(r) if c] for r in head_rows]
+    years = max(([int(YEAR_IN.search(c).group(1)) for c in r if YEAR_IN.search(c)] for r in rows), key=len, default=[])
+    if not years:
+        return "assumed", [], None
+    groups = max(([c for c in r if GROUP.search(c)] for r in rows), key=len, default=[])
+    g, size = 0, len(years)
+    if groups:
+        if len(years) % len(groups):
+            return "unknown", years, None
+        size = len(years) // len(groups)
+        quarterly = [i for i, c in enumerate(groups) if QUARTERLY.search(c)]
+        if ytd or (kind == "cf" and not quarterly):
+            g = 0
+        elif quarterly:
+            g = quarterly[0]
+        else:
+            return "unknown", years, None
+    ys = years[g * size:(g + 1) * size]
+    if len(ys) != 2 or ys[0] == ys[1]:
+        return "unknown", years, None
+    cur = ys.index(max(ys))
+    return "years", years, (g * size + cur, g * size + 1 - cur)
+
+
 def _mode(ds):
     ds = [d for d in ds if d is not None]
     return max(sorted(set(ds)), key=ds.count) if ds else 0
@@ -120,6 +157,8 @@ def parse_text(text, name):
         is_data = lambda lab, v, raw: lab and v and raw is not None and not _is_header(lab, raw)
         data = [(k, lab, v, d) for k, (lab, v, d, raw) in rows if is_data(lab, v, raw)]
         header = "\n".join(lines[k] for k, (lab, v, d, raw) in rows if not is_data(lab, v, raw) and k + 1 not in bad)
+        first = next((k for k, (lab, v, d, raw) in rows if is_data(lab, v, raw)), None)
+        head_rows = [lines[k] for k, (lab, v, d, raw) in rows if first is not None and k < first and k + 1 not in bad]
         scale = next((f for rx, f in SCALE if rx.search(header)), None)
         if scale is None:
             scale = next((f for rx, f in SCALE if rx.search(caption)), None)
@@ -132,13 +171,20 @@ def parse_text(text, name):
         kind = _kind([lab for _, lab, _, _ in data], caption)
         ytd = kind == "cf" and not re.search(r"three months", header, re.I)
         common = _mode([d for _, _, _, d in data])
+        layout, years, cp = _layout(head_rows, kind, ytd)
         t = len(out_t)
         out_t.append({"kind": kind, "ytd": ytd, "header": header, "scale": scale, "scale_known": known,
-                      "bad": bad, "start": start + 1})
+                      "bad": bad, "start": start + 1, "layout": layout, "periods": years})
         for k, lab, v, d in data:
+            if layout == "years" and len(v) == len(years):
+                ci, pi = cp
+            elif layout == "assumed" and len(v) == 2:
+                ci, pi = 0, 1                            # no header years: releases print current first
+            else:
+                ci = pi = None
             out_l.append({"id": f"{name}:{k + 1}", "file": name, "line": k + 1, "label": lab, "values": v,
                           "decimals": common if d is None else d, "factor": 1.0 if per_share(lab) else scale,
-                          "kind": kind, "table": t})
+                          "kind": kind, "table": t, "cur_i": ci, "prior_i": pi})
     return {"tables": out_t, "lines": out_l}
 
 

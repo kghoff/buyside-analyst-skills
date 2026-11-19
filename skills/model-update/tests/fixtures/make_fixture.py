@@ -80,7 +80,8 @@ def _f(tpl, p):
     return tpl.format(c=COL[p], py=COL[_py(p)] if p in QS and p[3:5] != "25" else "", pv=COL[_pv(p)] if QS.index(p) else "")
 
 
-def model(path, frozen_quarter="Q3 26E"):
+def model(path, frozen_quarter="Q3 26E", neg_cost=False):
+    """neg_cost: row 6 is '(-) Cost of sales', stored negative (the house convention for costs)."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "MOD"
@@ -91,7 +92,7 @@ def model(path, frozen_quarter="Q3 26E"):
         if a:
             ws[f"A{r}"] = a
         if b:
-            ws[f"B{r}"] = b
+            ws[f"B{r}"] = "(-) Cost of sales" if neg_cost and r == 6 else b
         if unit:
             ws[f"C{r}"] = unit
         if not b:
@@ -111,14 +112,15 @@ def model(path, frozen_quarter="Q3 26E"):
                 else:
                     ws[ref] = f"=SUM({COL[qs[0]]}{r}:{COL[qs[-1]]}{r})"
                 continue
+            neg = neg_cost and r == 6
             if k.startswith("="):
                 if r == 5 and p[3:5] == "25":
                     continue                         # no year-ago column for 2025
-                ws[ref] = _f(k, p)
+                ws[ref] = _f("={c}4+{c}6" if neg_cost and r == 7 else k, p)
             elif p.endswith("E"):
-                ws[ref] = _f(FORECAST[k], p)
+                ws[ref] = _f("=-{c}4*0.4" if neg else FORECAST[k], p)
             else:
-                ws[ref] = DATA[p][k]
+                ws[ref] = -DATA[p][k] if neg else DATA[p][k]
                 ws[ref].font = BLUE
     ws["D4"].comment = Comment("10-K 2025 line 10", "model-historicals")
     e = wb.create_sheet("Earnings")
@@ -134,7 +136,7 @@ def model(path, frozen_quarter="Q3 26E"):
     return path
 
 
-def values():
+def values(neg_cost=False):
     """{ref: value} for the actual columns D..K (constants and the subtotal formulas evaluated)."""
     out = {}
     for p in ["Q1 25", "Q2 25", "Q3 25", "Q4 25", "Q1 26", "Q2 26"]:
@@ -143,6 +145,8 @@ def values():
                10: d["restr"], 11: d["ni"], 12: d["eps"], 14: d["cash"], 15: d["oca"], 16: d["pre"],
                17: d["cash"] + d["oca"] + d["pre"], 18: d["liab"], 19: d["eq"], 20: d["liab"] + d["eq"], 22: d["cfo"],
                23: d["capex"], 24: d["rev"] - d["cos"], 25: d["amort"], 26: d["rev"] - d["cos"] + d["amort"], 27: d["units"]}
+        if neg_cost:
+            row[6] = -d["cos"]
         out.update({f"{c}{r}": v for r, v in row.items()})
     return out
 
