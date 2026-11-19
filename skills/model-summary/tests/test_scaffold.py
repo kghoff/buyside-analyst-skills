@@ -17,7 +17,7 @@ def _book(path):
     wb["MOD"].print_area = "A1:D10"
     wb.create_sheet("DCF")
     wb.create_sheet("Valuation")
-    wb.active = 2                                    # the user left Valuation open
+    wb.active = 1                                    # the user left DCF (a middle sheet) open
     wb.save(path)
     return path
 
@@ -37,18 +37,21 @@ def test_sum_first_keeps_print_area_and_open_tab(tmp_path):
     out = _add_sum(_book(str(tmp_path / "a.xlsx")), str(tmp_path / "b.xlsx"))
     wb = openpyxl.load_workbook(out)
     assert wb.sheetnames == ["SUM", "MOD", "DCF", "Valuation"]
-    assert wb["MOD"].print_area is not None          # still on MOD, not on SUM
-    assert wb.active.title == "Valuation"
+    assert wb["MOD"].print_area == "'MOD'!$A$1:$D$10"   # still on MOD, not on SUM
+    assert not wb["SUM"].print_area
+    assert wb.active.title == "DCF"
 
 
 def test_rerun_does_not_drift(tmp_path):
     a = _add_sum(_book(str(tmp_path / "a.xlsx")), str(tmp_path / "b.xlsx"))
     b = _add_sum(a, str(tmp_path / "c.xlsx"))
+    assert openpyxl.load_workbook(b).active.title == "DCF"
     c = _add_sum(b, str(tmp_path / "d.xlsx"))
     wb = openpyxl.load_workbook(c)
     assert wb.sheetnames == ["SUM", "MOD", "DCF", "Valuation"]
-    assert wb.active.title == "Valuation"
-    assert wb["MOD"].print_area is not None
+    assert wb.active.title == "DCF"
+    assert wb["MOD"].print_area == "'MOD'!$A$1:$D$10"
+    assert not wb["SUM"].print_area
 
 
 def test_dxf_fill_and_font():
