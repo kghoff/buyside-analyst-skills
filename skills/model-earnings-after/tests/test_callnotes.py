@@ -153,9 +153,10 @@ def test_read_round_trips_and_history_is_newest_first(model, tmp_path):
                           ("Q4 26", "Tone"): "confident"}
     second = str(tmp_path / "second.xlsx")
     _write(first, second, _grid(g, "Q1 27"))
-    h = context.history(second)
+    h = context.history(second, "Q2 27")
     assert [x["quarter"] for x in h] == ["Q1 27", "Q4 26"]
     assert h[1]["cells"]["Tone"] == "confident" and h[0]["head"]["file"] == "TEST/Transcripts/call.md"
+    assert [x["quarter"] for x in context.history(second, "Q1 27")] == ["Q4 26"]   # never this quarter's own
 
 
 def test_read_without_the_tab_is_empty(fixture_model):

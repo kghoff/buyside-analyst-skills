@@ -416,13 +416,14 @@ def earnings_values(wb, refs):
     return out
 
 
-def history(model):
-    """The last 4 Call Notes columns, newest first (needs callnotes.read: until then, none)."""
+def history(model, quarter):
+    """The 4 newest Call Notes columns before this quarter's, newest first. This quarter's own column (on a rerun) is
+    left out: it holds our earlier output or the user's typing, not a source a figure may be copied from."""
     if not hasattr(callnotes, "read"):
         return []
     g = callnotes.read(model)
     return [{"quarter": q, "head": g["head"].get(q), "cells": {t: v for (qq, t), v in g["cells"].items() if qq == q}}
-            for q in g["order"][:4]]
+            for q in [x for x in g["order"] if x != quarter][:4]]
 
 
 def _research(ticker, research):
@@ -513,7 +514,7 @@ def run(model, work, ticker, values=None, research=None, forecast_plan=None, tod
            "latest_close": {"value": lc["close"], "date": lc["date"].isoformat(), "ref": close_ref},
            "docs": dd, "topics": callnotes.topics([d["name"] for d in drv]),
            "drivers": [{"name": d["name"], "key": d["key"], "row": d["row"]} for d in drv],
-           "history": history(model), "mod_keys": [k for _, k, _ in mm.lines], "mod_periods": dict(mm.labels),
+           "history": history(model, q), "mod_keys": [k for _, k, _ in mm.lines], "mod_periods": dict(mm.labels),
            "house": H,
            "update": {"dir": upd, "snapshot": sp if snap is not None else None, "state": state},
            "warnings": warnings}

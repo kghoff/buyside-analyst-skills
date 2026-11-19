@@ -483,3 +483,33 @@ def test_out_must_be_a_copy(model, work):
     """The build never writes the user's model in place: the SKILL copies over it only after verify."""
     with pytest.raises(SystemExit):
         build.build(model, work, "TEST", model)
+
+
+def test_rerun_history_leaves_out_this_quarters_own_column(model, work, tmp_path, fixture_research):
+    """On a rerun the Call Notes tab already holds this quarter's column: our own earlier output, or what the user
+    typed there. Neither is a source, so a figure found only there must not pass the free-text number check (it
+    would let an invented number launder itself through a rerun). Older quarters still count."""
+    import anchors
+    out1 = str(tmp_path / "o1.xlsx")
+    build.build(model, work, "TEST", out1)
+    _promote(work)
+    wb = openpyxl.load_workbook(out1)
+    cn = wb["Call Notes"]
+    head = next(r for r in cn.iter_rows() if r[0].value == "Topic")[0].row
+    tone = next(c.row for c in cn["A"] if c.value == "Tone")
+    assert cn.cell(head, 2).value == "Q4 26"
+    cn.cell(tone, 2, "Guide was $613 million last time.")      # this quarter's column: not a source
+    cn.cell(head, 3, "Q3 26")
+    cn.cell(tone, 3, "Guide was $587 million.")                # an older quarter: a source
+    wb.save(model)                                             # a test copy, never a user's model
+    ctx = _ctx(model, work, fixture_research)
+    assert ctx["mode"] == "rerun" and [h["quarter"] for h in ctx["history"]] == ["Q3 26"]
+    md = open(os.path.join(work, "context.md")).read()
+    p = json.load(open(PLAN))
+    p["guidance"][0].pop("before_anchor")
+    p["guidance"][0].pop("before_quote")
+    p["guidance"][0]["before"] = "$613 million"
+    assert any(x.startswith("guidance[0].before:") and "613" in x
+               for x in anchors.check(p, None, fixture_research, ctx, md))
+    p["guidance"][0]["before"] = "$587 million"
+    assert anchors.check(p, None, fixture_research, ctx, md) == []
