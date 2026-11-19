@@ -67,17 +67,20 @@ def test_tiles_are_row_major_from_the_top_left():
     assert [(r, c) for r, c, _ in tiles] == [(1, 1), (1, 2), (2, 1), (2, 2)]
 
 
-def test_cap_of_twelve_and_truncated_flag():
-    tiles = render_tabs.tile_rects(3000, 1300 * 8)               # 3 x 8 = 24 tiles
-    keep, truncated = render_tabs.pick_tiles(tiles, lambda t: False)
-    assert len(keep) == 12 and truncated and keep == tiles[:12]   # the top-left is kept
-    keep, truncated = render_tabs.pick_tiles(tiles[:12], lambda t: False)
-    assert len(keep) == 12 and not truncated                      # exactly 12 is not truncation
+def test_cap_is_larger_for_chart_tabs():
+    # chart tabs need every chart; plain tabs are already in the digest, so a few layout tiles are enough
+    assert render_tabs.MAX_CHART_TILES > render_tabs.MAX_PLAIN_TILES
+    tiles = render_tabs.tile_rects(3000, 1300 * 20)               # 3 x 20 = 60 tiles
+    for cap in (render_tabs.MAX_CHART_TILES, render_tabs.MAX_PLAIN_TILES):
+        keep, truncated = render_tabs.pick_tiles(tiles, lambda t: False, cap)
+        assert len(keep) == cap and truncated and keep == tiles[:cap]   # the top-left is kept
+        keep, truncated = render_tabs.pick_tiles(tiles[:cap], lambda t: False, cap)
+        assert len(keep) == cap and not truncated                       # exactly the cap is not truncation
 
 
 def test_blank_tiles_do_not_count_toward_the_cap():
     tiles = render_tabs.tile_rects(600, 600 * 1.3 * 20)
-    keep, truncated = render_tabs.pick_tiles(tiles, lambda t: t not in (tiles[0], tiles[19]))
+    keep, truncated = render_tabs.pick_tiles(tiles, lambda t: t not in (tiles[0], tiles[19]), 4)
     assert keep == [tiles[0], tiles[19]] and not truncated
 
 

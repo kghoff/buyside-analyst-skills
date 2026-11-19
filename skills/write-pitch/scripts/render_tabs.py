@@ -8,7 +8,7 @@ non-blank tile gets one entry with "png": null (and "note" when something went w
 - LibreOffice prints each visible tab as ONE page, as wide and tall as the tab (hidden tabs are skipped), in tab order.
 - That page is cut into a grid of tiles of 1000 pt wide and 1.3 x that high (a narrower page: one column of its own
   width), rendered 1600 px wide, so a normal table or chart is legible. Tiles go row by row from the top-left; blank
-  ones are skipped; at most 12 non-blank per tab; "truncated": true when more were left out. Each entry has its grid
+  ones are skipped; at most 24 non-blank per tab with a chart or image, 4 per tab without; "truncated": true when more were left out. Each entry has its grid
   "row" and "col" (1-based) and the file name carries them.
 - has_chart comes from the xlsx zip itself: the tab's sheet rels point to a drawing part (charts and images).
 - The intermediate PDF is deleted after tiling."""
@@ -24,7 +24,8 @@ from xml.etree import ElementTree as ET
 TILE_RATIO = 1.3
 TILE_PT = 1000          # tile width in PDF points: about ten table columns or one Excel chart, legible at TILE_PX
 TILE_PX = 1600
-MAX_TILES = 12
+MAX_CHART_TILES = 24    # a tab with a chart or image: the analyst needs every chart
+MAX_PLAIN_TILES = 4     # a tab without: its numbers are in the digest, tiles only show layout
 NS_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 NS_REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 NS_R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -78,7 +79,7 @@ def is_blank(samples, ink_share=0.002):
     return sum(1 for b in samples if b < 245) / len(samples) < ink_share
 
 
-def pick_tiles(rects, blank, cap=MAX_TILES):
+def pick_tiles(rects, blank, cap):
     """The first `cap` non-blank tiles (blank(tile) -> bool) and whether more non-blank ones were left out."""
     keep = []
     for r in rects:
@@ -137,7 +138,7 @@ def render(values, out):
                 pix = page.get_pixmap(matrix=fitz.Matrix(z, z), clip=fitz.Rect(*tile[2]), colorspace=fitz.csGRAY)
                 return is_blank(pix.samples)
             try:
-                keep, truncated = pick_tiles(tile_rects(w, h), blank)
+                keep, truncated = pick_tiles(tile_rects(w, h), blank, MAX_CHART_TILES if tab in charts else MAX_PLAIN_TILES)
                 entries = []
                 for t, (row, col, r) in enumerate(keep, start=1):
                     z = TILE_PX / min(w, TILE_PT)
