@@ -102,10 +102,16 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
         os.remove(out)
         raise SystemExit("model-summary: the build changed parts it must not touch: " + ", ".join(bad))
 
-    no_street = [y for y in L["mod"]["years"] if y.endswith("E") and y not in L["mult"]["street"]]
-    if no_street:
-        warnings.append("No Street EPS on the Multiples forward table for " + ", ".join(no_street) + ": those Street "
-                        "rows show n/a.")
+    St, fy = L["street"], [y for y in L["mod"]["years"] if y.endswith("E")]
+    src = ("the Consensus tab's latest snapshot " + St["snapshot"]) if St["source"] == "consensus" else \
+        "the Multiples forward table (no Consensus tab estimates found)"
+    for key, name in (("eps", "EPS"), ("rev", "revenue")):
+        miss = [y for y in fy if y not in St[key]]
+        if miss:
+            warnings.append(f"No Street {name} from {src} for " + ", ".join(miss) + ": those Street cells show n/a.")
+    if L["mod"]["basis"] == "gaap" and St["eps"]:
+        warnings.append("SUM's EPS is GAAP but Street EPS is the analysts' basis (usually non-GAAP), so the EPS "
+                        "Expected Delta compares different bases.")
     pos = L["val"].get("position")
     if pos and str(pos["value"]).strip().lower() == "short":
         warnings.append("Valuation is set to a short; SUM's % returns and their colours are long-side math. Read "
@@ -119,7 +125,8 @@ def build(model, work, ticker, out, research_dir, fetch=advmod.yahoo, today=None
     json.dump({lab: {"value": v, "user": lab in users} for lab, v in used.items()},
               open(os.path.join(work, "inputs_written.next.json"), "w"), indent=1, default=str)
     return {"tab": TAB, "primary": L["val"]["kind"], "ntm_quarters": L["mod"]["ntm_quarters"],
-            "years": L["mod"]["years"], "street_years": sorted(L["mult"]["street"]),
+            "years": L["mod"]["years"], "street": {"source": St["source"], "snapshot": St["snapshot"], "eps_years": sorted(St["eps"]),
+                       "rev_years": sorted(St["rev"])},
             "tree": [b["name"] for b in L["val"]["tree"]], "ladder_rungs": len(L["val"]["ladder"]),
             "adv": {"route": A["route"], "note": A["note"]}, "users_kept": sorted(users),
             "action_follows_valuation": "Action" not in users, "warnings": warnings}

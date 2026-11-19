@@ -10,7 +10,10 @@
   filled only where a branch's target formula is the primary multiple's reward or risk price.
 - ADV: the Multiples comp sheet first (Yahoo's 3-month average, raw shares), then Px Data's source CSV (63 days, as
   fresh as Px Data), then Yahoo, then a CSV placed in the work folder by hand.
-- Street EPS comes from the Multiples forward table, so the Consensus tab isn't read.
+- Street EPS and revenue come from the Consensus tab's latest snapshot (2026-11-19, reversing the earlier "Consensus not read"
+  decision): the user asked, Consensus has more years than Multiples' 2-year forward table and has revenue. Multiples'
+  forward-table Street EPS is the fallback when there is no Consensus tab or snapshot (no revenue then). Each Street cell
+  notes the snapshot date and analyst count. Street EPS is the analysts' basis, so a GAAP model gets a warning.
 - No NCI: SUM's EV must equal the DCF / Valuation bridge, which has none.
 - Conditional formatting only on returns, IRR vs hurdle, R/R vs Buy-at-R/R, and Expected Delta vs a 3% band. The
   user declined price-vs-action-price and multiple-vs-history shading. The thresholds point at SUM cells that link

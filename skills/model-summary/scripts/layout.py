@@ -156,57 +156,87 @@ def lay_out(w, L, adv, used, ticker, today):
     m = lambda y, r: f"MOD!${Md['col'][y]}${r}"                                         # noqa: E731
     eb = lambda y: "+".join(m(y, r) for r in rows["ebitda"])                             # noqa: E731
     head("E3", "Internal estimates (our model; multiples at today's price and EV)")
+    St = L["street"]
     eps_lab = "EPS (non-GAAP)" if Md["basis"] == "ng" else "EPS (GAAP)"
     extra = {"EV/GP": "EV/GP", "FCF yield": "FCF yield"}.get(kind)
-    for r, t in ((5, "Revenue"), (6, "% yoy"), (7, "EBITDA"), (8, "% margin"), (9, "bps yoy"), (10, eps_lab),
-                 (11, "% yoy"), (12, "Street EPS"), (13, "Expected Delta (ours vs Street)"), (14, "EV/Sales"),
-                 (15, "EV/EBITDA"), (16, "P/E"), (17, "Street P/E")) + (((18, extra),) if extra else ()):
-        w.text(f"E{r}", t)
+    names = ["rev", "rev_g", "s_rev", "d_rev", "ebitda", "margin", "bps", "eps", "eps_g", "s_eps", "d_eps", "ev_s",
+             "ev_e", "pe", "s_pe"] + (["extra"] if extra else [])
+    rw = {n: 5 + k for k, n in enumerate(names)}
+    for n, t in zip(names, ("Revenue", "% yoy", "Street revenue", "Revenue delta (ours vs Street)", "EBITDA",
+                            "% margin", "bps yoy", eps_lab, "% yoy", "Street EPS (analysts' basis)",
+                            "Expected Delta (ours vs Street)", "EV/Sales", "EV/EBITDA", "P/E", "Street P/E", extra)):
+        if n in rw:
+            w.text(f"E{rw[n]}", t)
+    c_ = lambda n, c: f"{c}{rw[n]}"                                                      # noqa: E731
+
+    def note(n):
+        d = St["snapshot"]
+        return (f"Consensus snapshot {d}" + (f", {n} analysts" if n else "") if St["source"] == "consensus" else
+                "Multiples forward table (Yahoo consensus, analysts' basis); no analyst count there.")
+
     for c, y in zip(cols, yrs):
         p = Md["prev"][y]
         w.text(f"{c}4", y + ("A" if y.isdigit() else ""), b=True, align="right")
-        link(f"{c}5", m(y, rows["rev"]), MNY)
-        link(f"{c}7", eb(y), MNY)
-        f(f"{c}8", f"IF({c}5>0,{c}7/{c}5,NA())", PCT)
-        link(f"{c}10", m(y, rows["eps"]), PX)
+        link(c_("rev", c), m(y, rows["rev"]), MNY)
+        link(c_("ebitda", c), eb(y), MNY)
+        f(c_("margin", c), f"IF({c_('rev', c)}>0,{c_('ebitda', c)}/{c_('rev', c)},NA())", PCT)
+        link(c_("eps", c), m(y, rows["eps"]), PX)
         if p:
-            f(f"{c}6", f"IFERROR({m(y, rows['rev'])}/{m(p, rows['rev'])}-1,NA())", PCT)
-            f(f"{c}9", f"IFERROR(({c}8-({eb(p)})/{m(p, rows['rev'])})*10000,NA())", BPS)
-            f(f"{c}11", f"IF({m(p, rows['eps'])}>0,{m(y, rows['eps'])}/{m(p, rows['eps'])}-1,NA())", PCT)
+            f(c_("rev_g", c), f"IFERROR({m(y, rows['rev'])}/{m(p, rows['rev'])}-1,NA())", PCT)
+            f(c_("bps", c), f"IFERROR(({c_('margin', c)}-({eb(p)})/{m(p, rows['rev'])})*10000,NA())", BPS)
+            f(c_("eps_g", c), f"IF({m(p, rows['eps'])}>0,{m(y, rows['eps'])}/{m(p, rows['eps'])}-1,NA())", PCT)
         else:
-            na(f"{c}6"), na(f"{c}9"), na(f"{c}11")
-        s = Mu["street"].get(y)
+            na(c_("rev_g", c)), na(c_("bps", c)), na(c_("eps_g", c))
+        s = St["eps"].get(y)
         if s:
-            link(f"{c}12", s, PX)
-            f(f"{c}13", f"IF(AND({c}12>0,ISNUMBER({c}10)),{c}10/{c}12-1,NA())", PCT)
-            f(f"{c}17", f"IF({c}12>0,$C$7/{c}12,NA())", MULT)
+            se, de, sp = c_("s_eps", c), c_("eps", c), c_("s_pe", c)
+            link(se, s["ref"], PX)
+            f(c_("d_eps", c), f"IF(AND({se}>0,ISNUMBER({de})),{de}/{se}-1,NA())", PCT)
+            f(sp, f"IF({se}>0,$C$7/{se},NA())", MULT)
+            w.notes[se] = w.notes[sp] = note(s["n"])
         else:
-            na(f"{c}12"), na(f"{c}13"), na(f"{c}17")
-        f(f"{c}14", f"IF({c}5>0,$C$13/{c}5,NA())", MULT)
-        f(f"{c}15", f"IF({c}7>0,$C$13/{c}7,NA())", MULT)
-        f(f"{c}16", f"IF({c}10>0,$C$7/{c}10,NA())", MULT)
+            na(c_("s_eps", c)), na(c_("d_eps", c)), na(c_("s_pe", c))
+        s = St["rev"].get(y)
+        if s:
+            sr, dr = c_("s_rev", c), c_("rev", c)
+            link(sr, s["ref"], MNY)
+            f(c_("d_rev", c), f"IF(AND({sr}>0,ISNUMBER({dr})),{dr}/{sr}-1,NA())", PCT)
+            w.notes[sr] = note(s["n"])
+        else:
+            na(c_("s_rev", c)), na(c_("d_rev", c))
+        f(c_("ev_s", c), f"IF({c_('rev', c)}>0,$C$13/{c_('rev', c)},NA())", MULT)
+        f(c_("ev_e", c), f"IF({c_('ebitda', c)}>0,$C$13/{c_('ebitda', c)},NA())", MULT)
+        f(c_("pe", c), f"IF({c_('eps', c)}>0,$C$7/{c_('eps', c)},NA())", MULT)
         if extra == "EV/GP" and rows["gp"]:
-            f(f"{c}18", f"IF({m(y, rows['gp'])}>0,$C$13/{m(y, rows['gp'])},NA())", MULT)
+            f(c_("extra", c), f"IF({m(y, rows['gp'])}>0,$C$13/{m(y, rows['gp'])},NA())", MULT)
         elif extra == "FCF yield":
-            f(f"{c}18", f"IF($C$9>0,{m(y, rows['fcf'])}/$C$9,NA())", PCT)
+            f(c_("extra", c), f"IF($C$9>0,{m(y, rows['fcf'])}/$C$9,NA())", PCT)
     last = cols[-1]
     assert last <= "N" and len(last) == 1, f"the estimates grid ran past column N ({last}); it would hit the scenario block"
     tl = cols[0]
-    w.sh.cf.append((f"{tl}13:{last}13", f"AND(ISNUMBER({tl}13),{tl}13>$C$51)", w.st.dxf(*GOOD)))
-    w.sh.cf.append((f"{tl}13:{last}13", f"AND(ISNUMBER({tl}13),{tl}13<-$C$51)", w.st.dxf(*BAD)))
-    bar(w, f"E3:{last}3"), hdr(w, f"E4:{last}4"), result(w, f"E10:{last}10"), result(w, f"E13:{last}13")
+    for n in ("d_rev", "d_eps"):                              # the band's colour rules apply to both delta rows
+        r_ = rw[n]
+        w.sh.cf.append((f"{tl}{r_}:{last}{r_}", f"AND(ISNUMBER({tl}{r_}),{tl}{r_}>$C$51)", w.st.dxf(*GOOD)))
+        w.sh.cf.append((f"{tl}{r_}:{last}{r_}", f"AND(ISNUMBER({tl}{r_}),{tl}{r_}<-$C$51)", w.st.dxf(*BAD)))
+    bar(w, f"E3:{last}3"), hdr(w, f"E4:{last}4")
+    for n in ("eps", "d_eps", "d_rev"):
+        result(w, f"E{rw[n]}:{last}{rw[n]}")
     for c in ["E"] + cols:                                    # the multiples rows sit apart from the P&L rows
-        w.edge(f"{c}14", top="thin")
-    box(w, f"E3:{last}{18 if extra else 17}")
-    head("E20", "Thesis Summary")
-    w.input_("E21", "Thesis Summary", used["Thesis Summary"], GEN, PITCH, wrap=True)
-    w.sh.merges.append(f"E21:{last}30")
-    head("E32", "Trading Plan")
-    w.input_("E33", "Trading Plan", used["Trading Plan"], GEN, PITCH, wrap=True)
-    w.sh.merges.append(f"E33:{last}42")
-    for t in (20, 32):
+        w.edge(f"{c}{rw['ev_s']}", top="thin")
+    end = 5 + len(names) - 1
+    box(w, f"E3:{last}{end}")
+    t1 = end + 2                                              # Thesis Summary bar; the boxes follow, 10 rows each
+    t2 = t1 + 12
+    head(f"E{t1}", "Thesis Summary")
+    w.input_(f"E{t1 + 1}", "Thesis Summary", used["Thesis Summary"], GEN, PITCH, wrap=True)
+    w.sh.merges.append(f"E{t1 + 1}:{last}{t1 + 10}")
+    head(f"E{t2}", "Trading Plan")
+    w.input_(f"E{t2 + 1}", "Trading Plan", used["Trading Plan"], GEN, PITCH, wrap=True)
+    w.sh.merges.append(f"E{t2 + 1}:{last}{t2 + 10}")
+    for t in (t1, t2):
         bar(w, f"E{t}:{last}{t}"), box(w, f"E{t + 1}:{last}{t + 10}")
-    R.update(grid_cols=cols, delta_row=13)
+    R.update(grid_cols=cols, delta_row=rw["d_eps"], rev_delta_row=rw["d_rev"], eps_row=rw["eps"], rows=rw,
+             thesis_row=t1, plan_row=t2)
 
     # ---- right block (P:U): Valuation's probability tree, row for row
     metric_word = P["ntm1"]["label"].split("NTM+1 ", 1)[1].split(" (")[0]

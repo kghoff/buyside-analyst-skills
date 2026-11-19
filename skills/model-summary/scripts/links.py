@@ -2,10 +2,11 @@
 """Every cell SUM links to, found by its label on the source tab, never by another skill's work files (they go
 stale): DCF (the cap-table bridge), Valuation (verdict, house inputs, the primary multiple's block, blended R/R, the
 R/R ladder, the 3-year IRR, the probability tree), Multiples (ranges, the forward table's Street EPS, the comp
-sheet's subject 3M ADV) and MOD (rows by label within their section, FY columns, the first four forecast quarters).
+sheet's subject 3M ADV), the Consensus tab's latest snapshot (Street EPS and revenue by forecast year; optional,
+Multiples' forward table is the fallback) and MOD (rows by label within their section, FY columns, the first four forecast quarters).
 A missing piece stops the build and names the skill to rerun. Reads formulas only (no recalculation needed).
 
-collect(model) -> {"dcf", "val", "mult", "mod"} of sheet-qualified refs ('Valuation!$B$39') and labels."""
+collect(model) -> {"dcf", "val", "mult", "mod", "street"} of sheet-qualified refs ('Valuation!$B$39') and labels."""
 import re
 
 import openpyxl
@@ -177,6 +178,44 @@ def multiples(g, kind):
     return {"ranges": ranges, "street": street, "adv": adv}
 
 
+def consensus(g, years):
+    """The Consensus tab's latest snapshot as links: {"eps": {year: {"ref", "n"}}, "rev": {...}, "snapshot": date}.
+    Only forecast years that are SUM years ("FY 26" or "FY 2026" -> "2026E"), only where the mean is a number.
+    None when the tab has no snapshot block or no snapshots (Consensus is optional)."""
+    a = labels(g)
+    top = first(a, lambda t: t.startswith("5. CONSENSUS SNAPSHOTS"))
+    if top is None:
+        return None
+    heads = {str(v).strip(): c for (r, c), v in g.items() if r == top + 1 and isinstance(v, str)}
+    col = lambda test: next((c for h, c in heads.items() if test(h)), None)        # noqa: E731
+    cs, cp = heads.get("Snapshot"), heads.get("Period")
+    ce, cne = heads.get("EPS mean"), heads.get("# EPS")
+    cr, cnr = col(lambda h: h.startswith("Rev mean")), heads.get("# Rev")
+    if not (cs and cp and ce):
+        return None
+    rows, r = [], top + 2
+    while g.get((r, cs)) is not None:
+        rows.append((r, str(g[(r, cs)])[:10], str(g.get((r, cp), "")).strip()))
+        r += 1
+    if not rows:
+        return None
+    latest = max(d for _, d, _ in rows)
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)         # noqa: E731
+    out = {"eps": {}, "rev": {}, "snapshot": latest}
+    for r, d, p in rows:
+        m = re.fullmatch(r"(?i)FY\s*(\d{4}|\d{2})", p)
+        if d != latest or not m:
+            continue
+        y = f"{int(m[1]) + (2000 if len(m[1]) == 2 else 0)}E"
+        if y not in years:
+            continue
+        for key, cm, cn in (("eps", ce, cne), ("rev", cr, cnr)):
+            if cm and num(g.get((r, cm))):
+                n = g.get((r, cn)) if cn else None
+                out[key][y] = {"ref": ref("Consensus", L(cm), r), "n": int(n) if num(n) else None}
+    return out
+
+
 def mod(model):
     mm = ModMap(model)
     R = modrows.find_rows(mm)
@@ -212,7 +251,14 @@ def collect(model):
                              "then /model-summary.")
         v = valuation(grid(wb["Valuation"]))
         out = {"dcf": dcf(grid(wb["DCF"])), "val": v, "mult": multiples(grid(wb["Multiples"]), v["kind"])}
+        cg = grid(wb["Consensus"]) if "Consensus" in wb.sheetnames else None
     finally:
         wb.close()
     out["mod"] = mod(model)
+    c = consensus(cg, out["mod"]["years"]) if cg else None
+    if c and c["eps"]:
+        out["street"] = {"eps": c["eps"], "rev": c["rev"], "source": "consensus", "snapshot": c["snapshot"]}
+    else:                                          # Multiples' forward table: EPS only, no revenue, no snapshot date
+        out["street"] = {"eps": {y: {"ref": s, "n": None} for y, s in out["mult"]["street"].items()}, "rev": {},
+                         "source": "multiples", "snapshot": None}
     return out

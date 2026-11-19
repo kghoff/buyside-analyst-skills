@@ -160,3 +160,41 @@ def test_all_missing_tabs_are_named_in_one_stop(fixture_model, tmp_path):
     msg = str(e.value)
     assert all(s in msg for s in ("/model-dcf", "/model-multiples", "/model-valuation", "/model-forecast"))
     assert msg.index("/model-dcf") < msg.index("/model-multiples") < msg.index("/model-valuation")
+
+
+def test_consensus_wins_and_only_the_latest_snapshot_is_read(L):
+    """The older snapshot (rows 5-6) holds different numbers; reading it would show a stale Street. FY 28 has EPS
+    only, so it appears under eps and not under rev."""
+    s = L["street"]
+    assert s["source"] == "consensus" and s["snapshot"] == "2026-11-12"
+    assert s["eps"] == {"2026E": {"ref": "Consensus!$C$7", "n": 25}, "2027E": {"ref": "Consensus!$C$8", "n": 25},
+                        "2028E": {"ref": "Consensus!$C$9", "n": 6}}
+    assert s["rev"] == {"2026E": {"ref": "Consensus!$G$7", "n": 27}, "2027E": {"ref": "Consensus!$G$8", "n": 27}}
+    assert L["mult"]["street"] == {"2026E": "Multiples!$B$34", "2027E": "Multiples!$C$34"}   # kept as it was
+
+
+def test_consensus_year_label_and_text_dates(fixture_model, tmp_path):
+    """'FY 2026' is the same year as 'FY 26'; a snapshot typed as text still sorts as a date; a non-numeric mean
+    is no estimate."""
+    m, wb = _copy(fixture_model, tmp_path, "cons.xlsx")
+    ws = wb["Consensus"]
+    ws["A7"], ws["A8"], ws["A9"] = "2026-11-12", "2026-11-12", "2026-11-12"
+    ws["B7"], ws["C8"] = "FY 2026", "n/a"
+    wb.save(m)
+    s = links.collect(m)["street"]
+    assert list(s["eps"]) == ["2026E", "2028E"] and s["eps"]["2026E"]["ref"] == "Consensus!$C$7"
+
+
+def test_no_consensus_tab_or_no_snapshots_falls_back(fixture_model, tmp_path):
+    """Consensus is optional: the Multiples forward table (2 years, EPS only) is the fallback, with no revenue."""
+    m, wb = _copy(fixture_model, tmp_path, "noc.xlsx")
+    del wb["Consensus"]
+    wb.save(m)
+    s = links.collect(m)["street"]
+    assert s["source"] == "multiples" and s["snapshot"] is None and s["rev"] == {}
+    assert s["eps"] == {"2026E": {"ref": "Multiples!$B$34", "n": None}, "2027E": {"ref": "Multiples!$C$34", "n": None}}
+    m2, wb2 = _copy(fixture_model, tmp_path, "nosnap.xlsx")
+    for r in range(5, 10):
+        wb2["Consensus"].cell(r, 1).value = None
+    wb2.save(m2)
+    assert links.collect(m2)["street"]["source"] == "multiples"

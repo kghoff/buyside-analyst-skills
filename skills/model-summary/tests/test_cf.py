@@ -36,9 +36,11 @@ def test_rr_rules_read_the_linked_buy_threshold(built):
 
 
 def test_street_variance_follows_the_band(built):
+    """Both delta rows (EPS row 15, revenue row 8) turn green / red on the same yellow band."""
     rules = _rules(built[0])
-    assert [f for s, f in rules if s == "F13:M13"] == ["AND(ISNUMBER(F13),F13&gt;$C$51)",
-                                                       "AND(ISNUMBER(F13),F13&lt;-$C$51)"]
+    for r in (15, 8):
+        assert [f for s, f in rules if s == f"F{r}:M{r}"] == [f"AND(ISNUMBER(F{r}),F{r}&gt;$C$51)",
+                                                              f"AND(ISNUMBER(F{r}),F{r}&lt;-$C$51)"]
 
 
 def test_returns_are_signed(built):

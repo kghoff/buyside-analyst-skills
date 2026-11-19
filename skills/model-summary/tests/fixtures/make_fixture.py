@@ -134,7 +134,26 @@ def _val(ws):
     ws["C121"], ws["D121"] = "=B121/$B$5-1", "=SUM(D117:D120)"
 
 
-def build(path, multiples_adv=True):
+SNAP_HEADS = ["Snapshot", "Period", "EPS mean", "EPS low", "EPS high", "# EPS", "Rev mean ($M)", "Rev low", "Rev high",
+              "# Rev"]
+
+
+def _consensus(ws):
+    """Two snapshots: the older one has different numbers, so a test proves only the latest is read. The latest has
+    FY 26 / FY 27 with EPS and revenue, FY 28 with EPS only (as the real tab does)."""
+    ws["A3"] = "5. CONSENSUS SNAPSHOTS"
+    for c, h in enumerate(SNAP_HEADS, 1):
+        ws.cell(4, c, h)
+    old, new = dt.datetime(2026, 8, 6), dt.datetime(2026, 11, 12)
+    for r, (d, per, eps, ne, rev, nr) in enumerate((
+            (old, "FY 26", 1.5, 20, 900.0, 20), (old, "FY 27", 1.9, 20, 950.0, 20),
+            (new, "FY 26", 2.7, 25, 1000.0, 27), (new, "FY 27", 3.1, 25, 1100.0, 27), (new, "FY 28", 3.6, 6, None, None)), 5):
+        ws.cell(r, 1, d), ws.cell(r, 2, per), ws.cell(r, 3, eps), ws.cell(r, 6, ne)
+        if rev is not None:
+            ws.cell(r, 7, rev), ws.cell(r, 10, nr)
+
+
+def build(path, multiples_adv=True, consensus=True):
     wb = openpyxl.Workbook()
     wb.active.title = "MOD"
     _mod(wb["MOD"])
@@ -144,6 +163,8 @@ def build(path, multiples_adv=True):
     if not multiples_adv:
         wb["Multiples"]["H39"] = None
     _val(wb.create_sheet("Valuation"))
+    if consensus:
+        _consensus(wb.create_sheet("Consensus"))
     wb.active = 4                                                 # Valuation open
     wb.save(path)
     return path
