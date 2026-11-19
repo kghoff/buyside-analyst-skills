@@ -1,4 +1,4 @@
-"""(Copied from model-earnings-before, Nov 2026; keep in sync. Origin: model-multiples. Adds merged cells.) Raw-XML workbook editing: add / remove whole tabs (with their drawings, charts and comments) without loading the
+"""(Copied from model-earnings-before, Nov 2026; keep in sync. Origin: model-multiples. Adds merged cells. Changes: esc strips XML-invalid characters.) Raw-XML workbook editing: add / remove whole tabs (with their drawings, charts and comments) without loading the
 workbook in openpyxl, which would drop the user's text boxes, shapes, images and equations and re-serialize their charts.
 
 Every other part of the package is copied byte for byte. Only workbook.xml, its rels, [Content_Types].xml and
@@ -19,8 +19,11 @@ RT = {k: f"{NS_REL}/{v}" for k, v in {"sheet": "worksheet", "drawing": "drawing"
                                        "comments": "comments", "vml": "vmlDrawing"}.items()}
 
 
+XML_BAD = re.compile("[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]")
+
+
 def esc(t):
-    return _esc(str(t), {'"': "&quot;"})
+    return _esc(XML_BAD.sub("", str(t)), {'"': "&quot;"})
 
 
 def colnum(L):
