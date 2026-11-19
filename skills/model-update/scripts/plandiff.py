@@ -7,6 +7,9 @@ import json
 import sys
 
 THESIS = ("none", "supports", "undercuts")
+# Plan fields that insert or move MOD rows when model-forecast builds them. The roll changes assumptions only: a moved
+# row would leave state.json's cell refs (awaiting cells, placeholders, typed subtotals) pointing at the wrong rows.
+STRUCTURE = ("new_rows", "move_rows", "layout", "driver_sections")
 
 
 def _canon(x):
@@ -30,6 +33,12 @@ def check(old, new, changes):
     listed = [c["key"] for c in changes]
     probs += [f"{k} changed with no entry in changes.json" for k in diff if k not in listed]
     probs += [f"changes.json lists {k} but the plan did not change it" for k in listed if k not in diff]
+    probs += [f"{k} changes the model's rows; the roll changes assumptions only: put it back as it was and name the "
+              "change in your reply (the user makes it with /model-forecast)" for k in diff if k in STRUCTURE]
+    was = {e["key"]: e.get("method") for e in old.get("rows", [])}
+    probs += [f"{e['key']}: a new seasonal method inserts a seasonality row; keep the old method and name the change in "
+              "your reply (the user makes it with /model-forecast)" for e in new.get("rows", [])
+              if e.get("method") == "seasonal" and was.get(e["key"]) != "seasonal"]
     for c in changes:
         if c.get("thesis") not in THESIS:
             probs.append(f"{c['key']}: thesis must be none, supports or undercuts")

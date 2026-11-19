@@ -2,7 +2,10 @@
 writes either workbook (the recalculations go to --work).
 
 usage: python3 verify.py --before MODEL --after FINAL.xlsx --state state.json --work DIR
-                         [--before-values grid.json] [--restated refs.json] [--charts]
+                         [--mid ACTUALS.xlsx] [--before-values grid.json] [--restated refs.json] [--charts]
+--mid: the actuals copy before the forecast roll (actuals.py's --out). Checks 3 and 5 then run on --before -> --mid,
+  where state.json's refs are still right, and the roll (--mid -> --after) may change only forecast (E) columns, with
+  every MOD line on the same row (check 7). Without --mid (no roll: the 10-Q rerun) they run on --before -> --after.
 --before-values: the original's recalculated values, all tabs (grid.py --recalc); without it the original is
   recalculated into --work. --restated: the prior-period cells the user approved restating. --charts: a Q4 print
   rebuilt Filings Charts (handoff.py --charts-only), so its sheet, drawing and chart parts may change.
@@ -18,7 +21,11 @@ Checks:
    the user's own note, 'Update: ' appended after it); every placeholder is
    orange; every cell carrying a placeholder note is listed in state.json's placeholders;
 6. every formula on another tab that refers to MOD!<col><row> points at a row with the same column-B label and a
-   column with the same period header (E dropped) as before.
+   column with the same period header (E dropped) as before;
+7. (with --mid) no MOD line moved in the roll: model-forecast's layout.py / build.py / move_rows.py can move rows when
+   a plan adds rows or changes its layout, and then every ref in state.json (awaiting cells, placeholders, typed
+   subtotals and their saved formulas) would point at the wrong row on the 10-Q rerun. A targeted roll changes
+   assumptions only; structure changes belong to /model-forecast.
 Exit 1 with the problems listed (JSON); nothing is copied then."""
 import argparse
 import json
@@ -123,6 +130,28 @@ def static(before, after, state, allow_cols, restated=()):
     return probs
 
 
+def forecast_cols(model):
+    m = ModMap(model)
+    return {m.col(p) for p in m.order if p.endswith("E")}
+
+
+def moved(mid, after):
+    """MOD lines whose row differs between the actuals copy and the rolled copy (or that are gone): [(key, was, now)]."""
+    a, b = ModMap(mid), ModMap(after)
+    return [(k, r, b.keys.get(k)) for k, r in sorted(a.keys.items(), key=lambda x: x[1]) if b.keys.get(k) != r]
+
+
+def roll(mid, after, state):
+    """Check 7, then the roll may change only forecast columns (notes and placeholders re-checked on the rolled copy)."""
+    mv = moved(mid, after)
+    if mv:
+        shown = "; ".join(f"{k}: row {r} -> {'gone' if n is None else f'row {n}'}" for k, r, n in mv[:10])
+        return [f"the forecast roll moved {len(mv)} MOD line(s) ({shown}): model-update keeps rows in place so "
+                "state.json stays right for the 10-Q rerun; drop the structural change (new rows, move_rows, layout, "
+                "a new seasonal method) from the roll and make it with /model-forecast after this update"]
+    return static(mid, after, state, forecast_cols(mid))
+
+
 def links(before, after):
     fa, fb = _book(before)[0], _book(after)[0]
     la, lb = fa[TAB], fb[TAB]
@@ -170,10 +199,12 @@ def new_errors(before_grid, after_grid):
     return probs
 
 
-def check(before, after, state, after_grid, before_grid, restated=(), charts=False):
+def check(before, after, state, after_grid, before_grid, restated=(), charts=False, mid=None):
     probs = new_errors(before_grid, after_grid)
     probs += parts(before, after, charts)
-    probs += static(before, after, state, allowed_cols(before, state), set(restated))
+    probs += static(before, mid or after, state, allowed_cols(before, state), set(restated))
+    if mid:
+        probs += roll(mid, after, state)
     probs += balance(after_grid.get(TAB, {}), after, state["column"])
     probs += links(before, after)
     return probs
@@ -184,12 +215,13 @@ def main():
     ap.add_argument("--before", required=True), ap.add_argument("--after", required=True)
     ap.add_argument("--state", required=True), ap.add_argument("--work", required=True)
     ap.add_argument("--before-values"), ap.add_argument("--restated"), ap.add_argument("--charts", action="store_true")
+    ap.add_argument("--mid")
     a = ap.parse_args()
     st = json.load(open(a.state))
     restated = set(json.load(open(a.restated))) if a.restated else set()
     ga = json.load(open(a.before_values)) if a.before_values else grid.dump(a.before, os.path.join(a.work, "verify_before"))
     gb = grid.dump(a.after, os.path.join(a.work, "verify_after"))
-    probs = check(a.before, a.after, st, gb, ga, restated, a.charts)
+    probs = check(a.before, a.after, st, gb, ga, restated, a.charts, a.mid)
     print(json.dumps(probs, indent=1))
     sys.exit(1 if probs else 0)
 

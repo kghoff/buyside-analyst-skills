@@ -17,8 +17,19 @@ def test_an_entry_for_an_unchanged_key_fails():
 
 
 def test_top_level_fields_count_as_keys():
-    new = dict(OLD, layout=[2])
-    assert plandiff.check(OLD, new, []) == ["layout changed with no entry in changes.json"]
+    new = dict(OLD, guidance=[{"metric": "Revenue"}])
+    assert plandiff.check(OLD, new, []) == ["guidance changed with no entry in changes.json"]
+
+
+def test_a_roll_that_would_insert_or_move_mod_rows_is_refused_even_with_a_reason():
+    """state.json names waiting cells by row; new rows, moves, layout or a new seasonality row would shift them and the
+    10-Q rerun would fill the wrong cells. Structure is /model-forecast's job, so the roll never changes it."""
+    ch = lambda k: [{"key": k, "was": "a", "now": "b", "anchor": "x", "reason": "y", "thesis": "none"}]
+    probs = plandiff.check(OLD, dict(OLD, layout=[2]), ch("layout"))
+    assert len(probs) == 1 and probs[0].startswith("layout changes the model's rows")
+    new = {"rows": [{"key": "A", "method": "seasonal"}, {"key": "B", "pct": 0.4}], "layout": [1]}
+    probs = plandiff.check(OLD, new, ch("A"))
+    assert len(probs) == 1 and "seasonality row" in probs[0]
 
 
 def test_thesis_must_be_one_of_three_and_undercuts_go_first_in_bold():

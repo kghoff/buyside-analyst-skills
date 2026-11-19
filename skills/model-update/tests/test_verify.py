@@ -163,3 +163,39 @@ def test_a_model_without_the_balance_rows_says_so_instead_of_passing(model, tmp_
     p = _edit(model, str(tmp_path / "nobs.xlsx"), lambda wb: wb["MOD"].__setitem__("B17", "Assets"))
     assert verify.balance({"L17": 103.0, "L20": 103.0}, p, "L") == [
         "balance sheet check: no 'Total assets' and 'Total liabilities and equity' rows found in MOD column B"]
+
+
+def _forecast_col(path):
+    return sorted(verify.forecast_cols(path))[0]
+
+
+def test_a_roll_that_changes_only_forecast_columns_passes(model, tmp_path):
+    """The roll rewrites forecast assumptions on the actuals copy; that is the whole point of it and must pass."""
+    mid, st = _built(model, tmp_path)
+    c = _forecast_col(mid)
+    after = _edit(mid, str(tmp_path / "rolled.xlsx"), lambda wb: wb["MOD"].__setitem__(f"{c}4", 777))
+    assert verify.roll(mid, after, st) == []
+
+
+def test_a_roll_that_writes_into_the_reported_quarter_is_caught(model, tmp_path):
+    """The reported column holds the release's numbers; a forecast build writing there would overwrite actuals."""
+    mid, st = _built(model, tmp_path)
+    after = _edit(mid, str(tmp_path / "rolled.xlsx"), lambda wb: wb["MOD"].__setitem__(f"{st['column']}4", 1))
+    assert any(f"MOD!{st['column']}4" in p for p in verify.roll(mid, after, st))
+
+
+def test_a_roll_that_moves_mod_rows_is_refused_because_state_refs_would_go_stale(model, tmp_path):
+    """state.json names the awaiting cells, placeholders and typed subtotals by cell; if the roll inserts or moves a MOD
+    row they point at the wrong rows and the 10-Q rerun would fill (or put formulas into) the wrong cells. Every
+    reference moving consistently (as Excel's insert does) does not make it safe, so the move itself stops the run."""
+    from xlsx import Package
+    from xledit import insert_rows
+    mid, st = _built(model, tmp_path)
+    pkg = Package(mid)
+    insert_rows(pkg, "MOD", 5, 1)                  # a row inserted by a build: everything below shifts, links follow
+    pkg.finish()
+    after = str(tmp_path / "moved.xlsx")
+    pkg.save(after)
+    assert verify.links(mid, after) == []          # the links still read the same lines: only the move check sees it
+    probs = verify.roll(mid, after, st)
+    assert len(probs) == 1 and "moved" in probs[0] and "/model-forecast" in probs[0]
