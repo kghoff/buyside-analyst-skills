@@ -121,13 +121,14 @@ def solve_signs(items, base, target, tol):
 
 
 def map_is(rows, ov, tol=TOL):
-    out, state, chk, sub = {}, "REV", {}, None
+    out, state, chk, sub, share_hd = {}, "REV", {}, None, False
     add = lambda role, lab, v, tag="primary": out.setdefault(role, []).append([lab, v, tag])
     rev_parts, cost_parts, opex, nonop, post, nonop_raw = [], [], [], [], [], []
     for lab, vals in rows:
         l = norm(lab)
         if not l: continue                             # an unlabeled subtotal
-        if not vals:                                   # a heading: 'Cost of sales:' / 'Operating expenses:'
+        if not vals or l.endswith(":") and all(v == 0 for v in vals):   # a heading: 'Cost of sales:' (a stray '-' parses as 0)
+            share_hd = bool(re.search(r"weighted.average|\bshares\b", l))   # 'Weighted average shares outstanding:'
             if re.search(COST_RE, l): sub = "COST"
             elif re.search(r"revenue|sales", l) and state == "REV": sub = "REV"
             elif re.search(r"operating expenses|costs and expenses|expenses", l): sub = "OPEX"
@@ -141,6 +142,11 @@ def map_is(rows, ov, tol=TOL):
                 chk.setdefault("SB", x); chk.setdefault("SD", x)
             elif "basic" in l: chk.setdefault("SB", x)
             elif "dilut" in l: chk.setdefault("SD", x)
+            continue
+        if share_hd and (l.startswith("basic") or l.startswith("diluted")):   # bare 'Basic' / 'Diluted' share counts
+            if "basic and diluted" in l: chk.setdefault("SB", x); chk.setdefault("SD", x)
+            elif "dilut" in l: chk.setdefault("SD", x)
+            else: chk.setdefault("SB", x)
             continue
         if "per share" in l or "per common share" in l or "per ordinary share" in l or l.startswith("basic") or l.startswith("diluted"):
             if "dividend" not in l and "continuing" not in l and "discontinued" not in l:
@@ -354,7 +360,7 @@ def map_bs(rows, ov):
     for role in ("PPE", "GWI"):
         items = out.get(role, [])
         nets = [i for i in items if re.search(r"\bnet\b", norm(i[0]))]
-        detail = [i for i in items if re.search(r"accumulated|^less|gross", norm(i[0]))]
+        detail = [i for i in items if i not in nets and re.search(r"accumulated|^less|gross", norm(i[0]))]   # 'net of accumulated depreciation' is the net line
         if nets and detail:
             out[role] = [i for i in items if i not in detail and (i in nets or not re.match(r"property|plant|equipment", norm(i[0])))]
     if "EQ" not in chk and "EQ_TOTAL" in chk: chk["EQ"] = chk["EQ_TOTAL"] - tot(out, "NCTL")
@@ -381,12 +387,17 @@ def map_cf(rows, ov):
             chk["CFI"] = x; sect = "FIN"; continue
         if l.startswith("net cash") and "financing" in l or l.startswith("cash used in financing") or l.startswith("cash provided by financing"):
             chk["CFF"] = x; sect = "POST"; continue
+        m = x is not None and re.match(r"(net )?cash\b.*\b(operating|investing|financing) activities", l)
+        if m:                                          # 'Cash flows used in investing activities' (a heading has no value)
+            role, sect = {"operating": ("CFO", "INV"), "investing": ("CFI", "FIN"), "financing": ("CFF", "POST")}[m.group(2)]
+            chk[role] = x; continue
         if x is None:
             continue
+        if l.startswith("cash") and ("beginning of" in l or "end of" in l): sect = "POST"   # the roll-forward closes the statement
         if sect == "POST":
             if l.startswith("effect of exchange") or "exchange rate" in l: chk["FX"] = x
             elif "beginning of" in l: chk.setdefault("BEG", x)
-            elif "end of" in l or "ending of" in l: chk.setdefault("END", x)
+            elif "end of" in l or "ending of" in l: chk.setdefault("END", x); chk.setdefault("END_LABEL", lab)
             elif l == "restricted cash" or l.startswith("restricted cash"): chk.setdefault("RC", x)
             continue
         r = apply_overrides("CF", lab, ov)
@@ -470,6 +481,24 @@ def plug_rounding(out, roles, plug, reported, unit, what):
     d = round(reported - tot(out, *roles), 6)
     if TOL < abs(d) <= 3 * unit + 1e-9:
         out.setdefault(plug, []).append([f"Rounding to the reported {what}", d, "rounding"])
+
+
+def derive_rc(Cc, B):
+    """restricted cash that is in the cash flow's ending cash but not a cash-flow row (it sits in another
+    balance-sheet line, e.g. prepaid): ending cash less balance-sheet cash, kept as components; None if not printed"""
+    if "RC" in Cc or "END" not in Cc or "restricted cash" not in norm(Cc.get("END_LABEL")): return None
+    comps = [Cc["END"], round(-tot(B, "CASH"), 6)]
+    return comps if sum(comps) > TOL else None
+
+
+def scale_q4(q4out, periods):
+    """press releases sometimes report shares (and net income) in thousands"""
+    for k, v in q4out.items():
+        fy = periods.get("FY " + k[3:], {}).get("IS_chk", {})
+        if not v.get("missing") and fy.get("SB") and v["SB"] / fy["SB"] > 300:
+            v["SB"] /= 1000; v["SD"] /= 1000; v["source"] += " (shares scaled from thousands)"
+        if not v.get("missing") and v.get("NI") and fy.get("NI") and abs(v["NI"]) / abs(fy["NI"]) > 30:
+            v["NI"] /= 1000; v["source"] += " (net income scaled from thousands)"
 
 
 def tie_out(key, I, Ic, B, Bc, C, Cc):
@@ -607,6 +636,8 @@ def main():
             if TOL < abs(d) <= 3 * unit + 1e-9:
                 Cc["FX"] = round((Cc.get("FX") or 0) + d, 6)
                 C["FX_ROUND"] = [["Cash roll-forward rounding, put in Exchange Rate Effects", d, "rounding"]]
+        rc = derive_rc(Cc, B)
+        if rc: Cc["RC"] = round(sum(rc), 6); Cc["RC_COMPONENTS"] = rc
         e = tie_out(key, I, Ic, B, Bc, C, Cc)
         if any(u != "millions" for u in units.values()): report_units.append(f"{key}: {units} (scaled to $ millions)")
         periods[key] = {"source": os.path.basename(path), "units": units, "IS": I, "IS_chk": Ic, "BS": B, "BS_chk": Bc, "CF": C, "CF_chk": Cc}
@@ -652,10 +683,7 @@ def main():
                                      "source_period": f"Q4 {yy}", "fallback": True, "derived": True}
             else:
                 q4out[f"Q4 {yy}"] = {"missing": True}
-    for k, v in q4out.items():          # press releases sometimes report shares in thousands
-        fy = periods.get("FY " + k[3:], {}).get("IS_chk", {})
-        if not v.get("missing") and fy.get("SB") and v["SB"] / fy["SB"] > 300:
-            v["SB"] /= 1000; v["SD"] /= 1000; v["source"] += " (shares scaled from thousands)"
+    scale_q4(q4out, periods)
     json.dump({"periods": periods, "q4": q4out}, open(os.path.join(a.work, "periods.json"), "w"), indent=1)
     json.dump(raw, open(os.path.join(a.work, "filings.json"), "w"))
     # mapping log: every fold / fallback / override, grouped by filing label
@@ -676,6 +704,12 @@ def main():
             f.write("\n## Two-class EPS (earnings allocated to participating securities)\n\n"
                     f"- filled: {', '.join('20' + y for y in filled) or 'none'}\n")
             for yy, why in two_class_skipped.items(): f.write(f"- **20{yy} left at zero** (EPS = net income / shares): {why}\n")
+        rc_keys = [k for k, p in periods.items() if p["CF_chk"].get("RC_COMPONENTS")]
+        if rc_keys:
+            f.write("\n## Restricted cash derived (not a cash-flow row)\n\n")
+            for k in rc_keys:
+                end, bs = periods[k]["CF_chk"]["RC_COMPONENTS"]
+                f.write(f"- {k}: ending cash {end} less balance-sheet cash {-bs}; restricted cash is held in another balance-sheet line\n")
         f.write("\n## Non-obvious mappings (each one is a judgment call to report)\n\n| Stmt | Filing line | Model role | Why | Periods |\n|---|---|---|---|---|\n")
         for (st, lab, role, tag), ks in sorted(calls.items()):
             f.write(f"| {st} | {lab} | {role} | {tag} | {', '.join(ks[:6])}{' ...' if len(ks) > 6 else ''} ({len(ks)}) |\n")

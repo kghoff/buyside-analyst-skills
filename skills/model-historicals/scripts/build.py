@@ -174,6 +174,16 @@ def prune(ws, row, used, log):
                 ", ".join(gone)))
 
 
+def apply_value_overrides(per, dec):
+    """value overrides from decisions.json, applied to the periods in place; returns the judgment-call log entries"""
+    log = []
+    for o in dec.get("value_overrides", []):
+        st = next(s for s in ("IS", "BS", "CF") if o["role"] in [*map_roles(s)])
+        per[o["period"]][st][o["role"]] = [[o.get("label", "decisions.json override"), c, "override"] for c in o["components"]]
+        log.append(("Value override", f"{o['period']} {o['role']} = {expr(o['components'])}", o.get("note", "")))
+    return log
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--work", required=True); ap.add_argument("--template", required=True)
@@ -185,11 +195,7 @@ def main():
     dec = json.load(open(a.decisions)) if a.decisions and os.path.exists(a.decisions) else {}
     log = []
 
-    # value overrides from decisions.json
-    for o in dec.get("value_overrides", []):
-        st = next(s for s in ("IS", "BS", "CF") if o["role"] in [*map_roles(s)])
-        per[o["period"]][st][o["role"]] = [[o.get("label", "decisions.json override"), c, "override"] for c in o["components"]]
-        log.append(("Value override", f"{o['period']} {o['role']} = {expr(o['components'])}", o.get("note", "")))
+    log.extend(apply_value_overrides(per, dec))
 
     wb = openpyxl.load_workbook(a.template); ws = wb[wb.sheetnames[0]]
     HDR = 2
@@ -349,7 +355,8 @@ def main():
                 e = e if re.fullmatch(r"-?[\d.]+", e) else f"({e})"
                 vals[role] = f"={e}-" + "-".join(f"{col(k)}{row[role]}" for k in range(q - 1, 0, -1))
         if "RC" in row:
-            vals["RC"] = f"={col(5)}{row['RC']}" if q == 4 else typed([per[key]["CF_chk"].get("RC") or 0])
+            if q == 4: vals["RC"] = f"={col(5)}{row['RC']}"           # Q4 has no filing of its own
+            else: vals["RC"] = typed(per[key]["CF_chk"].get("RC_COMPONENTS") or [per[key]["CF_chk"].get("RC") or 0])
         # beginning cash: first period typed, then links to the prior period's ending cash
         if y == first_fy and q in (1, 5):
             vals["BEG"] = per[f"Q1 {yy}"]["CF_chk"]["BEG"]
@@ -385,6 +392,10 @@ def main():
     for k, d in q4.items():
         if d.get("fallback") and first_fy <= 2000 + int(k[3:]):
             log.append(("Q4 share source", k, f"no Q4 release with share counts for {k}; used {d['source']}"))
+    rc_keys = [k for k, p in per.items() if p["CF_chk"].get("RC_COMPONENTS") and first_fy <= 2000 + int(k[3:]) <= last_fy + 1]
+    if rc_keys:
+        log.append(("Restricted cash derived", f"restricted cash for {', '.join(rc_keys)} = ending cash (cash flow) less balance-sheet cash",
+                    "the filings include it in another balance-sheet line (e.g. prepaid), not as a cash-flow row"))
     with open(os.path.join(a.work, "JUDGMENT_CALLS.md"), "w") as f:
         f.write(f"# {a.ticker} model - judgment calls\n\nModel: {os.path.basename(a.out)} | FY{first_fy}-FY{last_fy} + {len(partial)} reported quarter(s) of {est_y}\n\n")
         f.write("## Decisions\n\n")
