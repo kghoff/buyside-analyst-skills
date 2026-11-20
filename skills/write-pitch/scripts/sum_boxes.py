@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))   # run with pyt
 import openpyxl  # noqa: E402
 
 import common  # noqa: E402
+from common import ILLEGAL  # noqa: E402
+from fill import HOLDER, fill  # noqa: E402
 from xlsx import Package, colname, colnum, esc  # noqa: E402
 
 TAB = "SUM"
@@ -33,11 +35,9 @@ TAB = "SUM"
 INPUT_OFFSET = {"Buy price": (1, 0), "No-brainer price": (1, 0), "Mgmt contact": (0, 1), "Thesis Summary": (0, 1),
                 "Trading Plan": (0, 1), "Valuation Thoughts": (0, 1)}
 PRICES = ("Buy price", "No-brainer price")
-KEY = re.compile(r"\{(\w+)\}")
 CELL = re.compile(r"<c\b(?P<a>[^>]*?)(?:/>|>(?P<body>.*?)</c>)", re.S)
 ROW = re.compile(r"<row\b(?P<a>[^>]*?)(?:/>|>(?P<body>.*?)</row>)", re.S)
 CALCPR = re.compile(r"<calcPr\b(?P<a>[^>]*?)(?:/>|>\s*</calcPr>)")
-ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")    # not allowed in XML 1.0
 
 
 def ref_of(c, r):
@@ -87,7 +87,7 @@ def find_boxes(model):
 
 def wanted(label, text, numbers):
     """The value the plan asks for: a number for a price box, a string with {key} replaced for a text box."""
-    for k in KEY.findall(text):
+    for k in HOLDER.findall(text):
         if k not in numbers:
             raise SystemExit(f"write-pitch: sum_boxes['{label}'] uses {{{k}}}, which is not in numbers.")
     if label in PRICES:
@@ -100,7 +100,10 @@ def wanted(label, text, numbers):
             raise SystemExit(f"write-pitch: numbers['{m.group(1)}'].value is not a finite number ({v!r}); fix the "
                              "plan's number before filling SUM.")
         return v
-    t = KEY.sub(lambda m: str(numbers[m.group(1)]["shown"]), text).replace("\r\n", "\n").replace("\r", "\n")
+    t = fill(text, numbers).replace("\r\n", "\n").replace("\r", "\n")
+    if len(t) > common.EXCEL_CELL_MAX:
+        raise SystemExit(f"write-pitch: sum_boxes['{label}'] is {len(t):,} characters with the numbers filled in; an "
+                         f"Excel cell holds at most {common.EXCEL_CELL_MAX:,}. Shorten the plan's text.")
     if ILLEGAL.search(t):
         raise SystemExit(f"write-pitch: sum_boxes['{label}'] has control characters Excel cannot store: {t!r}.")
     if t.lstrip().startswith("="):

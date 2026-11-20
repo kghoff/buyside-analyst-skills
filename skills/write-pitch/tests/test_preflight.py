@@ -76,12 +76,70 @@ def test_unjudgeable_freshness_warns_not_stops(tmp_path):
 
 def test_summary_work_older_than_release_is_stale_even_with_fresh_note(tmp_path):
     m = fresh(tmp_path, "2026-11-08")
-    f = tmp_path / "_model_work" / "model-summary" / "build.json"
-    f.parent.mkdir(parents=True); f.write_text("{}")
-    old = datetime.datetime(2026, 11, 2).timestamp()
-    os.utime(f, (old, old))
+    summary_record(tmp_path, datetime.datetime(2026, 11, 2))
     j = run(m, tmp_path / "R")
     assert j["status"] == "stop" and j["stale"]["quarter"] == "Q3 26"
+
+
+def summary_record(tmp, when, name="inputs_written.json"):
+    """A model-summary work file dated `when`. inputs_written.json is the one copyover.py promotes only after the
+    built SUM was copied over the model, so it dates the last successful /model-summary."""
+    f = tmp / "_model_work" / "model-summary" / name
+    f.parent.mkdir(parents=True, exist_ok=True); f.write_text("{}")
+    os.utime(f, (when.timestamp(), when.timestamp()))
+    return f
+
+
+# why: an aborted /model-summary run (built, never copied over) leaves fresh work files; dating SUM by the newest of
+# any file would call an old SUM fresh and the pitch would quote last quarter's cap table and targets
+def test_aborted_summary_run_does_not_count_as_fresh(tmp_path):
+    m = fresh(tmp_path, "2026-11-08")
+    summary_record(tmp_path, datetime.datetime(2026, 11, 2))
+    summary_record(tmp_path, datetime.datetime(2026, 11, 9), "layout.json")
+    summary_record(tmp_path, datetime.datetime(2026, 11, 9), "inputs_written.next.json")
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "stop" and j["stale"]["quarter"] == "Q3 26"
+
+
+def test_summary_copied_after_release_is_fresh(tmp_path):
+    m = fresh(tmp_path, "2026-11-08")
+    summary_record(tmp_path, datetime.datetime(2026, 11, 9))
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "ok" and j["stale"] is None
+
+
+# why: work files but no copy-over record means /model-summary never finished here; say so rather than guess
+def test_summary_work_without_record_warns(tmp_path):
+    m = fresh(tmp_path, "2026-11-08")
+    summary_record(tmp_path, datetime.datetime(2026, 11, 9), "layout.json")
+    j = run(m, tmp_path / "R")
+    assert j["stale"] is None and any("inputs_written.json" in w for w in j["warnings"])
+
+
+def with_event(m, period, day):
+    """Add an earnings event row to Px Events' event block (model-price-history names it '<period> earnings')."""
+    wb = openpyxl.load_workbook(m)
+    ws = wb["Px Events"]
+    ws["D3"], ws["E3"], ws["F3"] = "Event date", "Type", "Event"
+    ws["D4"], ws["E4"], ws["F4"] = datetime.datetime(2026, 11, 5), "Earnings", "Q3 26 earnings"
+    ws["D5"], ws["E5"], ws["F5"] = day, "Earnings", f"{period} earnings"
+    wb.save(m)
+    return m
+
+
+# why: a quarter the company has already reported but MOD still shows as a forecast means every number in the pitch
+# (actuals, estimates, valuation) is a quarter old; the valuation note can still look fresh against MOD's own quarter
+def test_reported_quarter_missing_from_mod_stops(tmp_path):
+    m = with_event(fresh(tmp_path, "2026-11-08"), "Q4 26", datetime.datetime(2026, 11, 12))
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "stop" and j["stale"]["quarter"] == "Q4 26"
+    assert j["stale"]["fix"] == "run /model-update, then /model-valuation and /model-summary"
+
+
+def test_scheduled_release_after_today_does_not_stop(tmp_path):
+    m = with_event(fresh(tmp_path, "2026-11-08"), "Q4 26", datetime.datetime(2099, 2, 1))
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "ok" and j["stale"] is None
 
 def test_newest_note_by_date_decides(tmp_path):
     m = fresh(tmp_path, "2026-11-01")
@@ -116,3 +174,37 @@ def test_hidden_package_cli(tmp_path):
                           "--ticker", "XYZ"], capture_output=True, text=True)
     res = json.loads(out.stdout)
     assert res["status"] == "stop" and [x["what"] for x in res["missing"]] == ["python-docx"]
+
+
+def stale_dimension(m, ref="A1:B2"):
+    """Rewrite every sheet's <dimension> to a range that cuts rows and columns off (Excel and other writers can leave
+    one stale; read-only openpyxl trusts it)."""
+    import re
+    import shutil
+    import zipfile
+    tmp = m.with_suffix(".tmp")
+    with zipfile.ZipFile(m) as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.startswith("xl/worksheets/sheet"):
+                data = re.sub(rb'<dimension ref="[^"]*"/>', f'<dimension ref="{ref}"/>'.encode(), data)
+            zout.writestr(item, data)
+    shutil.move(tmp, m)
+
+
+# why: a stale <dimension> hid MOD's period headers from column D on, so a model with a forecast was told to run
+# /model-forecast, and the user would rerun a skill for nothing
+def test_stale_dimension_does_not_hide_mod_headers(tmp_path):
+    m = mk(tmp_path, ALL, REQ)
+    stale_dimension(m)
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "ok", j["missing"]
+
+
+# why: the same cut hid Px Events' release rows, so a quarter reported after the last valuation note slipped through
+# as "freshness not checked" and the pitch was built on a stale valuation
+def test_stale_dimension_does_not_hide_the_newest_release(tmp_path):
+    m = fresh(tmp_path, "2026-11-01")
+    stale_dimension(m)
+    j = run(m, tmp_path / "R")
+    assert j["status"] == "stop" and j["stale"] and j["stale"]["quarter"] == "Q3 26"

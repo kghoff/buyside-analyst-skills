@@ -98,6 +98,15 @@ def test_md_override_object_and_dropped_fields(tmp_path):
         assert fill(s["title"], p["numbers"]) in text.split("## 20-second pitch")[0]
 
 
+# why: a waived hurdle is a judgment call; the Markdown copy must show it at the top like an override, or the reader
+# sees a Long that cleared nothing with no reason given
+def test_md_shows_hurdle_override(tmp_path):
+    p = copy.deepcopy(PLAN)
+    p["hurdle_override"] = {"reason": "Print in two weeks at {price}.", "evidence": "Valuation!C5"}
+    text = open(build_md.build(p, "", str(tmp_path / "p.md"))).read()
+    assert "Hurdle override: Print in two weeks at $72.40. Evidence: Valuation!C5" in text.split("# XYZ pitch")[0]
+
+
 def test_md_two_column_and_text_chart_render(tmp_path):
     text = open(build_md.build(PLAN, "", str(tmp_path / "p.md"))).read()
     assert "**Bull view**" in text and "Growth holds on new products." in text

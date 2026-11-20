@@ -97,7 +97,7 @@ def test_skill_md_runs_every_script_and_house_rules():
                  "speaker notes", "mv -n", "--research <dir>", "python3 -m pip install"):
         assert must in text, must
     # the model copies are deleted on every stop after Step 4 (house rule: keep no copies), not just on success
-    assert text.count('rm -rf "$W/values" "$W/out.xlsx" "$W/build"') >= 5
+    assert text.count('rm -rf "$MW/values" "$MW/out.xlsx" "$W/build"') >= 5
     # UNVERIFIED items go in the speaker notes and the report, never in red on the slide face
     assert "in red" not in text
     # every assignment fill is named, so none reaches the agent as a raw {KEY}
@@ -140,3 +140,48 @@ def test_other_docs_know_write_pitch_exists():
     assert "`write-` (future)" not in claude and "`write-` produces a deliverable" in claude
     upd = (root / "skills" / "model-update" / "SKILL.md").read_text()
     assert "newest `$SRC/Pitch/*.md`" in upd and "future /write-pitch" not in upd
+
+
+def _section(text, start, end):
+    return text[text.index(start):text.index(end)]
+
+
+# why: a save the user makes while closing Excel lands after a checksum taken before the wait, and the cp then wipes
+# it; the lock wait must come first, then the checksum, then the copy with nothing in between
+def test_copy_over_waits_for_excel_before_the_checksum():
+    s10 = _section((R.parent / "SKILL.md").read_text(), "## Step 10", "## Step 11")
+    lock, sha, cp = s10.index("~$"), s10.index('shasum -a 256 "$M"'), s10.index('cp "$MW/out.xlsx" "$M"')
+    assert lock < sha < cp
+    assert "close Excel" not in s10[sha:]
+
+
+# why: plan.py's hurdle check for a Long must know which of its numbers anchors.py could not prove ([R20]); run
+# plan.py first and it reads last round's (or no) problems file
+def test_anchors_run_before_plan_and_feed_it():
+    s7 = re.sub(r"\s+", " ", _section((R.parent / "SKILL.md").read_text(), "## Step 7", "## Step 8"))
+    assert s7.index('"$SK/anchors.py"') < s7.index('"$SK/plan.py"')
+    assert '--anchor-problems "$W/anchor_problems.json"' in s7
+
+
+# why: a waived hurdle or a builder warning the user never hears about is a judgment call hidden from them
+def test_report_names_hurdle_override_and_build_warnings():
+    text = (R.parent / "SKILL.md").read_text()
+    s11 = re.sub(r"\s+", " ", text[text.index("## Step 11"):])
+    assert "`hurdle_override`" in s11 and "`override`" in s11
+    assert "WARNING" in s11 and "build_deck.py" in s11
+
+
+# why: the call rule is a Long must clear BOTH hurdles; a SKILL.md that says "the hurdles" loosely lets Claude tell the
+# user a Long passed on the IRR alone
+def test_long_needs_both_hurdles_is_stated():
+    flat = re.sub(r"\s+", " ", (R.parent / "SKILL.md").read_text())
+    desc = flat[:flat.index("# /write-pitch")]
+    for text in (desc, flat[len(desc):]):
+        assert "both the IRR hurdle and the buy R/R" in text
+
+
+# why: CLAUDE.md puts working copies of the model in <model dir>/_model_work/<skill>/, not beside the research
+def test_model_copies_live_in_model_work():
+    text = (R.parent / "SKILL.md").read_text()
+    assert 'MW="$MD/_model_work/write-pitch"' in text
+    assert '"$W/values' not in text and '"$W/out.xlsx' not in text

@@ -4,9 +4,11 @@
 check(plan, valuation_verdict, short_verdict, hurdles) returns plain-English problems, one per line; [] means the plan
 is sound. Each line starts with its rule id ([R1] ...), the same id plan_schema.md section 12 gives the rule.
 usage: python3 plan.py --plan pitch_plan.json [--valuation-verdict Buy] [--short-verdict "Alpha short"]
-       [--irr-hurdle 0.2] [--buy-rr 2] [--pound-rr 3]
-(the hurdles are the Valuation tab's inputs; common.HURDLES when not given. Prints the problems, or "plan OK";
-exit 1 if any)"""
+       [--irr-hurdle 0.2] [--buy-rr 2] [--pound-rr 3] [--anchor-problems anchor_problems.json]
+(the hurdles are the Valuation tab's inputs; common.HURDLES when not given. --anchor-problems is anchors.py's --json
+output, [{"key" or "quote", "rule", "problem"}]: a Long whose irr_3y, base_ret, risk_ret, target_3y, buy_price or
+nobrainer_price is in it gets [R20], since the hurdle check would rest on unproved numbers; so run anchors.py first.
+Prints the problems, or "plan OK"; exit 1 if any)"""
 import argparse
 import datetime
 import math
@@ -19,14 +21,17 @@ from common import BUDGET  # noqa: E402
 from common import CALLS  # noqa: E402
 from common import CORE_TYPES  # noqa: E402
 from common import HURDLES  # noqa: E402
+from common import ILLEGAL  # noqa: E402
 from common import SUM_BOXES  # noqa: E402
 from common import SUPPORT_LAYOUTS  # noqa: E402
 from common import load  # noqa: E402
+from anchors import _tolerance, parse_shown  # noqa: E402
 
 HOLDER = re.compile(r"\{(\w+)\}")
 VERDICT_CALL = {"buy": "Long", "sell": "Short", "hold": "Watch"}
 REQUIRED = ("price", "base_ret", "risk_ret", "irr_3y", "target_3y", "buy_price", "nobrainer_price")
 KNOW_COLD = ("price", "base_ret", "risk_ret", "irr_3y", "buy_price")
+HURDLE_KEYS = ("irr_3y", "base_ret", "risk_ret", "target_3y", "buy_price", "nobrainer_price")    # the call check's
 BULLETS = {"summary": (0, 3), "setup": (3, 5), "why_now": (3, 5), "valuation": (2, 4), "different": (2, 4),
            "catalysts": (3, 6), "text_chart": (2, 5)}       # bullets per slide type; summary's are optional (0-3)
 SUPPORTS = ("thesis.1", "thesis.2", "thesis.3", "risks.1", "risks.2")
@@ -37,7 +42,11 @@ TOP_TEXT = ("ticker", "as_of", "action", "most_important_thing", "pitch_20s")   
 CASE_FIELDS = ("name", "eps", "pe", "ret", "prob")
 THREE_RS = ("roll", "revisions", "rerating")
 PRICE_BOXES = ("Buy price", "No-brainer price")
-ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")    # Excel cannot store these in a SUM box
+# labels, not measurements (plan.py _typed): years and year ranges, quarter / half / fiscal labels, filings, ISO dates
+LABEL = re.compile(r"(?:19|20)\d\d[EA]?(?:[-\u2013/](?:(?:19|20)?\d\d)[EA]?)?|[1-4]Q(?:\d\d)?|[12]H(?:\d\d)?"
+                   r"|\d{1,2}-[KQ](?:/A)?|(?:19|20)\d\d-\d\d-\d\d", re.I)
+ORDINAL_WORDS = {"slide", "slides", "step", "steps", "section", "page", "p"}
+MONTHS = {"jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"}
 
 
 def _num(x):
@@ -117,8 +126,8 @@ def _holders(plan):
     """(where, key) for every {key} typed anywhere in the plan outside numbers and quotes."""
     slides = plan.get("slides") if isinstance(plan.get("slides"), list) else []
     parts = [("slide %d" % i, s) for i, s in enumerate(slides, 1)]
-    parts += [(k, plan.get(k)) for k in ("action", "pitch_20s", "most_important_thing", "override", "pitch_sheet",
-                                         "sum_boxes", "notes")]
+    parts += [(k, plan.get(k)) for k in ("action", "pitch_20s", "most_important_thing", "override", "hurdle_override",
+                                         "pitch_sheet", "sum_boxes", "notes")]
     for where, part in parts:
         for s in _strings(part):
             for m in HOLDER.findall(s):
@@ -349,15 +358,32 @@ def _text_checks(plan, slides, nums, out):
     boxes = plan.get("sum_boxes") if isinstance(plan.get("sum_boxes"), dict) else {}
     for name, t in boxes.items():
         _budget(f"sum_boxes {name}", "box", t, nums, out)
+    for where, t in [("action", plan.get("action"))] + [
+            (f"{k} {f}", plan[k].get(f)) for k in ("override", "hurdle_override") if isinstance(plan.get(k), dict)
+            for f in ("reason", "evidence")]:
+        if isinstance(t, str):
+            for w in _typed(t):
+                out.append(f"[R14] {where}: typed number {w!r}; use a {{key}} from numbers")
 
 
 def _typed(text):
-    """Tokens that look like a typed measurement: with $ or %, 12x, or a decimal. Years and counts pass."""
-    text = HOLDER.sub(" ", text)
-    for tok in text.split():
-        t = tok.strip(".,;:!?()[]\"'")
-        if "$" in t or "%" in t or re.search(r"\d\.\d", t) or re.fullmatch(r"[\d.\-]+[xX]", t):
-            yield t
+    """Words that are a typed number: any word that starts with a digit (after a sign or currency), so $72.40, 15%,
+    12x, 40bps, $1.2bn, 31m, 5k, 1,250 and a plain 40 or 4 all count. Labels pass: years (2027, 2027E, 2025-27),
+    quarter, half and fiscal labels (Q3 26, 3Q26, 1H26, FY 27), filing names (10-K), dates (2026-02-03, March 3,
+    12 May) and slide / step / section / page numbers. A word that starts with a letter (Q3, FY27, F20, C1) passes."""
+    words = [w.strip(".,;:!?()[]\"'~") for w in HOLDER.sub(" ", text).split()]
+    for i, t in enumerate(words):
+        if not re.match(r"[-+\u2212\u2013$\u20ac\u00a3]*\d", t) or LABEL.fullmatch(t):
+            continue
+        prev = words[i - 1].lower() if i else ""
+        nxt = words[i + 1].lower() if i + 1 < len(words) else ""
+        if re.fullmatch(r"\d\d", t) and re.fullmatch(r"q[1-4]|[1-4]q|h[12]|[12]h|fy|cy", prev):
+            continue                        # "Q3 26", "FY 27"
+        if re.fullmatch(r"\d+", t) and prev in ORDINAL_WORDS:
+            continue                        # "slide 12", "step 2"
+        if re.fullmatch(r"\d{1,2}(?:st|nd|rd|th)?", t) and (prev[:3] in MONTHS or nxt[:3] in MONTHS):
+            continue                        # "March 3", "12 May"
+        yield t
 
 
 def _budget(where, kind, text, nums, out):
@@ -435,14 +461,17 @@ def _override_ok(o):
     return isinstance(o, dict) and _text(o.get("reason")) and _text(o.get("evidence"))
 
 
-def _call(plan, nums, val, short, hurdles, out):
+def _call(plan, nums, val, short, hurdles, out, unverified=()):
     call = plan.get("call")
     if call not in CALLS:       # also catches an unhashable or non-string call
         out.append(f"[R2] call: must be one of {', '.join(CALLS)}, got {call!r}")
         return
     ov = _override_ok(plan.get("override"))
+    raw = val
     val = val.strip().lower() if isinstance(val, str) else None
     short = short.strip().lower() if isinstance(short, str) else None
+    if val and val not in VERDICT_CALL:
+        out.append(f"[R19] Valuation verdict {raw.strip()!r} is not Buy / Hold / Sell; fix the cell")
     if call == "Short" and short != "alpha short":
         out.append(f"[R19] call is Short but the short verdict is {short!r}; a short needs the verdict 'alpha short'")
     if val in VERDICT_CALL and VERDICT_CALL[val] != call and not ov:
@@ -451,29 +480,54 @@ def _call(plan, nums, val, short, hurdles, out):
     if call != "Long":
         return
     nums = nums or {}
+    shaky = [k for k in HURDLE_KEYS if k in unverified]
+    if shaky:
+        out.append(f"[R20] the hurdle check rests on unverified numbers: {', '.join(shaky)}; fix their anchors "
+                   f"(the anchors.py problems) first")
     v = {k: nums[k].get("value") if isinstance(nums.get(k), dict) else None for k in ("irr_3y", "base_ret", "risk_ret")}
     missing = [k for k, x in v.items() if not _num(x)]
     if missing:
         out.append(f"[R20] call is Long but numbers {', '.join(missing)} are missing: the hurdle check can't run")
         return
-    # a risk_ret of 0 means no downside, so R/R is infinite and the R/R hurdle is met
-    rr = v["base_ret"] / abs(v["risk_ret"]) if v["risk_ret"] else float("inf")
+    # a risk_ret of 0 means no downside: infinite R/R if there is upside, none if there is not
+    rr = v["base_ret"] / abs(v["risk_ret"]) if v["risk_ret"] else float("inf") if v["base_ret"] > 0 else 0.0
     h = hurdles
-    if v["irr_3y"] < h["irr"] and rr < h["buy_rr"] and not ov:
-        out.append(f"[R20] call is Long but misses both hurdles (3-year IRR {v['irr_3y']:.1%} under {h['irr']:.0%}, "
-                   f"R/R {rr:.1f} under {h['buy_rr']:g}); make the call Watch or give an override")
+    missed = []
+    if v["irr_3y"] < h["irr"]:
+        missed.append(f"3-year IRR {v['irr_3y']:.1%} under the {h['irr']:.0%} IRR hurdle")
+    if rr < h["buy_rr"]:
+        missed.append(f"R/R {rr:.1f} under {h['buy_rr']:g}")
+    if missed and not _override_ok(plan.get("hurdle_override")):
+        out.append(f"[R20] call is Long but misses {' and '.join(missed)}; a Long must clear both the IRR hurdle and "
+                   f"the buy R/R: make the call Watch or give a hurdle_override with a reason and evidence")
     act = plan.get("action")
     if isinstance(act, str) and "pound" in act.lower() and rr < h["pound_rr"]:
         out.append(f"[R21] action {act!r} pounds the table but the R/R is {rr:.1f}, under {h['pound_rr']:g}; "
                    f"size the action down (e.g. Buy)")
 
 
+def _prices(nums, h, out):
+    """[R23] buy_price and nobrainer_price are target_3y discounted 3 years at the IRR hurdle and the no-brainer IRR."""
+    val = {k: nums[k].get("value") if isinstance(nums.get(k), dict) else None
+           for k in ("target_3y", "buy_price", "nobrainer_price")}
+    if not all(_num(x) for x in val.values()):
+        return          # R3 / R4 report a missing or bad number
+    for k, irr, name in (("buy_price", h["irr"], "IRR hurdle"), ("nobrainer_price", h["nobrainer_irr"], "no-brainer IRR")):
+        want = val["target_3y"] / (1 + irr) ** 3
+        p = parse_shown(nums[k].get("shown"))
+        tol = max(0.005 * abs(want), _tolerance(p) if p else 0)
+        if abs(val[k] - want) > tol + 1e-9:
+            out.append(f"[R23] {k} {val[k]:g} is not target_3y / (1 + {irr:.0%})^3 = {want:.2f}, the 3-year target at "
+                       f"the {name} of {irr:.0%}; anchor it as calc: target_3y/{1 + irr:g}^3")
+
+
 def _verdict(x):
     return x if isinstance(x, str) else None
 
 
-def check(plan, valuation_verdict=None, short_verdict=None, hurdles=None):
-    """hurdles: {"irr", "buy_rr", "pound_rr"} from the Valuation tab; any key left out falls back to common.HURDLES."""
+def check(plan, valuation_verdict=None, short_verdict=None, hurdles=None, unverified=()):
+    """hurdles: {"irr", "buy_rr", "pound_rr"} from the Valuation tab; any key left out falls back to common.HURDLES.
+    unverified: number keys anchors.py could not prove (its --json output)."""
     h = dict(HURDLES)
     h.update({k: v for k, v in (hurdles or {}).items() if v is not None})
     if not isinstance(plan, dict):
@@ -487,7 +541,8 @@ def check(plan, valuation_verdict=None, short_verdict=None, hurdles=None):
     _sheet(plan, nums, out)
     sv = plan.get("starting_verdicts") if isinstance(plan.get("starting_verdicts"), dict) else {}
     _call(plan, nums, valuation_verdict or _verdict(sv.get("valuation")),
-          short_verdict or _verdict(sv.get("short")), h, out)
+          short_verdict or _verdict(sv.get("short")), h, out, set(unverified))
+    _prices(nums or {}, h, out)
     return out
 
 
@@ -499,14 +554,22 @@ def main(argv=None):
     ap.add_argument("--irr-hurdle", type=float, help="Valuation tab's IRR hurdle as a fraction (0.2)")
     ap.add_argument("--buy-rr", type=float, help="Valuation tab's Buy at R/R (2)")
     ap.add_argument("--pound-rr", type=float, help="Valuation tab's Table-pound at R/R (3)")
+    ap.add_argument("--anchor-problems", help="anchors.py --json output: the numbers it could not prove")
     a = ap.parse_args(argv)
     try:
         plan = load(a.plan)
     except ValueError as e:
         print(f"[R1] plan: not valid JSON ({e})")
         return 1
+    unverified = set()
+    if a.anchor_problems:
+        try:
+            unverified = {i["key"] for i in load(a.anchor_problems) if isinstance(i, dict) and i.get("key")}
+        except (OSError, ValueError, TypeError) as e:
+            print(f"plan.py: cannot read --anchor-problems {a.anchor_problems} ({e}); run anchors.py --json first")
+            return 1
     problems = check(plan, a.valuation_verdict, a.short_verdict,
-                     {"irr": a.irr_hurdle, "buy_rr": a.buy_rr, "pound_rr": a.pound_rr})
+                     {"irr": a.irr_hurdle, "buy_rr": a.buy_rr, "pound_rr": a.pound_rr}, unverified)
     print("\n".join(problems) if problems else "plan OK")
     return 1 if problems else 0
 

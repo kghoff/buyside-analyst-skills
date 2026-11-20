@@ -25,7 +25,7 @@ hurdles themselves are the user's inputs on the Valuation tab (section 12, R20).
 {
   "ticker": "XYZ", "as_of": "2026-11-19", "call": "Long", "action": "Buy",
   "starting_verdicts": {"valuation": "Buy", "short": "No short"},
-  "override": null,
+  "override": null, "hurdle_override": null,
   "most_important_thing": "one sentence",
   "pitch_20s": "the 20-second pitch",
   "numbers": {
@@ -78,7 +78,8 @@ appendix slides `pitch_brief.md` section 3 lists (the two checklists among them)
 | `call` | One of `Long`, `Short`, `Watch` (common.CALLS). |
 | `action` | The size of the conviction in a few words: "Small buy", "Buy", "Pound the table", "Short", "Wait for {buy_price}". `{key}`s are allowed and checked. "Pound" needs the pound R/R (R21). |
 | `starting_verdicts` | `valuation`: the value of the Valuation tab row labelled "Overall verdict (the agent's call: Buy / Hold / Sell)" (`Buy`, `Hold` or `Sell`); if that cell is empty (the valuation plan had no verdict), write `Hold` and say so in `notes`. `short`: the Short Check row "Verdict (agent's call)" (the user's own input) as the tab shows it (`Alpha short`, `Filler short`, `Watchlist`, `No short`); if that cell is empty, the row "Verdict (the rule)" (cell B5). `null` when there is no Short Check tab. Verdicts are compared ignoring case. |
-| `override` | `null` when `call` follows the mapping (Buy → Long, Sell → Short, Hold → Watch). Otherwise `{"reason": "...", "evidence": "..."}`; `evidence` cites `file:line` or `Tab!Cell`. |
+| `override` | `null` when `call` follows the mapping (Buy → Long, Sell → Short, Hold → Watch). Otherwise `{"reason": "...", "evidence": "..."}`; `evidence` cites `file:line` or `Tab!Cell`. It covers the call only, never the hurdles. |
+| `hurdle_override` | `null` unless a `Long` misses the IRR hurdle or the buy R/R (R20). Then `{"reason": "...", "evidence": "..."}`, cited the same way: why it is still a Long. It is the only thing that waives the hurdle check. |
 | `most_important_thing` | One sentence: the differentiated view on where a number in the statements is heading. |
 | `pitch_20s` | The full 20-second pitch (box budget, 420): position, why mispriced, what's changing, the number that matters, the valuation gap, the ask. It opens the pitch sheet; slide 2's `takeaway` is a version of it cut to 160 characters. |
 | `numbers` | Every number the plan shows (section 3). |
@@ -106,23 +107,30 @@ Each entry is `"<key>": {"value": <number>, "shown": "<string>", "anchor": "<anc
   `risk_ret` (12-month risk-case return, negative), `irr_3y` (3-year IRR at today's price), `target_3y` (3-year
   target price), `buy_price` and `nobrainer_price`. Add `rr_12m` (= base_ret / abs(risk_ret)) if you show the R/R.
   `buy_price` = `target_3y` / (1 + IRR hurdle)^3 and `nobrainer_price` = `target_3y` / (1 + no-brainer IRR)^3, the
-  IRR hurdle being the Valuation tab's "IRR hurdle" input (house default 20%, so `calc: target_3y/1.2^3`) and the
-  no-brainer IRR 30% (`calc: target_3y/1.3^3`).
+  IRR hurdle being the Valuation tab's "IRR hurdle" input as the digest shows it (`calc: target_3y/1.15^3` for 15%;
+  the house default 20% only when the tab has none, `calc: target_3y/1.2^3`) and the no-brainer IRR 30%
+  (`calc: target_3y/1.3^3`). Code checks both against the hurdle it was given (R23).
 - **Anchors**, three forms:
   1. `Tab!Cell`, e.g. `Valuation!F20`, `SUM!J12`, `MOD!H45`: a cell in the model. `value` must equal the
      recalculated cell at the rounding `shown` implies. Use the cell that holds the number, not one that links to it,
      when both exist; either passes if the values match.
   2. `file:line`, e.g. `Earnings Calls/_md/2026 Q3 XYZ call.md:214`: a line in a research file. The path is relative
      to the research root (the folder `<research_dir>/<TICKER>/` the assignment names). The
-     `shown` number must be printed on that line. Before comparing, the check drops a leading `+` or `-`, any `$`,
-     `,`, `%`, `x`, `(` and `)`, and a unit suffix `m`, `bn` or `k`; what is left (the digits and decimal point) must
-     appear as a number on the line. So `"$1,204m"` matches `1,204` and `"(18%)"` matches `-18%`, but `"$1.2bn"` does
-     not match `1,204 million`: copy the form printed on the line. Use it for numbers the model doesn't hold:
+     `shown` number must be printed on that line, as a whole number (commas ignored), with its unit next to it:
+     `%` (or `percent`, `pct`), `x` (or `times`), `bps` (or `bp`, `basis points`), `m` (or `mn`, `million`), `bn`
+     (or `billion`), `k` (or `thousand`); a `$` with no `m` / `bn` / `k` needs a `$` before it. So `"$1,204m"` matches
+     `$1,204 million` and `1,204 million` but not `1,204 days`, and `"$1.2bn"` does not match `1,204 million`: copy
+     the form printed on the line. A sign must not be contradicted: `"+5%"` fails on "fell 5%" or "(5%)", `"-5%"` or
+     `"(5%)"` fails on "grew 5%" (the three words before the number and the one after its unit are read for fell /
+     declined / down / decrease and rose / grew / up / increase); an unsigned `"5%"` passes on "fell 5%" but not on a
+     number printed negative ("-5%", "(5%)"). Use it for numbers the model doesn't hold:
      guidance, a market size, a sell-side estimate, a number from the user's notes (file
      `Pitch/_work/user_notes.md`).
   3. `calc: <expression>`, e.g. `calc: (target_3y/price)^(1/3)-1`, `calc: target_3y/1.2^3`: arithmetic over other
      keys. Allowed: key names, numbers, `+ - * / ^ ( )`, `abs`, `min`, `max`. The result must equal `value` at the
-     shown rounding. Every key it uses must itself be anchored (no circles).
+     shown rounding. It must use at least one key (`calc: 0.25` proves nothing; constants only beside a key, as in
+     `target_3y/1.2^3`). Every key it uses must itself be anchored (no circles), and a calc on a key that fails its
+     own check fails too.
 - **Repeats agree.** Two keys with the same anchor must have the same `shown`. Better: use one key everywhere the
   number appears.
 
@@ -245,14 +253,16 @@ Structure (`plan.py`):
   `rerating`; `short`, if present, is an object.
 - **[R12]** There are 10 to 25 slides with `section` `support`; each has `supports` set to `thesis.1`, `thesis.2`,
   `thesis.3`, `risks.1` or `risks.2`; each of those five is supported at least once.
-- **[R13]** Every `{key}` written in `action`, `pitch_20s`, `most_important_thing`, `override`, any slide field,
+- **[R13]** Every `{key}` written in `action`, `pitch_20s`, `most_important_thing`, `override`, `hurdle_override`, any slide field,
   `pitch_sheet`, `sum_boxes` or `notes` exists in `numbers`.
-- **[R14]** No typed numbers in the budgeted text fields (section 11; quote `text` is exempt). How the check works:
-  it takes out the `{key}`s, splits the text on spaces, trims surrounding punctuation from each word, and flags a word
-  that holds `$` or `%`, holds a decimal (a digit, a point, a digit), or is a number followed by `x` (`12x`). Whole
-  numbers with no sign or unit ("2027E", "Q3 26", "15") pass the code, but the `{key}` rule in section 3 still binds
-  you: anything that measures the company or the stock goes through `numbers`. `risks[].prob` is a structured field,
-  not text, so it is not scanned.
+- **[R14]** No typed numbers in the budgeted text fields (section 11; quote `text` is exempt), nor in `action` or the
+  `reason` and `evidence` of `override` and `hurdle_override`. How the check works: it takes out the `{key}`s, splits
+  the text on spaces, trims surrounding punctuation from each word, and flags a word that starts with a digit (after
+  any sign or currency): `$72.40`, `15%`, `12x`, `40bps`, `$1.2bn`, `31m`, `5k`, `1,250`, and a plain `40` or `4`.
+  Labels pass: years (`2027`, `2027E`, `2025-27`), quarter, half and fiscal labels (`Q3 26`, `3Q26`, `1H26`,
+  `FY 27`), filings (`10-K`), dates (`2026-02-03`, `March 3`, `12 May`), a number after slide, step, section or page,
+  and any word that starts with a letter (`Q3`, `FY27`, `Valuation!F20`). Write counts in words ("three thesis
+  points"). `risks[].prob` is a structured field, not text, so it is not scanned.
 - **[R15]** `quotes` is a list of objects, each with `id`, `text`, `file` and a whole-number `line`; a slide's
   `quotes` is a list of ids, and every id it names exists in `quotes`.
 - **[R16]** Every text field is within its budget (section 11), counted after each `{key}` is replaced by its `shown`.
@@ -264,24 +274,30 @@ Structure (`plan.py`):
   or `null`; `Buy price` and `No-brainer price` are a single `{key}`; no text starts with `=` or holds control
   characters.
 - **[R19]** The call against the verdicts (the skill reads them from the tabs; failing that, `starting_verdicts`;
-  case ignored). If the Valuation verdict is Buy, Sell or Hold, a call other than its mapping (Buy → Long,
+  case and surrounding spaces ignored). A Valuation verdict that is not empty and not Buy, Hold or Sell is a problem
+  (fix the cell). If the Valuation verdict is Buy, Sell or Hold, a call other than its mapping (Buy → Long,
   Sell → Short, Hold → Watch) needs `override` with a non-empty `reason` and `evidence`. `Short` needs the short
   verdict `alpha short`, override or not; with no Short Check tab a Short is impossible.
-- **[R20]** A `Long` needs numeric `irr_3y`, `base_ret` and `risk_ret`. If `irr_3y` is below the IRR hurdle *and*
-  `base_ret` / |`risk_ret`| is below the buy R/R, it needs `override` or the call `Watch` (a `risk_ret` of 0 counts
-  as infinite R/R). The hurdles are the Valuation tab's "IRR hurdle" and "Buy at R/R" inputs; when the tab has none,
-  common.HURDLES: 20% 3-year IRR, 2:1 to buy, 3:1 to pound the table.
+- **[R20]** A `Long` needs numeric `irr_3y`, `base_ret` and `risk_ret`, and must clear both the IRR hurdle and the
+  buy R/R: if `irr_3y` is below the IRR hurdle *or* `base_ret` / |`risk_ret`| is below the buy R/R, it needs
+  `hurdle_override` with a non-empty `reason` and `evidence`, or the call `Watch` (`override` does not waive it). A
+  `risk_ret` of 0 counts as infinite R/R when `base_ret` is above 0, and as missing the R/R when it is not. A `Long`
+  also fails while any of `irr_3y`, `base_ret`, `risk_ret`, `target_3y`, `buy_price` or `nobrainer_price` failed its
+  anchor check (the skill passes anchors.py's problems in). The hurdles are the Valuation tab's "IRR hurdle" and "Buy
+  at R/R" inputs; when the tab has none, common.HURDLES: 20% 3-year IRR, 2:1 to buy, 3:1 to pound the table.
 - **[R21]** On a `Long`, an `action` containing "pound" needs `base_ret` / |`risk_ret`| at or above the pound R/R (the
   Valuation tab's "Table-pound at R/R", default 3:1).
 - **[R22]** `ticker`, `as_of`, `action`, `most_important_thing` and `pitch_20s` are non-empty text; `notes`, if
   present, is a list of sentences.
+- **[R23]** `buy_price` is `target_3y` / (1 + IRR hurdle)^3 and `nobrainer_price` is `target_3y` / (1 + 30%)^3, within
+  0.5% or the rounding `shown` implies, whichever is wider; the IRR hurdle is the one R20 uses.
 
-Truth (`anchors.py`, run after `plan.py`):
+Truth (`anchors.py`; the skill runs it before `plan.py` and passes its problems to R20):
 - **[A1]** A `Tab!Cell` anchor's value equals the recalculated cell at the rounding `shown` implies.
 - **[A2]** A `file:line` anchor's `shown` number is printed on that line of that file (path relative to the research
-  root), after dropping a leading `+` or `-`, `$ , % x ( )` and a unit suffix `m`, `bn` or `k` (section 3).
+  root), with the shown unit next to it and no sign the words contradict (section 3).
 - **[A3]** A `calc:` anchor evaluates, over the other keys' values, to `value` at the shown rounding; only names,
-  numbers, `+ - * / ^ ( )`, `abs`, `min`, `max`.
+  numbers, `+ - * / ^ ( )`, `abs`, `min`, `max`; it uses at least one key, and none of its keys failed.
 - **[A4]** A quote's `text` is verbatim on its `line` of its `file`.
 - **[A5]** Two keys with the same anchor have the same `shown`.
 

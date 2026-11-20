@@ -148,7 +148,7 @@ def test_prices_written_as_numbers(tmp_path, sum_model):
 def test_placeholders_substituted_with_shown(tmp_path, sum_model):
     # text never carries a typed number: {key} becomes numbers[key].shown, the form the deck prints
     out, _ = run_sum_boxes(tmp_path, sum_model)
-    assert read_cell(out, "SUM", "Valuation Thoughts") == "Target $120 in three years, IRR 18.3%."
+    assert read_cell(out, "SUM", "Valuation Thoughts") == "Target $130 in three years, IRR 21.5%."
 
 
 def test_null_box_skipped_and_untouched(tmp_path):
@@ -296,6 +296,8 @@ def test_line_breaks_normalised(tmp_path, sum_model):
 @pytest.mark.parametrize("box, text, why", [
     ("Thesis_Summary", "=Valuation!C30 is the target", "formula"),
     ("Thesis_Summary", "bell\x07 here", "control characters"),
+    # Excel holds at most 32,767 characters in a cell; a longer string makes it repair (truncate) the user's file
+    pytest.param("Thesis_Summary", "x" * 32768, "32,767", id="over-the-cell-limit"),
 ])
 def test_bad_text_stops(tmp_path, sum_model, box, text, why):
     with pytest.raises(SystemExit, match=why):
@@ -332,7 +334,7 @@ def test_added_row_still_checks_other_rows(tmp_path):
     m = make_model(tmp_path / "XYZ_model.xlsx", bare=("Valuation Thoughts",))
     out, rep = run_sum_boxes(tmp_path, m)
     assert "Valuation Thoughts" in rep["written"]
-    assert read_cell(out, "SUM", "Valuation Thoughts") == "Target $120 in three years, IRR 18.3%."
+    assert read_cell(out, "SUM", "Valuation Thoughts") == "Target $130 in three years, IRR 21.5%."
     assert run_verify(m, out) == 0
     sum_part_rewrite(out, lambda x: x.replace('<row r="19"', '<row r="19" ht="40" customHeight="1"', 1))
     assert run_verify(m, out) == 1

@@ -1,6 +1,6 @@
 ---
 name: write-pitch
-description: Write the stock pitch for a company from everything the earlier skills produced - a long PowerPoint pitch deck, a core deck (slides 1-10), a 2-page pitch sheet, a Markdown copy, and SUM's write-pitch boxes. An agent (pitch-analyst) reads the filings and street research, the earlier agents' reasoning, the valuation / short / earnings notes, a digest of every tab of the model and pictures of its charts; keeps a plate file; makes the call (Long / Short / Watch) from Valuation's and Short Check's verdicts against the Valuation tab's hurdles, overriding only with cited evidence; and writes the pitch plan with every number anchored to a cell, a research line or a calc. A second agent plays the PM and attacks the draft; the analyst concedes or defends with evidence. Code checks the structure, the call against the hurdles and every number and quote, builds the decks, the sheet and the PDFs, and writes only the empty (or still its own) SUM boxes: thesis summary, trading plan, valuation thoughts, buy and no-brainer prices, management contact. Works for any listed company. Run after /model-summary; rerun each print. Use when the user runs /write-pitch TICKER or asks for a pitch, a pitch deck or an elevator pitch.
+description: Write the stock pitch for a company from everything the earlier skills produced - a long PowerPoint pitch deck, a core deck (slides 1-10), a 2-page pitch sheet, a Markdown copy, and SUM's write-pitch boxes. An agent (pitch-analyst) reads the filings and street research, the earlier agents' reasoning, the valuation / short / earnings notes, a digest of every tab of the model and pictures of its charts; keeps a plate file; makes the call (Long / Short / Watch) from Valuation's and Short Check's verdicts against the Valuation tab's hurdles (a Long must clear both the IRR hurdle and the buy R/R), overriding only with cited evidence; and writes the pitch plan with every number anchored to a cell, a research line or a calc. A second agent plays the PM and attacks the draft; the analyst concedes or defends with evidence. Code checks the structure, the call against the hurdles and every number and quote, builds the decks, the sheet and the PDFs, and writes only the empty (or still its own) SUM boxes: thesis summary, trading plan, valuation thoughts, buy and no-brainer prices, management contact. Works for any listed company. Run after /model-summary; rerun each print. Use when the user runs /write-pitch TICKER or asks for a pitch, a pitch deck or an elevator pitch.
 ---
 
 # /write-pitch
@@ -19,10 +19,10 @@ There is **no approval pause**: the analyst decides, a PM agent attacks it, code
 tells the user every call. The only change to the model is SUM's write-pitch boxes, and only the ones that are empty
 or still hold what the last run wrote; anything the user typed stays.
 
-**Keep no model copies.** From Step 4 on, the run holds copies of the model (`$W/values`, later `$W/out.xlsx`, and
+**Keep no model copies.** From Step 4 on, the run holds copies of the model (`$MW/values`, later `$MW/out.xlsx`, and
 `$W/build` with the decks drawn from them). On every stop or abort after Step 4, for any reason (a failed check, a
 verify problem, a changed checksum, the user calling it off, a look-step fault you can't fix), first run
-`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`, then tell the user.
+`rm -rf "$MW/values" "$MW/out.xlsx" "$W/build"`, then tell the user.
 
 ## Requirements
 - Python 3 with openpyxl, python-pptx, python-docx, PyMuPDF and Pillow, installed for the system `python3` (every
@@ -37,11 +37,13 @@ verify problem, a changed checksum, the user calling it off, a look-step fault y
 the research folder is not `research_dir/<T>` from the settings file). It prints JSON. Set
 `M` = `model`, `MD` = the model's folder, `R` = `research`, `P` = `pitch_dir`, `W` = `work`, `MODE` = `mode`
 (`first`, or `rerun` when `$W/plate.md` exists) and keep `optional_missing` and `warnings`.
-`mkdir -p "$W" "$MD/_model_work/write-pitch"`.
+`MW="$MD/_model_work/write-pitch"` (the model copies and the SUM record go here, per the house rule; the research
+artefacts stay in `$W`). `mkdir -p "$W" "$MW"`.
 - `status` = `stop`: tell the user, in plain English, each `missing` item and its `fix` (the skill to run, or the
   `python3 -m pip install ...` line for a Python package that does not import under `-I`), and the
-  `stale` quarter if set (a quarter was reported after the last valuation note or SUM build: rerun /model-valuation,
-  then /model-summary). Stop.
+  `stale` quarter and its `fix` if set: either Px Events shows a quarter already reported that MOD still forecasts
+  (run /model-update, then /model-valuation and /model-summary), or MOD's newest quarter was reported after the last
+  valuation note or the last finished SUM build (rerun /model-valuation, then /model-summary). Stop.
 - Tell the user every `warnings` line (e.g. freshness could not be checked) and the `optional_missing` list.
 
 ## Step 2: Lock and checksum
@@ -55,13 +57,13 @@ conversations, an angle to test)?" Write what they say, as they said it, to `$W/
 `rm -f "$W/user_notes.md"` (an old run's notes must not pass as new) and use `none`.
 
 ## Step 4: Digest and tab pictures
-Clear what an earlier run left: `rm -rf "$W/values" "$W/look" "$W/build" "$W/unverified.json" "$W/anchor_problems.json"`.
+Clear what an earlier run left: `rm -rf "$MW/values" "$MW/out.xlsx" "$W/look" "$W/build" "$W/unverified.json" "$W/anchor_problems.json"`.
 ```bash
-V=$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import lo; print(lo.recalc(sys.argv[2], sys.argv[3]))' "$SK" "$M" "$W/values")
+V=$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import lo; print(lo.recalc(sys.argv[2], sys.argv[3]))' "$SK" "$M" "$MW/values")
 python3 -I "$SK/digest.py" --values "$V" --out "$W/digest.md"
 python3 -I "$SK/render_tabs.py" --values "$V" --out "$W/tabs"
 ```
-`lo.recalc` makes a recalculated copy of the model in `$W/values/` (a minute or two; the model is only read).
+`lo.recalc` makes a recalculated copy of the model in `$MW/values/` (a minute or two; the model is only read).
 `digest.py` writes every tab's text, notes and numbers with their cells; `render_tabs.py` writes PNG tiles of every tab
 and `$W/tabs/index.md`. `$V` stays until Step 10 (the checks read it); then it is deleted.
 
@@ -105,18 +107,24 @@ and `$W/tabs/index.md`. `$V` stays until Step 10 (the checks read it); then it i
    "Verdict (agent's call)" (else "Verdict (the rule)"; no tab = none), and Valuation's "IRR hurdle", "Buy at R/R"
    and "Table-pound at R/R". It prints JSON whose keys are plan.py's flags; pass each non-null one. Keep its `notes`
    for the report (each is a fallback the user must hear).
-2. Run both:
+2. Run both, anchors.py first:
    ```bash
-   python3 -I "$SK/plan.py" --plan "$W/pitch_plan.json" --valuation-verdict "<valuation_verdict>" \
-       --short-verdict "<short_verdict>" --irr-hurdle <irr_hurdle> --buy-rr <buy_rr> --pound-rr <pound_rr>
    python3 -I "$SK/anchors.py" --plan "$W/pitch_plan.json" --values "$V" --research "$R" --json "$W/anchor_problems.json"
+   python3 -I "$SK/plan.py" --plan "$W/pitch_plan.json" --valuation-verdict "<valuation_verdict>" \
+       --short-verdict "<short_verdict>" --irr-hurdle <irr_hurdle> --buy-rr <buy_rr> --pound-rr <pound_rr> \
+       --anchor-problems "$W/anchor_problems.json"
    ```
-   Each prints one problem per line (or `plan OK` / `anchors OK`) and exits 1 on any.
+   Each prints one problem per line (or `anchors OK` / `plan OK`) and exits 1 on any. anchors.py rewrites
+   `$W/anchor_problems.json` on every run (`[]` when it finds none; Step 4 cleared the last run's), so plan.py always
+   reads this round's. plan.py checks the call against the hurdles: a Long must clear both the IRR hurdle and the buy
+   R/R, and it reports [R20] when that check rests on a number anchors.py could not prove. The plan's
+   `hurdle_override` (a reason and evidence) waives the hurdle check; it is separate from `override`, which permits a
+   call that differs from the Valuation verdict.
 3. Problems → SendMessage the analyst: "Code found these problems; follow 'When you get check problems' in your
    assignment." and paste every line of both. Wait for `PLAN REVISED`; run both again. At most 2 rounds.
 4. After round 2:
    - plan.py problems stop the run: tell the user each one in plain English and build nothing. The model is
-     untouched. Delete the model copies: `rm -rf "$W/values" "$W/out.xlsx" "$W/build"`.
+     untouched. Delete the model copies: `rm -rf "$MW/values" "$MW/out.xlsx" "$W/build"`.
    - anchors.py problems: `cp "$W/anchor_problems.json" "$W/unverified.json"`. build_deck.py names each one as
      UNVERIFIED in the speaker notes of the slides that use it (nowhere on the slide face), and the report lists
      every one. With none, make sure no old file is left:
@@ -149,7 +157,7 @@ and `$W/tabs/index.md`. `$V` stays until Step 10 (the checks read it); then it i
    to shorten; then Step 7 again on the changed plan, but at most one more check round: Step 7's two-round limit does
    not restart, so after that round apply Step 7.4 and rebuild); a layout fault is the builder's to fix. Rebuild (Step 8.2)
    and look again. Never hand-edit an output. If you cannot make it right, stop: delete the model copies
-   (`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`) and tell the user what is wrong and on which slide.
+   (`rm -rf "$MW/values" "$MW/out.xlsx" "$W/build"`) and tell the user what is wrong and on which slide.
 3. When it looks right, `mkdir -p "$P"` and `mv -n` each file of `$B` (decks, sheet, Markdown, PDFs) into `$P`; then
    check `$B` is empty. `-n` never overwrites: a file left behind means one of that name appeared since names.py ran,
    so rerun names.py and move it under the new name.
@@ -157,26 +165,29 @@ and `$W/tabs/index.md`. `$V` stays until Step 10 (the checks read it); then it i
 ## Step 10: SUM boxes
 ```bash
 python3 -I "$SK/sum_boxes.py" --model "$M" --plan "$W/pitch_plan.json" \
-    --record "$MD/_model_work/write-pitch/sum_written.json" --out "$W/out.xlsx" > "$W/sum_boxes.json"
-python3 -I "$SK/verify.py" --before "$M" --after "$W/out.xlsx" --expect "$W/sum_boxes.json"
+    --record "$MW/sum_written.json" --out "$MW/out.xlsx" > "$W/sum_boxes.json"
+python3 -I "$SK/verify.py" --before "$M" --after "$MW/out.xlsx" --expect "$W/sum_boxes.json"
 ```
 sum_boxes.py edits the XML of a copy (never openpyxl's save): a box is written only if empty or still equal to what
 the last run wrote; anything else is the user's and stays. verify.py must print `verify OK` and exit 0: it proves
 every other part of the workbook is byte-identical. Any problem: stop, do not copy, delete the model copies
-(`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`) and tell the user the problems in plain English.
+(`rm -rf "$MW/values" "$MW/out.xlsx" "$W/build"`) and tell the user the problems in plain English.
 1. If `written` is empty, the model needs no change: skip to 4.
-2. `shasum -a 256 "$M"` again: if it differs from `SHA`, the user saved meanwhile: stop, delete the copies
-   (`rm -rf "$W/values" "$W/out.xlsx" "$W/build"`) and tell the user to rerun /write-pitch.
-3. Check `~$<model file name>` again (ask the user to close Excel). Then `cp "$W/out.xlsx" "$M"`.
-4. `mv "$MD/_model_work/write-pitch/sum_written.next.json" "$MD/_model_work/write-pitch/sum_written.json"` (the record
-   of what this run wrote, so the next run can tell the user's changes from its own).
-5. Delete every copy of the model the run made (keep none): `rm -rf "$W/values" "$W/out.xlsx" "$W/look" "$W/build"`.
+2. If `~$<model file name>` exists next to `M`, ask the user to close Excel and wait until it is gone. Then
+   `shasum -a 256 "$M"`: if it differs from `SHA`, the user saved meanwhile (perhaps while closing Excel): stop,
+   delete the copies (`rm -rf "$MW/values" "$MW/out.xlsx" "$W/build"`) and tell the user to rerun /write-pitch.
+3. Straight after the checksum, with nothing in between: `cp "$MW/out.xlsx" "$M"`.
+4. `mv "$MW/sum_written.next.json" "$MW/sum_written.json"` (the record of what this run wrote, so the next run can
+   tell the user's changes from its own).
+5. Delete every copy of the model the run made (keep none): `rm -rf "$MW/values" "$MW/out.xlsx" "$W/look" "$W/build"`.
    Keep the plate, the plan, the PM review, the digest, the tab pictures, `unverified.json` and `sum_boxes.json`.
 
 ## Step 11: Report
 Tell the user, in plain English:
 - The call and the action, and any override of the Valuation or Short Check verdict with its reason and evidence
   (`override` in the plan); labels.py's `notes` (an empty verdict read as Hold, a rule verdict used, a house hurdle).
+- Whether the hurdle check was waived: if the plan has a `hurdle_override`, say so plainly (a Long normally must clear
+  both the IRR hurdle and the buy R/R) with its reason and evidence.
 - The most important thing, the three thesis points, the two risks, the 12-month base / risk and R/R, the 3-year IRR,
   the buy and no-brainer prices.
 - The PM's verdict (pass to IC / not good enough yet / kill), what the analyst conceded, and every challenge left
@@ -190,6 +201,8 @@ Tell the user, in plain English:
   `sum_boxes` text for it; any key that is a `key` in `unverified.json` means a box in the user's model holds an
   unchecked number. Name the box, the number (`shown`) and why it failed, so the user can check or clear it.
 - Every judgment call: each entry of the plan's `notes`, your own (fixes in the look step, anything shortened).
+- Every `WARNING` line build_deck.py (and the other build scripts) printed, e.g. a chart or table left out because
+  its data was not found.
 - The missing optional inputs (preflight's `optional_missing` and the reading list's "Missing" section) and
   preflight's `warnings`.
 - Next steps: rehearse with the pitch sheet (the 20-second pitch, the 3-minute script, the hard questions); rerun

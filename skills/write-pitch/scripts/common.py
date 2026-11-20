@@ -1,5 +1,5 @@
 # skills/write-pitch/scripts/common.py
-import json, pathlib
+import json, pathlib, re
 
 CORE_TYPES = ["title", "summary", "setup", "thesis", "risks", "why_now", "valuation", "different",
               "risk_reward", "catalysts"]                      # slides 1-10, in this order
@@ -11,6 +11,8 @@ SUM_BOXES = ["Thesis Summary", "Trading Plan", "Valuation Thoughts", "Buy price"
 # Table-pound at R/R) are missing; buy price = 3-yr target / (1+irr)^3, no-brainer = 3-yr target / (1+nobrainer_irr)^3
 HURDLES = {"buy_rr": 2.0, "pound_rr": 3.0, "irr": 0.20, "nobrainer_irr": 0.30}
 CALLS = ["Long", "Short", "Watch"]
+ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")    # not allowed in XML 1.0, so not in a SUM box
+EXCEL_CELL_MAX = 32767                                                  # characters Excel holds in one cell
 
 def load(p): return json.loads(pathlib.Path(p).read_text())
 def save(p, obj): pathlib.Path(p).write_text(json.dumps(obj, indent=2))

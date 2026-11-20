@@ -117,8 +117,8 @@ The analyst starts from the Valuation tab's verdict and the Short Check tab's ve
   rule)" when that is empty.
 - An override needs evidence the earlier agent did not weigh. Read the evidence cited. Is it new (a later print, a
   quote, the user's notes) or just a different opinion on the same facts? An override with weak evidence is a serious
-  challenge; an override that hides a hurdle miss (a Long below both the IRR hurdle and the buy R/R with no reason)
-  is fatal.
+  challenge; a Long that misses either the IRR hurdle or the buy R/R needs a `hurdle_override` with its own reason
+  and evidence (a Long must clear both the IRR hurdle and the buy R/R), and one that hides the miss is fatal.
 - A short pitch without an alpha-short verdict from model-short is fatal.
 - A Watch is a legitimate outcome. Do not push the analyst to a Long the numbers do not support.
 

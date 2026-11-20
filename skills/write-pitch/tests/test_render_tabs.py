@@ -78,12 +78,6 @@ def test_blank_tiles_do_not_count_toward_the_cap():
 
 
 def test_clipped_title_still_matches_its_page():
-    # a centred title wider than its column prints without its first and last letters; that must not flag the mapping
-    assert render_tabs._on_page("CAPITAL ASSET PRICING MODEL (CAPM)", "APITAL ASSET PRICING MODEL (CAPM\nWACC")
-    assert not render_tabs._on_page("CAPITAL ASSET PRICING MODEL (CAPM)", "Revenue growth by segment")
-
-
-def test_clipped_title_still_matches_its_page():
     # a centred title wider than its column prints without letters at one or both ends; that must not flag the mapping
     title = "CAPITAL ASSET PRICING MODEL (CAPM)"
     assert render_tabs._on_page(title, "APITAL ASSET PRICING MODEL (CAPM\nWACC")

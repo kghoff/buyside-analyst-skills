@@ -145,7 +145,7 @@ def test_calc_cycle_is_a_problem(tmp_path, model_values):
 
 
 def test_calc_functions_allowed(tmp_path, model_values):
-    p = with_number("c", 120.0, "$120", "calc: max(price, target_3y) + min(1,2) - 1 + abs(0-0)")
+    p = with_number("c", 130.0, "$130", "calc: max(price, target_3y) + min(1,2) - 1 + abs(0-0)")
     assert run(tmp_path, p, model_values)[0] == 0
 
 
@@ -261,3 +261,67 @@ def test_lowercase_ref_and_windows_path(tmp_path, model_values):
     rc, out = run(tmp_path, with_number("n", 15.0, "15", "Earnings Calls\\_md\\2026 Q3 XYZ call.md:214"),
                   model_values)
     assert rc == 1 and "forward slashes" in out
+
+
+# why: a calc made only of constants proves nothing; "calc: 0.25" would let any typed number pass as anchored
+def test_calc_of_constants_only_is_a_problem(tmp_path, model_values):
+    for expr in ("0.25", "1/4", "max(0.2, 0.25)", "(1+0.25)-1"):
+        rc, out = run(tmp_path, with_number("c", 0.25, "25%", "calc: " + expr), model_values)
+        assert rc == 1 and "[A3] c" in out and "at least one key" in out, expr
+    # constants beside a key are fine (the buy price at a typed hurdle is target_3y/1.2^3)
+    assert run(tmp_path, with_number("c", 144.8, "$144.80", "calc: price*2"), model_values)[0] == 0
+
+
+# why: a number worked out from a failed number is just as unproved; a buy_price derived from a wrong target_3y must
+# land in anchor_problems (unverified.json), or the slide and the SUM box print it as checked
+def test_calc_on_a_failed_key_fails_too(tmp_path, model_values):
+    p = copy.deepcopy(BASE)
+    p["numbers"]["target_3y"]["anchor"] = "Valuation!C40"        # a wrong cell: target_3y fails [A1]
+    # half_buy comes first in the plan but uses buy_price, which uses target_3y: the order must not matter
+    half = p["numbers"]["buy_price"]["value"] / 2
+    p["numbers"] = {"half_buy": {"value": half, "shown": f"${half:.2f}", "anchor": "calc: buy_price/2"},
+                    **p["numbers"]}
+    out_json = tmp_path / "out.json"
+    rc, out = run(tmp_path, p, model_values, json_out=out_json)
+    assert rc == 1 and "[A1] target_3y" in out
+    buy = next(ln for ln in out.splitlines() if ln.startswith("[A3] buy_price"))
+    assert "depends on target_3y, which failed [A1]" in buy
+    half = next(ln for ln in out.splitlines() if ln.startswith("[A3] half_buy"))
+    assert "depends on buy_price, which failed [A3]" in half
+    keys = {i.get("key"): i["rule"] for i in json.loads(out_json.read_text())}
+    assert keys.get("buy_price") == "A3" and keys.get("half_buy") == "A3"
+
+
+def _line(tmp_path, model_values, text):
+    r = tmp_path / "res"
+    r.mkdir(exist_ok=True)
+    (r / "a.md").write_text(text)
+
+    def bad(v, shown, ln):
+        return "[A2] n" in run(tmp_path, with_number("n", v, shown, f"a.md:{ln}"), model_values, research=r)[1]
+    return bad
+
+
+# why: a bare number match proves nothing about what it measures: "$31m" is not proved by "31 days", "25bps" not by
+# "25 stores"; the unit printed next to the number is part of the number
+def test_line_unit_must_sit_next_to_the_number(tmp_path, model_values):
+    bad = _line(tmp_path, model_values, "Inventory was 31 days.\nRevenue was $31 million.\nRevenue was 31 million.\n"
+                                        "Margin rose 25 basis points and 40 stores opened.\nGross margin was 31 percent.\n"
+                                        "Units were 31, up from 29.\nRevenue was $31m and it rose 25 bp, or 31pct.\n")
+    assert bad(31.0, "$31m", 1) and bad(0.31, "31%", 1) and bad(31.0, "31x", 1) and bad(31.0, "$31", 6)
+    assert bad(40.0, "40bps", 4)
+    assert not bad(31.0, "$31m", 2) and not bad(31.0, "$31m", 3) and not bad(31.0, "$31m", 7)
+    assert not bad(25.0, "25bps", 4) and not bad(25.0, "25bps", 7) and not bad(0.31, "31%", 5)
+    assert not bad(0.31, "31%", 7)
+    assert not bad(31.0, "31", 1)                 # a unitless shown number needs no unit
+
+
+# why: "+5%" is not proved by "fell 5%"; a sign shown on the slide must not contradict the words on the line
+def test_line_sign_must_not_contradict_the_words(tmp_path, model_values):
+    bad = _line(tmp_path, model_values, "Margin fell 5% in the quarter.\nSales grew 5% and margin rose 2%.\n"
+                                        "Sales were -5% year on year.\nOperating loss of (5%) of sales.\n")
+    assert bad(0.05, "+5%", 1) and bad(-0.05, "-5%", 2) and bad(0.05, "+5%", 3) and bad(0.05, "+5%", 4)
+    assert not bad(0.05, "+5%", 2) and not bad(0.02, "+2%", 2)
+    assert not bad(-0.05, "-5%", 1) and not bad(-0.05, "(5%)", 3) and not bad(-0.05, "-5%", 4)
+    assert not bad(0.05, "5%", 1)                 # unsigned: the sentence carries the direction
+    assert bad(0.05, "5%", 3)                     # but the line prints it negative

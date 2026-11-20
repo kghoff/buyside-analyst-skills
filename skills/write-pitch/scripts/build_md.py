@@ -125,6 +125,9 @@ def build(plan, pm_review, out):
             L += [f"Override: {f(o.get('reason', ''))} Evidence: {f(o.get('evidence', ''))}", ""]
         else:
             L += [f"Override: {f(o)}", ""]
+    ho = plan.get("hurdle_override")
+    if isinstance(ho, dict) and ho:
+        L += [f"Hurdle override: {f(ho.get('reason', ''))} Evidence: {f(ho.get('evidence', ''))}", ""]
     L += [f"Most important thing: {f(plan['most_important_thing'])}", "",
           f"# {plan['ticker']} pitch", "", f"As of {plan['as_of']}", "", "## Contents", ""]
     L += [f"- [20-second pitch](#20-second-pitch)", "- [Slides](#slides)"]

@@ -115,9 +115,9 @@ def test_short_with_alpha_short_passes(tmp_path):
     p = copy.deepcopy(BASE); p["call"] = "Short"
     assert check(tmp_path, p, "--valuation-verdict", "sell", "--short-verdict", "Alpha Short")[0] == 0
 
-def test_long_below_hurdles_with_override_passes():
+def test_long_below_hurdles_with_hurdle_override_passes():
     p = copy.deepcopy(BASE); p["numbers"]["base_ret"]["value"] = 0.10
-    p["override"] = {"reason": "r", "evidence": "e"}
+    p["hurdle_override"] = {"reason": "r", "evidence": "e"}
     assert plan.check(p, "Buy") == []
 
 # why: every text kind is measured, not only takeaways
@@ -212,11 +212,11 @@ def test_checklist_shape():
 
 # why: the Valuation tab's own hurdle is the user's; the house 20% / 2:1 is only the fallback
 def test_hurdles_from_valuation_tab(tmp_path):
-    p = copy.deepcopy(BASE)     # IRR 18.3%, R/R 2.1: clears the house 2:1
+    p = copy.deepcopy(BASE)     # IRR 21.5%, R/R 2.1: clears the house 20% and 2:1
     assert check(tmp_path, p, "--valuation-verdict", "Buy")[0] == 0
     rc, out = check(tmp_path, p, "--valuation-verdict", "Buy", "--buy-rr", "2.5")
     assert rc == 1 and "[R20]" in out and "under 2.5" in out
-    assert check(tmp_path, p, "--valuation-verdict", "Buy", "--buy-rr", "2.5", "--irr-hurdle", "0.15")[0] == 0
+    assert check(tmp_path, p, "--valuation-verdict", "Buy", "--buy-rr", "1.5")[0] == 0
     assert plan.check(p, "Buy", hurdles={"buy_rr": None}) == []      # a missing tab input falls back
 
 # why: "pound the table" on a set-up under the pound hurdle is the equivocal-payoff mistake
@@ -328,3 +328,119 @@ def test_every_plan_plan_py_accepts_builds(tmp_path):
             except Exception as e:
                 raise AssertionError(f"plan OK but the build failed: {path} = {bad!r}: {e!r}") from e
     assert accepted > 100            # the sweep really built plans, not just rejected everything
+
+
+def r_lines(out, rid):
+    return [l for l in out if l.startswith(f"[{rid}]")]
+
+
+# why: anchors.py never reads slide text, so only a {key} is proved; a whole number ("40 stores", "EPS of 4"), a bps
+# move, a $m figure or a comma-grouped count typed in text is as unchecked as a typed "15%"
+def test_typed_numbers_of_every_form_flagged():
+    p = copy.deepcopy(BASE)
+    at(p, "thesis")["points"][0]["body"] += " Up 40bps, 40 stores, EPS of 4, $1.2bn, 1,250 units, 31m users, 5k reps."
+    out = "\n".join(plan.check(p, "Buy"))
+    for t in ("40bps", "'40'", "'4'", "$1.2bn", "1,250", "31m", "5k"):
+        assert f"typed number {t if t.startswith(chr(39)) else repr(t)}" in out, t
+    # labels are not measurements: years, quarters, halves, fiscal years, ranges, filings, dates, slide and step numbers
+    p = copy.deepcopy(BASE)
+    at(p, "thesis")["points"][0]["body"] += (" In Q3 26, 3Q26, FY27, FY 27, 1H26, 2H, 2027E, 2025-27, the 10-K, on"
+                                             " March 3 and 12 May, 2026-02-03, see slide 12, step 2.")
+    assert plan.check(p, "Buy") == []
+
+
+# why: action and the override reasons print in the deck, the Markdown copy and the report like any other text
+def test_action_and_override_text_checked_for_typed_numbers():
+    p = copy.deepcopy(BASE)
+    p["action"] = "Buy below 70"
+    p["override"] = {"reason": "Beat by 12%", "evidence": "Valuation!F20"}
+    p["hurdle_override"] = {"reason": "Catalyst in 30 days", "evidence": "Earnings Calls/_md/2026 Q3 XYZ call.md:214"}
+    out = "\n".join(plan.check(p, "Buy"))
+    assert "[R14] action: typed number '70'" in out
+    assert "[R14] override reason: typed number '12%'" in out
+    assert "[R14] hurdle_override reason: typed number '30'" in out
+    assert "evidence" not in out                     # Tab!Cell and file:line citations are not typed numbers
+
+
+# why: the buy price is the price at which the 3-year IRR equals the USER's hurdle; one worked at the house 20% when
+# the Valuation tab says 15% tells the PM to buy at the wrong price
+def test_buy_and_nobrainer_prices_follow_the_given_hurdle():
+    p = copy.deepcopy(BASE)                           # buy_price at the 20% default
+    assert not r_lines(plan.check(p, "Buy"), "R23")
+    out = r_lines(plan.check(p, "Buy", hurdles={"irr": 0.15}), "R23")
+    assert len(out) == 1 and "buy_price" in out[0] and "15%" in out[0]
+    t = p["numbers"]["target_3y"]["value"]
+    p["numbers"]["buy_price"].update(value=round(t / 1.15 ** 3, 2), shown=f"${t / 1.15 ** 3:.2f}")
+    assert not r_lines(plan.check(p, "Buy", hurdles={"irr": 0.15}), "R23")
+    p = copy.deepcopy(BASE)
+    p["numbers"]["nobrainer_price"].update(value=55.0, shown="$55.00")
+    assert any("nobrainer_price" in l and "30%" in l for l in r_lines(plan.check(p, "Buy"), "R23"))
+    b = p["numbers"]["buy_price"]["value"]
+    p = copy.deepcopy(BASE)
+    p["numbers"]["buy_price"].update(value=round(b * 1.004, 2), shown=f"${b * 1.004:.2f}")   # within 0.5%
+    assert not r_lines(plan.check(p, "Buy"), "R23")
+    p["numbers"]["buy_price"].update(value=round(b * 1.01, 2), shown=f"${b * 1.01:.2f}")
+    assert r_lines(plan.check(p, "Buy"), "R23")
+
+
+# why: a hurdle check run on numbers anchors.py could not prove checks nothing; the Long must not pass on them
+def test_hurdle_check_names_unverified_numbers(tmp_path):
+    ap = tmp_path / "anchor_problems.json"
+    ap.write_text(json.dumps([{"key": "irr_3y", "rule": "A3", "problem": "irr_3y: calc gives 0.1"},
+                              {"key": "eps_27_street", "rule": "A1", "problem": "x"},
+                              {"quote": "q1", "rule": "A4", "problem": "q1: not on line"}]))
+    rc, out = check(tmp_path, BASE, "--valuation-verdict", "Buy", "--anchor-problems", str(ap))
+    r20 = [l for l in out.splitlines() if l.startswith("[R20]")]
+    assert rc == 1 and len(r20) == 1 and "unverified" in r20[0] and "irr_3y" in r20[0]
+    assert "eps_27_street" not in r20[0]
+    ap.write_text("[]")
+    assert check(tmp_path, BASE, "--valuation-verdict", "Buy", "--anchor-problems", str(ap))[0] == 0
+    ap.write_text(json.dumps([{"key": "target_3y", "rule": "A1", "problem": "x"}]))
+    w = copy.deepcopy(BASE); w["call"] = "Watch"; w["override"] = {"reason": "r", "evidence": "e"}
+    assert check(tmp_path, w, "--valuation-verdict", "Buy", "--anchor-problems", str(ap))[0] == 0   # Long only
+
+
+# why: a verdict the mapping does not know ("Strong Buy", a typo) silently skipped the override check, so any call
+# passed; the cell must be fixed instead
+def test_verdict_outside_buy_hold_sell_is_a_problem():
+    out = plan.check(BASE, "Strong Buy")
+    assert "[R19] Valuation verdict 'Strong Buy' is not Buy / Hold / Sell; fix the cell" in out
+    assert plan.check(BASE, " buy ") == []
+
+
+# why: overriding the verdict and waiving the hurdles are two different claims; one field must not quietly do both
+def test_override_does_not_waive_the_hurdles():
+    p = copy.deepcopy(BASE); p["numbers"]["base_ret"]["value"] = 0.10
+    p["override"] = {"reason": "r", "evidence": "e"}
+    assert r_lines(plan.check(p, "Buy"), "R20")
+    p["override"] = None; p["hurdle_override"] = {"reason": "r", "evidence": "e"}
+    assert plan.check(p, "Buy") == []
+    p["hurdle_override"] = {"reason": "r", "evidence": ""}
+    assert r_lines(plan.check(p, "Buy"), "R20")
+
+
+# why (the user's rule): a Long must clear both the IRR hurdle and the buy R/R, not either one
+def test_long_must_clear_both_hurdles():
+    assert plan.check(BASE, "Buy") == []
+    out = r_lines(plan.check(BASE, "Buy", hurdles={"irr": 0.25}), "R20")    # IRR misses, R/R clears
+    missed = out[0].split(";")[0]                                           # "... misses <what>; ..."
+    assert len(out) == 1 and "IRR 21.5% under the 25%" in missed and "R/R" not in missed
+    p = copy.deepcopy(BASE); p["numbers"]["base_ret"]["value"] = 0.20       # R/R 1.3 misses, IRR clears
+    out = r_lines(plan.check(p, "Buy"), "R20")
+    missed = out[0].split(";")[0]
+    assert len(out) == 1 and "R/R 1.3 under 2" in missed and "IRR" not in missed
+
+
+# why: no downside and no upside is not an infinite R/R; it must not clear the buy hurdle
+def test_zero_risk_with_no_reward_fails():
+    for base in (0.0, -0.05):
+        p = copy.deepcopy(BASE); p["numbers"]["risk_ret"]["value"] = 0.0; p["numbers"]["base_ret"]["value"] = base
+        assert r_lines(plan.check(p, "Buy"), "R20"), base
+    p = copy.deepcopy(BASE); p["numbers"]["risk_ret"]["value"] = 0.0
+    assert not r_lines(plan.check(p, "Buy"), "R20")
+
+
+# why: plan.py and sum_boxes.py must refuse the same characters, or a plan passes the check and then stops the run
+def test_plan_and_sum_boxes_share_one_illegal_set():
+    import common, sum_boxes
+    assert plan.ILLEGAL is common.ILLEGAL and sum_boxes.ILLEGAL is common.ILLEGAL

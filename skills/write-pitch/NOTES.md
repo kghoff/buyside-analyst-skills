@@ -49,7 +49,13 @@ Why things are the way they are. Read before changing scripts.
 - Hurdles come from the user's own Valuation inputs ("IRR hurdle", "Buy at R/R", "Table-pound at R/R") via
   labels.py; common.HURDLES is only the fallback.
 - Buy price = 3-year target / (1 + hurdle)^3. No-brainer price = target / 1.3^3 (30% IRR, the course's figure).
-- plan.py rule ids [R1]-[R22] are kept in sync with plan_schema section 12 by a test.
+  plan.py checks both against the hurdle it was given ([R23], within 0.5% or the shown rounding), so a buy price
+  worked at the house 20% fails when the user's tab says otherwise.
+- A Long must clear both the IRR hurdle and the buy R/R (the user's decision, 2026-11-19; it used to be either).
+  `override` (call vs the Valuation verdict) and `hurdle_override` (waives the hurdle check) are separate fields, so
+  one cannot quietly do the other's job. A Valuation verdict outside Buy / Hold / Sell is a problem, not skipped.
+- plan.py --anchor-problems takes anchors.py's --json: a Long whose hurdle numbers failed their anchors gets [R20].
+- plan.py rule ids [R1]-[R23] are kept in sync with plan_schema section 12 by a test.
 - plan.py rejects every plan the builders cannot build: a field's shape is checked on any slide that carries it
   (build_md prints any field wherever it is), and a test feeds single-field breakages of the example plan through
   plan.py and builds every one it accepts. plan.py runs before the build; anchors.py problems do not stop it.
@@ -62,9 +68,23 @@ Why things are the way they are. Read before changing scripts.
   `<dimension>` is reset.
 
 ## Working folder
-- Working files live in `<research>/<T>/Pitch/_work/`, per the spec: the plate file is a research artefact the next
-  rerun reads. Only the SUM record goes in `<model dir>/_model_work/write-pitch/`. This differs from the general rule
-  in CLAUDE.md. Model copies made there are always deleted.
+- The research-side working files (plate, plan, PM review, digest, tab pictures, build output) live in
+  `<research>/<T>/Pitch/_work/`, per the spec: the plate file is a research artefact the next rerun reads. This is an
+  exception to the general rule in CLAUDE.md.
+- Copies of the model (the recalculated `values/` and the SUM-box `out.xlsx`) and the SUM record follow the house
+  rule: `<model dir>/_model_work/write-pitch/`. The copies are always deleted.
+- Step 10 waits for Excel to close before it retakes the checksum, then copies straight away: a save made while
+  closing Excel must change the checksum, not be overwritten.
+
+## Preflight freshness
+- Read-only openpyxl trusts a sheet's `<dimension>`; preflight resets it before reading MOD and Px Events (a stale
+  one hid MOD's period headers and Px Events' newest rows).
+- Px Events' left block lists only MOD's actual quarters (model-price-history builds it from them), so a quarter
+  reported but not yet in MOD shows only in the event block, as an "Earnings" event named "<period> earnings". If
+  /model-price-history was not rerun after the release either, nothing in the model shows it and preflight cannot
+  tell.
+- SUM's date is the mtime of model-summary's `inputs_written.json`: copyover.py promotes it only after a successful
+  copy-over, so an aborted run's newer work files do not count as a fresh SUM.
 
 ## Other choices
 - export_pdf uses a fresh LibreOffice profile per call so the deck and the sheet can convert at the same time.

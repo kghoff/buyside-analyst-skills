@@ -52,8 +52,10 @@ Follow `pitch_brief.md` section 9. Start from the verdicts in the digest: the Va
 agent's call: Buy / Hold / Sell)" (empty = Hold; say so in `notes`) and the Short Check row "Verdict (agent's call)"
 (empty = the row "Verdict (the rule)"; no Short Check tab = `null`, and no Short call). Apply the mapping and the
 hurdles from the Valuation tab's "IRR hurdle", "Buy at R/R" and "Table-pound at R/R" inputs (the house defaults in
-`pitch_brief.md` section 7 only if the tab lacks them), and override only with cited evidence. Write the call and
-its reasons at the top of the plate before you write the plan.
+`pitch_brief.md` section 7 only if the tab lacks them), and override only with cited evidence. A Long must clear
+both the IRR hurdle and the buy R/R (`hurdle_override` otherwise). Work the buy price at the "IRR hurdle" the digest
+shows for the Valuation tab, not at the house 20% unless the tab lacks it. Write the call and its reasons at the top
+of the plate before you write the plan.
 
 ## 6. Write the plan
 Write `{WORK}/pitch_plan.json` exactly as `plan_schema.md` describes: the ten core slides in order, 10-25 support
@@ -65,7 +67,7 @@ you will replace both after the review. Check your own work against the rule lis
 before you reply.
 
 Then reply exactly `PLAN WRITTEN` followed by five lines:
-1. Call and action (and the override, if any, in a few words).
+1. Call and action (and the override or hurdle_override, if any, in a few words).
 2. The most important thing.
 3. 12-month base / risk and R/R; 3-year IRR at today's price.
 4. Buy price and no-brainer price.

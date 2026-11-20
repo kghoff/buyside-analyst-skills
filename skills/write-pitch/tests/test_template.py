@@ -20,6 +20,11 @@ def idx_map(prs):
     return {l.name: sorted(p.placeholder_format.idx for p in l.placeholders) for l in prs.slide_layouts}
 
 
+def geometry(prs):
+    return {l.name: {p.placeholder_format.idx: (p.left, p.top, p.width, p.height) for p in l.placeholders}
+            for l in prs.slide_layouts}
+
+
 def test_opens_and_is_16_9():
     # a 4:3 deck would crop the mockup's wide tables
     prs = Presentation(TEMPLATE)
@@ -74,6 +79,9 @@ def test_regenerating_does_not_drift(tmp_path):
     out = tmp_path / "t.pptx"
     make_template.write(str(out))
     assert idx_map(Presentation(str(out))) == idx_map(Presentation(TEMPLATE))
+    # the builder's length budgets were tuned on the committed geometry; a script change that moves or resizes a box
+    # without regenerating the asset would make the tuned budgets and the shipped template disagree
+    assert geometry(Presentation(str(out))) == geometry(Presentation(TEMPLATE))
     out2 = tmp_path / "t2.pptx"
     make_template.write(str(out2))
     assert hashlib.sha1(out.read_bytes()).hexdigest() == hashlib.sha1(out2.read_bytes()).hexdigest()

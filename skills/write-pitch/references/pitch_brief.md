@@ -191,7 +191,8 @@ a driver reading). The thesis and risks are still there: the work is done, only 
   - no-brainer price = 3-year target ÷ (1 + no-brainer IRR)^3 (with the 30% default, ÷ 1.3^3). If the Valuation
     tab's R/R ladder shows the 12-month R/R passing the pound R/R (default 3:1) at a clearly different price,
     mention it in the notes and say which you used.
-  Both go in `numbers` with `calc:` anchors over `target_3y` (and in `sum_boxes`).
+  Both go in `numbers` with `calc:` anchors over `target_3y` (and in `sum_boxes`), at the hurdle the Valuation tab
+  shows: e.g. `calc: target_3y/1.15^3` for a 15% "IRR hurdle". Code checks both against the hurdle it was given.
 - **Never stretch the estimates or the multiple until the hurdle clears** (§14.1). If it doesn't clear at today's
   price, the honest call is Watch with a buy price and a price alert; that is a good outcome, not a failure.
 - **When to pound the table** (§14.4): only when you are highly confident *and* the set-up is highly asymmetric
@@ -250,7 +251,8 @@ a recent large acquisition.
 - **You may override**, but only with cited evidence you found that the earlier agent did not weigh (a newer print, a
   quote, a driver calculation, the user's notes). Set `override` to `{"reason": "...", "evidence": "..."}` (evidence
   cites `file:line` or `Tab!Cell`), say it on slide 1's notes and slide 9, and list it in `notes`. No override
-  without evidence; "I feel differently" is not evidence.
+  without evidence; "I feel differently" is not evidence. `override` covers only a call that differs from the
+  Valuation verdict; it never waives the hurdles (that is `hurdle_override`, below).
 - **Watch** (from a Hold, or from a Buy that misses the hurdles, or from a PM kill you cannot answer): a full pitch
   with the buy price and no-brainer price; the PM should leave knowing exactly what price or event turns it into a
   Long. Any call other than the mapped one needs `override`, a step down to Watch included (the evidence is then the
@@ -259,9 +261,13 @@ a recent large acquisition.
   short, watchlist, no short) becomes `Watch`, not a short pitch; because Watch differs from the Sell → Short mapping,
   set `override` with the Short Check verdict cell as the evidence. A short pitch with no Short Check tab is not
   allowed.
-- **A Long must clear a hurdle:** if `irr_3y` is below the IRR hurdle (default 20%) *and* the 12-month R/R
-  (`base_ret` ÷ |`risk_ret`|) is below the buy R/R (default 2:1), the call is `Watch`, or `override` explains why it
-  is still a Long (e.g. a near catalyst the hurdle misses). An `action` of "Pound the table" needs the pound R/R.
+- **A Long must clear both the IRR hurdle and the buy R/R:** if `irr_3y` is below the IRR hurdle (default 20%)
+  *or* the 12-month R/R (`base_ret` ÷ |`risk_ret`|) is below the buy R/R (default 2:1), the call is `Watch`, or
+  `hurdle_override` (`{"reason": "...", "evidence": "..."}`, evidence cited like an override's) explains why it is
+  still a Long (e.g. a near catalyst the hurdle misses); say it on slide 9 and in `notes`. No downside with no upside
+  (`risk_ret` 0 and `base_ret` 0 or less) misses the R/R. The check uses only proved numbers: if `irr_3y`,
+  `base_ret`, `risk_ret`, `target_3y`, `buy_price` or `nobrainer_price` fails its anchor, the Long is sent back. An
+  `action` of "Pound the table" needs the pound R/R.
 - **Make the call yourself.** Equivocating ("could be long, could be short") is one of the named mistakes. Say what
   you think and how confident you are, then let `action` carry the size.
 

@@ -11,7 +11,7 @@ import math
 
 import openpyxl
 
-VALUATION = {"C5": 72.40, "C30": 120, "F20": 0.31, "F21": -0.15, "C32": 55.00, "D12": 4.10, "D13": 32, "D14": 0.81,
+VALUATION = {"C5": 72.40, "C30": 130, "F20": 0.31, "F21": -0.15, "C32": 59.17, "D12": 4.10, "D13": 32, "D14": 0.81,
              "D15": 0.25, "C40": 0.06, "C41": 0.08, "C42": 0.04, "C13": 28, "C15": 0.5, "E12": 2.60, "E13": 22,
              "E15": 0.25}
 SUM = {"H12": 2.85, "J12": 3.30, "K12": 3.05, "H8": 1250, "J8": 1420}
@@ -48,8 +48,8 @@ def _sum_blocks(ws):
            ("Enterprise value", 8800.0), ("Cash per share", 5.20), ("3M ADV (M shares)", 1.6), ("3M ADV ($M)", 115.8),
            (None, None), ("Action prices (write-pitch fills these)", None), ("Buy price", None),
            ("No-brainer price", None), (None, None), ("3-year target (P/E, the primary multiple)", None),
-           ("FY 2029 EPS", 4.0), ("P/E", 30.0), ("3-year target price", 120.0), ("% return", 0.657),
-           ("x money", 1.657), ("Years", 3), ("IRR", 0.1834), ("IRR hurdle", 0.2), (None, None),
+           ("FY 2029 EPS", 4.0), ("P/E", 32.5), ("3-year target price", 130.0), ("% return", 0.796),
+           ("x money", 1.796), ("Years", 3), ("IRR", 0.2154), ("IRR hurdle", 0.2), (None, None),
            ("12-month base target (P/E only)", None), ("NTM+1 EPS", 3.30), ("Reward P/E", 28.5),
            ("12-month target", 94.84), ("% return", 0.31), ("x money", 1.31), (None, None),
            ("12-month risk case (P/E only)", None), ("Risk EPS", 2.80), ("Risk P/E", 22.0), ("Risk price", 61.54),

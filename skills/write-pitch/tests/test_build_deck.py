@@ -143,7 +143,7 @@ def test_summary_notes_flag_plan_numbers_shown_in_place_of_sum(decks):
     s = of_type(long, BASE, "summary")
     assert "{buy_price}" not in json.dumps(BASE["slides"][1])
     assert "UNVERIFIED: buy_price" in s.notes_slide.notes_text_frame.text
-    assert "$69.44" in cells(s)
+    assert "$75.23" in cells(s)
 
 
 # why: SUM's price boxes are written after the deck (Step 10 after Step 8), so on a rerun they hold last run's prices;
@@ -155,13 +155,13 @@ def test_summary_prices_are_this_runs_and_a_typed_one_is_named(tmp_path, model_v
     wb.save(rerun)
     long, _ = build(tmp_path, rerun)
     s = of_type(long, BASE, "summary")
-    assert "$69.44" in cells(s) and "$50.00" not in cells(s)
-    assert "SUM's Buy price box holds $50.00 (typed by you); the pitch uses $69.44" in s.notes_slide.notes_text_frame.text
+    assert "$75.23" in cells(s) and "$50.00" not in cells(s)
+    assert "SUM's Buy price box holds $50.00 (typed by you); the pitch uses $75.23" in s.notes_slide.notes_text_frame.text
     rec = tmp_path / "sum_written.json"
     rec.write_text(json.dumps({"Buy price": {"cell": "C19", "value": 50.0}}))   # last run wrote 50: not the user's
     long, _ = build(tmp_path, rerun, BASE, "--sum-record", str(rec))
     s = of_type(long, BASE, "summary")
-    assert "$69.44" in cells(s) and "typed by you" not in s.notes_slide.notes_text_frame.text
+    assert "$75.23" in cells(s) and "typed by you" not in s.notes_slide.notes_text_frame.text
 
 
 def test_valuation_chart_names_its_basis(decks):

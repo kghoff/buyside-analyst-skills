@@ -28,8 +28,16 @@ CELL = re.compile(r"^\s*(?:'(?P<q>[^']+)'|(?P<u>[^!']+))!\$?(?P<col>[A-Za-z]{1,3
 LINE = re.compile(r"^\s*(?P<path>.+):(?P<n>\d+)\s*$")
 SHOWN = re.compile(r"\d[\d,]*(?:\.\d+)?")
 # a whole number: not glued to a letter, digit or point before ("Q3" is not 3, "150" is not 15), nor followed by a
-# digit, ".digit" or a letter other than a unit (x, m, k, bn)
-TOKEN = re.compile(r"(?<![\w.])\d+(?:\.\d+)?(?!\d|\.\d|(?!(?:x|m|k|bn)\b)[A-Za-z])")
+# digit, ".digit" or a letter other than a unit (x, m, mn, mm, k, b, bn, bp, bps, pct)
+TOKEN = re.compile(r"(?<![\w.])\d+(?:\.\d+)?(?!\d|\.\d|(?!(?:x|m|mn|mm|k|b|bn|bp|bps|pct)\b)[A-Za-z])")
+# what may follow a line's number for each unit a shown number carries (the line's equivalents of "%", "x", ...)
+UNIT_AFTER = {"%": r"\s?(?:%|percent\b|per cent\b|pct\b)", "x": r"\s?(?:[xX\u00d7](?![A-Za-z])|times\b)",
+              "bps": r"\s?(?:bps|bp|basis points?)\b", "m": r"\s?(?:m|mn|mm|million)\b",
+              "bn": r"\s?(?:bn|b|billion)\b", "k": r"\s?(?:k|thousand)\b"}
+DOLLAR_BEFORE = re.compile(r"(?:\$|US\$|USD)\s?[(\-\u2212\u2013]?\s?$")
+# words that contradict a signed shown number when they sit just before it (3 words) or just after it (1 word)
+DOWN_WORDS = re.compile(r"^(?:fell|fall|falls|falling|declin\w*|down|decreas\w*)$", re.I)
+UP_WORDS = re.compile(r"^(?:rose|rise|rises|risen|rising|grew|grow|grows|growing|up|increas\w*)$", re.I)
 EPS = 1e-9
 FUNCS = {"abs": abs, "min": min, "max": max}
 BINOPS = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b, ast.Mult: lambda a, b: a * b,
@@ -158,8 +166,56 @@ def check_cell(m, value, shown, cells):
     return f"{sheet}!{ref} holds {seen:g}, but value is {value:g} (shown {shown!r})"
 
 
+def _shown_units(shown):
+    """The units a shown number carries, as UNIT_AFTER keys, plus "$" (needed only when no m / bn / k follows it)."""
+    s = str(shown)
+    num = SHOWN.search(s)
+    after = s[num.end():]
+    units = [u for u, pat in (("%", r"\s?%"), ("x", r"\s?[xX](?![A-Za-z])"), ("bps", r"\s?(?:bps|bp)\b"),
+                              ("m", r"\s?(?:m|mn)\b"), ("bn", r"\s?bn\b"), ("k", r"\s?k\b"))
+             if re.match(pat, after, re.I)]
+    if "$" in s and not set(units) & {"m", "bn", "k"}:
+        units.append("$")
+    return units
+
+
+def _printed_negative(text, start, end):
+    """The line prints this number negative: a minus glued before it, or "(" before and ")" after."""
+    before = text[:start]
+    if re.search(r"(?<![\w%)])[-\u2212\u2013]\s?\$?$", before) or re.search(r"\$\s?[-\u2212\u2013]$", before):
+        return True
+    return bool(re.search(r"\(\s?\$?$|\$\s?\($", before) and re.match(r"\s?\)", text[end:]))
+
+
+def _line_match(text, tok, units, sign):
+    """None if this number token on the line reads as the shown number (its units next to it, no sign contradicted),
+    else why not. sign: +1 shown with "+", -1 shown negative, 0 unsigned."""
+    end = tok.end()
+    for u in units:
+        if u == "$":
+            if not DOLLAR_BEFORE.search(text[:tok.start()]) and not re.match(r"\s?dollars\b", text[end:], re.I):
+                return "no $ next to it"
+            continue
+        m = re.match(UNIT_AFTER[u], text[end:], re.I)
+        if not m:
+            return f"no {u} next to it"
+        end += m.end()
+    neg = _printed_negative(text, tok.start(), end)
+    if sign == 0:
+        return "it is printed negative" if neg else None
+    words = re.findall(r"[A-Za-z]+", text[:tok.start()])[-3:] + re.findall(r"[A-Za-z]+", text[end:])[:1]
+    if sign > 0 and (neg or any(DOWN_WORDS.match(w) for w in words)):
+        return "the line says it went down"
+    if sign < 0 and not neg and any(UP_WORDS.match(w) for w in words):
+        return "the line says it went up"
+    return None
+
+
 def check_line(m, shown, root):
-    """[A2] the shown number is printed on that line, as a whole number token."""
+    """[A2] the shown number is printed on that line, as a whole number token, with the shown unit next to it (an
+    equivalent form counts: "31 percent" for "31%", "$31 million" or "31 million" for "$31m", "25 basis points" for
+    "25bps"). A shown "+" or negative must not be contradicted by the words around it ("+5%" fails on "fell 5%" or
+    "(5%)"; "-5%" fails on "grew 5%"); an unsigned shown number passes any words but not a number printed negative."""
     n = int(m["n"])
     lines, bad = _read_lines(root, m["path"], n)
     if bad:
@@ -168,9 +224,17 @@ def check_line(m, shown, root):
     if p is None:
         return None
     text = re.sub(r"(?<=\d),(?=\d{3})", "", lines[n - 1])
-    if any(abs(float(t) - p[0]) < EPS for t in TOKEN.findall(text)):
-        return None
-    return f"{m['path']}:{n} reads {lines[n - 1].strip()[:120]!r}, which does not print {shown!r}"
+    s = str(shown)
+    sign = -1 if p[3] else 1 if "+" in s[:SHOWN.search(s).start()] else 0
+    units = _shown_units(s)
+    why = None
+    for tok in TOKEN.finditer(text):
+        if abs(float(tok.group()) - p[0]) < EPS:
+            why = _line_match(text, tok, units, sign)
+            if why is None:
+                return None
+    reason = f" (the number is there, but {why})" if why else ""
+    return f"{m['path']}:{n} reads {lines[n - 1].strip()[:120]!r}, which does not print {shown!r}{reason}"
 
 
 def evaluate(expr, names):
@@ -218,17 +282,48 @@ def evaluate(expr, names):
         raise ValueError("number too large")
 
 
-def _calc_cycles(numbers):
-    """Keys on a calc cycle (a uses b uses a)."""
+def _names(expr):
+    """Names an expression uses (the allowed functions abs / min / max left out), in order; None if it does not parse."""
+    try:
+        tree = ast.parse(expr.replace("^", "**"), mode="eval")
+    except SyntaxError:
+        return None
+    called = {id(n.func) for n in ast.walk(tree)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in FUNCS}
+    return list(dict.fromkeys(n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and id(n) not in called))
+
+
+def _calc_deps(numbers):
+    """{calc key: [keys of numbers its expression uses]}."""
     deps = {}
     for k, x in numbers.items():
         m = CALC.match(str(x.get("anchor", ""))) if isinstance(x, dict) else None
         if m:
-            try:
-                deps[k] = {n.id for n in ast.walk(ast.parse(m["expr"].replace("^", "**"), mode="eval"))
-                           if isinstance(n, ast.Name) and n.id in numbers and n.id not in FUNCS}
-            except SyntaxError:
-                deps[k] = set()
+            deps[k] = [n for n in _names(m["expr"]) or [] if n in numbers]
+    return deps
+
+
+def _calc_order(numbers, deps):
+    """Every key, the non-calc keys first, then each calc after the calcs it uses (so a failure flows forward)."""
+    order = [k for k in numbers if k not in deps]
+    seen = set(order)
+
+    def visit(k):
+        if k in seen:
+            return
+        seen.add(k)
+        for d in deps.get(k, ()):
+            visit(d)
+        order.append(k)
+
+    for k in deps:
+        visit(k)
+    return order
+
+
+def _calc_cycles(numbers):
+    """Keys on a calc cycle (a uses b uses a)."""
+    deps = _calc_deps(numbers)
     bad = set()
 
     def reaches(start, k, seen):
@@ -254,11 +349,10 @@ def check(plan, values_path, research_root):
     cells = Cells(values_path)
     values = {k: x["value"] for k, x in numbers.items() if isinstance(x, dict) and _num(x.get("value"))}
     cyc = _calc_cycles(numbers)
+    deps = _calc_deps(numbers)
     failed = {}
     results = {}
-    keys = [k for k, x in numbers.items() if not (isinstance(x, dict) and CALC.match(str(x.get("anchor"))))]
-    keys += [k for k in numbers if k not in keys]      # calcs last, so the keys they use are already judged
-    for k in keys:
+    for k in _calc_order(numbers, deps):       # a calc after the keys it uses, so they are already judged
         x = numbers[k]
         if not isinstance(x, dict):
             failed[k] = "A1"
@@ -272,6 +366,9 @@ def check(plan, values_path, research_root):
             if cm:
                 if k in cyc:
                     bad = "calc anchor is part of a cycle (a key's calc uses a key that uses it); anchor one to a cell"
+                elif _names(cm["expr"]) == []:
+                    bad = ("calc uses only constants, which proves nothing; a calc must use at least one key from "
+                           "numbers (constants only beside a key, e.g. target_3y/(1+irr_3y)^3)")
                 else:
                     try:
                         r = evaluate(cm["expr"], {n: w for n, w in values.items() if n != k})
@@ -286,12 +383,10 @@ def check(plan, values_path, research_root):
                 bad = check_line(ln, shown, research_root)
             else:
                 bad = f"anchor {a!r} is not Tab!Cell, file:line or calc: <expression>"
+        if cm:      # a calc on a failed key is unproved too, even if its arithmetic holds
+            dep_bad = [f"depends on {u}, which failed [{failed[u]}]" for u in deps.get(k, ()) if u in failed]
+            bad = "; ".join(([bad] if bad else []) + dep_bad) or None
         if bad:
-            if cm:
-                used = [n.id for n in ast.walk(ast.parse(cm["expr"].replace("^", "**"), mode="eval"))
-                        if isinstance(n, ast.Name) and n.id in failed] if _parses(cm["expr"]) else []
-                for u in dict.fromkeys(used):
-                    bad += f"; depends on {u}, which failed [{failed[u]}]"
             failed[k] = rule
             results[k] = (k, None, rule, f"{k}: {bad}")
     out.extend(results[k] for k in numbers if k in results)
@@ -308,14 +403,6 @@ def check(plan, values_path, research_root):
         if bad:
             out.append((None, qid, "A4", f"{qid}: {bad}"))
     return out
-
-
-def _parses(expr):
-    try:
-        ast.parse(expr.replace("^", "**"), mode="eval")
-        return True
-    except SyntaxError:
-        return False
 
 
 def _flat(s):

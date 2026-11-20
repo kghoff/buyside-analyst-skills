@@ -1,4 +1,4 @@
-"""(Copied from model-short, Nov 2026; keep in sync, except the profile folder is named write-pitch so two skills can run at once.) LibreOffice headless helpers: recalculate a workbook (every formula, not the cached values) and render one tab.
+"""(Copied from model-short, Nov 2026; keep in sync, except the profile folder is named write-pitch so two skills can run at once, and recalc / render_pdf stop when soffice exits 0 without writing its output.) LibreOffice headless helpers: recalculate a workbook (every formula, not the cached values) and render one tab.
 
 A private LibreOffice profile set to "always recalculate on load" is created on first use, so the user's own
 LibreOffice settings (if they have any) are never touched."""
@@ -37,13 +37,19 @@ def recalc(path, outdir):
         _run(["--convert-to", "xlsx", src], outdir)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    return os.path.join(outdir, os.path.basename(path))
+    out = os.path.join(outdir, os.path.basename(path))
+    if not os.path.exists(out):                # soffice can exit 0 having written nothing
+        raise SystemExit(f"LibreOffice made no recalculated copy of {path}. Close any LibreOffice window and rerun.")
+    return out
 
 
 def render_pdf(path, outdir):
     """Every tab as one PDF page each (SinglePageSheets). Returns the PDF path."""
     _run(["--convert-to", 'pdf:calc_pdf_Export:{"SinglePageSheets":{"type":"boolean","value":"true"}}', path], outdir)
-    return os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".pdf")
+    pdf = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".pdf")
+    if not os.path.exists(pdf):                # soffice can exit 0 having written nothing
+        raise SystemExit(f"LibreOffice made no PDF of {path}. Close any LibreOffice window and rerun.")
+    return pdf
 
 
 def page_png(pdf, page, out_png, width=1800):
