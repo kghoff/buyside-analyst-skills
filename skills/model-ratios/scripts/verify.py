@@ -207,7 +207,8 @@ def check(model, work, decisions=None, src=None):
     T["EBITDA"] = {k: safe(lambda k=k: V["OI"][k] + V["DA"][k]) for k in rep}
     T["EBITDA_TTM"] = {k: ttm(T["EBITDA"], k) for k in rep}
     debt = {k: safe(lambda k=k: V["LTDEBT"][k] + V["CURDEBT"][k]) for k in rep}
-    T["NETLEV"] = {k: safe(lambda k=k: (debt[k] - V["CASH"][k] - V["STSEC"][k]) / T["EBITDA_TTM"][k]) if T["EBITDA_TTM"][k] is not None else None for k in rep}
+    stsec = V["STSEC"] if "STSEC" in roles else {k: 0.0 for k in rep}   # no securities row: net leverage is debt less cash
+    T["NETLEV"] = {k: safe(lambda k=k: (debt[k] - V["CASH"][k] - stsec[k]) / T["EBITDA_TTM"][k]) if T["EBITDA_TTM"][k] is not None else None for k in rep}
     T["LEV"] = {k: safe(lambda k=k: debt[k] / T["EBITDA_TTM"][k]) if T["EBITDA_TTM"][k] is not None else None for k in rep}
     T["INTCOV"] = {k: safe(lambda k=k: ttm(V["OI"], k) / -ttm(V["INTEXP"], k)) if ttm(V["OI"], k) is not None else None for k in rep}
     for key, role in (("ROE", "EQ"), ("ROA", "TA")):

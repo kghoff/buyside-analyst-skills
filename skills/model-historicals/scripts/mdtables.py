@@ -50,7 +50,7 @@ def _scales(head):
 def _rows(lines, j, scale, shares, min_rows):
     """rows of the table starting at line j; an unlabeled row keeps label "" (ABT prints total assets with no label);
     a row of years (a column header) is dropped"""
-    rows, blanks = [], 0
+    rows, blanks, hd = [], 0, None                      # hd: the factor a valueless heading sets for the rows under it
     while j < len(lines):
         L = lines[j]
         if L.lstrip().startswith("|"):
@@ -61,7 +61,9 @@ def _rows(lines, j, scale, shares, min_rows):
             if lab is not None and not SKIP_LABEL.match(lab.strip()) and lab.strip() != "---":
                 lab = re.sub(r"\s+", " ", lab).strip()
                 low = lab.lower()
-                f = 1.0 if PER_SHARE.search(low) and "shares" not in low else (shares if "shares" in low else scale)
+                if lab and (not vals or low.endswith(":") and all(v == 0 for v in vals)):   # a heading: 'Net income per share:'
+                    hd = 1.0 if PER_SHARE.search(low) and "shares" not in low else (shares if re.search(r"shares|weighted.average", low) else None)
+                f = 1.0 if PER_SHARE.search(low) and "shares" not in low else (shares if "shares" in low else hd if hd is not None else scale)
                 rows.append((lab, vals if f == 1.0 else [round(v * f, 4) for v in vals]))
         elif ZW.sub("", L).strip() == "":                  # a line holding only an invisible character is blank too
             blanks += 1
@@ -105,13 +107,22 @@ def find_tables(text, min_rows=12):
 def shares_from_release(text):
     """Q4 press release: first-column basic/diluted share counts and net income (3 months)."""
     sb = sd = ni = None
+    share_hd = False                                   # under a 'Weighted average shares outstanding:' heading
     for line in text.split("\n"):
         if not line.startswith("|"):
             continue
         lab, v = parse_row(line)
-        if not lab or not v:
+        if not lab:
             continue
         l = lab.lower()
+        if not v or l.rstrip().endswith(":") and all(x == 0 for x in v):   # a heading (a stray '-' parses as 0)
+            share_hd = bool(re.search(r"weighted.average|\bshares\b", l))
+            continue
+        if share_hd and (l.startswith("basic") or l.startswith("diluted")):   # bare 'Basic' / 'Diluted' share counts
+            if "basic and diluted" in l: sb = sb or v; sd = sd or v
+            elif "dilut" in l: sd = sd or v
+            else: sb = sb or v
+            continue
         # "Shares used in ... basic", "Weighted average shares - basic", or MDT's "Basic weighted average shares outstanding"
         share_row = "shares used" in l or "weighted average" in l
         if share_row and "basic and diluted" in l:

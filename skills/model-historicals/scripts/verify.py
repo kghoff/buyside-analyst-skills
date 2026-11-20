@@ -14,7 +14,7 @@ Writes <work>/verify_report.md; exit code 1 on any failure."""
 import argparse, json, os, re, sys
 import openpyxl
 from openpyxl.utils import get_column_letter as L, column_index_from_string as CI
-from build import ROLE_PATTERNS, IS_IN, CF_IN, BS_IN, INPUT_ROLES, norm, color_for
+from build import ROLE_PATTERNS, IS_IN, CF_IN, BS_IN, INPUT_ROLES, norm, color_for, apply_value_overrides
 
 TOL = 0.11
 
@@ -55,6 +55,7 @@ def main():
     P = json.load(open(os.path.join(a.work, "periods.json"))); per, q4 = P["periods"], P["q4"]
     dp = os.path.join(a.work, "decisions.json")
     splits = json.load(open(dp)).get("share_splits", []) if os.path.exists(dp) else []
+    if os.path.exists(dp): apply_value_overrides(per, json.load(open(dp)))   # check what build typed
     order = lambda k: (int(k[3:]), 4 if k.startswith("FY") else int(k[1]))
     wb = openpyxl.load_workbook(a.model); ws = wb[wb.sheetnames[0]]; S = Sheet(ws)
     # rows by label (same patterns as build)

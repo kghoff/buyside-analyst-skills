@@ -260,3 +260,119 @@ def test_two_class_fills_a_whole_year_or_none_of_it():
     p["Q1 25"] = mk(1325, None); p["FY 25"] = mk(6500, None)    # printed only as '$1.3 billion': must still be reported
     assert "25" in two_class(p)
     assert two_class({"Q1 24": mk(10, None), "FY 24": mk(40, None)}) == {}   # never printed: not a two-class company
+
+
+def test_net_ppe_label_that_names_accumulated_depreciation_is_kept():
+    # SFM: 'Property and equipment, net of accumulated depreciation' is the net balance, not a detail line.
+    # Dropping it lost $1bn of assets and every balance sheet failed to tie.
+    rows = [("Cash and cash equivalents", [257.3]), ("Inventories", [427.1]), ("Total current assets", [684.4]),
+            ("Property and equipment, net of accumulated depreciation", [1085.4]), ("Goodwill", [381.8]),
+            ("Total assets", [2151.6]), ("Accounts payable", [291.0]), ("Total current liabilities", [291.0]),
+            ("Total liabilities", [291.0]), ("Total stockholders' equity", [1860.6]),
+            ("Total liabilities and stockholders' equity", [2151.6])]
+    out, chk = map_bs(rows, [])
+    assert tot(out, "PPE") == 1085.4
+
+
+def test_share_counts_under_a_weighted_average_heading():
+    # SFM: EPS 'Basic' / 'Diluted' first, then a 'Weighted average shares outstanding:' heading with bare
+    # 'Basic' / 'Diluted' share rows. Those are share counts, not a second EPS; missing them means no EPS check.
+    rows = [("Net sales", [100.0]), ("Cost of sales", [60.0]), ("Gross profit", [40.0]),
+            ("Selling, general and administrative expenses", [20.0]), ("Income from operations", [20.0]),
+            ("Income before income taxes", [20.0]), ("Income tax provision", [5.0]), ("Net income", [15.0]),
+            ("Net income per share:", []), ("Basic", [0.16]), ("Diluted", [0.15]),
+            ("Weighted average shares outstanding:", []), ("Basic", [93.1]), ("Diluted", [93.7])]
+    out, chk = map_is(rows, [], 0.45)
+    assert chk["EPSB"] == 0.16 and chk["EPSD"] == 0.15
+    assert chk["SB"] == 93.1 and chk["SD"] == 93.7
+
+
+def test_cash_flows_used_in_activity_subtotals():
+    # SFM: 'Cash flows provided by operating activities', 'Cash flows used in investing activities'; the
+    # 'Cash flows from ... activities' headings carry no numbers. Missing the subtotals put every line in one section.
+    rows = [("Cash flows from operating activities", []), ("Net income", [15.0]),
+            ("Depreciation and amortization expense", [5.0]), ("Cash flows provided by operating activities", [20.0]),
+            ("Cash flows from investing activities", []), ("Purchases of property and equipment", [-8.0]),
+            ("Cash flows used in investing activities", [-8.0]),
+            ("Cash flows from financing activities", []), ("Repurchase of common stock", [-10.0]),
+            ("Cash flows used in financing activities", [-10.0]),
+            ("Cash, cash equivalents, and restricted cash at beginning of the period", [3.0]),
+            ("Cash, cash equivalents, and restricted cash at the end of the period", [5.0])]
+    out, chk = map_cf(rows, [])
+    assert chk["CFO"] == 20 and chk["CFI"] == -8 and chk["CFF"] == -10
+    assert tot(out, "CAPEX") == -8 and tot(out, "BUYBACK") == -10
+    assert chk["BEG"] == 3 and chk["END"] == 5
+
+
+def test_share_heading_with_a_stray_dash_is_still_a_heading():
+    # SFM FY21 10-K prints '-' in the 'Weighted average shares outstanding:' heading row (parsed as 0.0)
+    rows = [("Net sales", [100.0]), ("Cost of sales", [60.0]), ("Gross profit", [40.0]),
+            ("Selling, general and administrative expenses", [20.0]), ("Income from operations", [20.0]),
+            ("Income before income taxes", [20.0]), ("Income tax provision", [5.0]), ("Net income", [15.0]),
+            ("Net income per share:", []), ("Basic", [0.0021]), ("Diluted", [0.0021]),
+            ("Weighted average shares outstanding:", [0.0]), ("Basic", [115.377]), ("Diluted", [116.077])]
+    out, chk = map_is(rows, [], 0.45)
+    assert chk["SB"] == 115.377 and chk["SD"] == 116.077
+
+
+def test_restricted_cash_not_on_the_cash_flow_comes_from_ending_cash_less_bs_cash():
+    # SFM (ASU 2016-18): the cash flow ends on 'cash, cash equivalents, and restricted cash'; the restricted part sits
+    # inside prepaid on the balance sheet and is not a cash-flow row. It is the difference of two printed numbers,
+    # kept as components so the model cell shows the arithmetic. No restricted cash in the ending label: no guess.
+    from extract import derive_rc
+    bs = [("Cash and cash equivalents", [257.282]), ("Total current assets", [257.282]), ("Total assets", [257.282]),
+          ("Total liabilities", [0.0]), ("Total stockholders' equity", [257.282])]
+    B, _ = map_bs(bs, [])
+    cf = [("Net income", [1.0]), ("Cash flows from operating activities", [1.0]),
+          ("Cash, cash equivalents, and restricted cash at beginning of the period", [259.894]),
+          ("Cash, cash equivalents, and restricted cash at the end of the period", [260.894])]
+    _, Cc = map_cf(cf, [])
+    assert derive_rc(Cc, B) == [260.894, -257.282]
+    cf_plain = cf[:2] + [("Cash and cash equivalents at beginning of period", [259.894]),
+                         ("Cash and cash equivalents at end of period", [260.894])]
+    _, Cc2 = map_cf(cf_plain, [])
+    assert derive_rc(Cc2, B) is None
+
+
+def test_release_share_counts_under_a_weighted_average_heading():
+    # SFM Q4 releases: bare 'Basic' / 'Diluted' share rows under a 'Weighted average shares outstanding:' heading,
+    # right after the EPS 'Basic' / 'Diluted' rows. Missing them meant every Q4 share count was only estimated.
+    from mdtables import shares_from_release
+    text = "\n".join([
+        "| Net income | $ | 90,100 |  |  | $ | 79,600 |  |",
+        "| Basic | $ | 0.93 |  |  | $ | 0.80 |  |",
+        "| Diluted | $ | 0.92 |  |  | $ | 0.79 |  |",
+        "| Weighted average shares outstanding: |  |  |  |  |",
+        "| Basic | 96,681 |  | 99,820 |  |",
+        "| Diluted | 97,536 |  | 101,020 |  |"])
+    sb, sd, ni = shares_from_release(text)
+    assert sb[0] == 96681 and sd[0] == 97536 and sb[1] == 99820
+
+
+def test_bare_eps_rows_under_a_per_share_heading_are_not_unit_scaled():
+    # SFM: '(IN THOUSANDS, EXCEPT PER SHARE AMOUNTS)'; EPS rows are bare 'Basic' / 'Diluted' under 'Net income per
+    # share:'. Scaling them by 1/1000 turned $0.93 into 0.0009 and every EPS check failed.
+    from mdtables import _rows
+    lines = ["| Net income | $ | 90,100 |  |", "| Net income per share: |  |  |",
+             "| Basic | $ | 0.93 |  |", "| Diluted | $ | 0.92 |  |",
+             "| Weighted average shares outstanding: |  |  |", "| Basic | 96,681 |  |", "| Diluted | 97,536 |  |"]
+    vals = [v for _, v in _rows(lines, 0, 0.001, 0.001, 0)[0]]
+    assert vals[0] == [90.1] and vals[2] == [0.93] and vals[3] == [0.92] and vals[5] == [96.681]
+
+
+def test_q4_release_net_income_in_thousands_is_scaled_with_the_shares():
+    # SFM releases report in thousands: the Q4 net income check compared 17,005 with the model's 17.0
+    from extract import scale_q4
+    q4out = {"Q4 16": {"SB": 141638.0, "SD": 143950.0, "NI": 17005.0, "source": "r.md"}}
+    periods = {"FY 16": {"IS_chk": {"SB": 147.311, "NI": 124.306}}}
+    scale_q4(q4out, periods)
+    assert q4out["Q4 16"]["SB"] == 141.638 and q4out["Q4 16"]["NI"] == 17.005
+
+
+def test_verify_sees_the_same_value_overrides_as_build():
+    # A logged restatement override (SFM Q1-Q3 18 on the 2018 basis) must be what verify checks against,
+    # otherwise every accepted decision shows up as a failure.
+    from build import apply_value_overrides
+    per = {"Q1 18": {"IS": {"COGS": [["Cost of sales, buying and occupancy", -900.144, "primary"]]}, "BS": {}, "CF": {}}}
+    log = apply_value_overrides(per, {"value_overrides": [{"period": "Q1 18", "role": "COGS", "components": [-842.587], "note": "x"}]})
+    assert per["Q1 18"]["IS"]["COGS"][0][1] == -842.587 and len(log) == 1

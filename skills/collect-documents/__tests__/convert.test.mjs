@@ -22,6 +22,12 @@ describe('EDGAR HTML → Markdown', () => {
     expect(md).toContain('| --- | --- |');
     expect(md).toContain('| Auto | 100 |');
   });
+  it('survives an empty <table> (old EDGAR 10-Qs have them; one crash loses the whole filing)', () => {
+    const out = convertToMarkdown(cleanEdgarHtml(
+      '<p>Net sales rose</p><table></table><table><tr><td>Sales</td><td>1,000</td></tr></table>'));
+    expect(out).toContain('Net sales rose');
+    expect(out).toContain('| Sales | 1,000 |');
+  });
 });
 
 // The IR agent converts saved HTML pages with this CLI so it never types out

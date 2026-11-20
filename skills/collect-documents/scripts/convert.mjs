@@ -54,6 +54,13 @@ function getTurndown() {
 
     turndownInstance.use(gfm);
 
+    // gfm's table rule crashes on a <table> with no rows (old EDGAR 10-Qs have them).
+    // Rules added later are checked first, so this one runs before gfm's.
+    turndownInstance.addRule('emptyTables', {
+      filter: (node) => node.nodeName === 'TABLE' && node.rows.length === 0,
+      replacement: () => '',
+    });
+
     // Unwrap <font> tags (EDGAR uses these heavily for styling)
     turndownInstance.addRule('font', {
       filter: 'font',
