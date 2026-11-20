@@ -7,7 +7,7 @@ PAT='\.claude/(skills|agents)|/Users/|phase-1|phase-2|Phase 1|Phase 2'
 if [ -f "$R/.refs-blocklist" ]; then
   while IFS= read -r t; do [ -n "$t" ] && PAT="$PAT|$t"; done < "$R/.refs-blocklist"
 fi
-hits=$(grep -rInE "$PAT" "$R" --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs --exclude-dir=.claude-plugin \
+hits=$(grep -rInE "$PAT" "$R" --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.brainstorm --exclude-dir=docs --exclude-dir=.claude-plugin \
   --exclude-dir=__pycache__ --exclude=README.md --exclude=LICENSE --exclude=check-refs.sh --exclude=.refs-blocklist \
   --exclude='*.xlsx' --exclude='*.pdf' --exclude='*.png' --exclude='*.json.gz')
 fail=0

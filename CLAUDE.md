@@ -23,11 +23,12 @@ plugin `buyside`. Explain everything in plain English.
 | 14 | model-update | the reported quarter into MOD from the release (8-K Ex. 99.1), old forecast held in orange placeholders until the 10-Q, the 10-Q gaps on a rerun, restatements on approval, new guidance for Filings Charts, and a thesis-aware targeted forecast roll the user approves; rerun each print |
 | 15 | model-earnings-after | after-print wrap: actual vs frozen forecast, SFOT, move vs expected and implied, estimates and valuation before / after, IRR now, guidance and long-term pace, checkpoint and react call (Earnings bands 9-15), Call Notes tab, after-print note; rerun at T+7 |
 | 16 | model-summary | SUM tab, the first sheet: the PM's one-page view. Cap table with 3M ADV, NTM FCF yield, 3-year target and IRR, 12-month base and risk on the primary multiple, internal estimates vs Street on the Street's own basis (GAAP or non-GAAP by evidence, margins in bps) with Expected Delta and multiples per year, the probability tree, multiple ranges, the tactical R/R ladder. Every number links to its home tab; empty yellow boxes for write-pitch; conditional formatting on returns, IRR, R/R and Street variance |
+| 17 | write-pitch | the pitch: an Opus analyst reads everything and makes the call, a PM attacks it; long PowerPoint deck, core deck (slides 1-10), 2-page pitch sheet, Markdown copy in Pitch/, SUM's write-pitch boxes |
 | – | model-industry | optional: industry P&L and peer comparison tabs |
 | – | model-consensus | optional: broker ratings, targets, estimates, rating history, consensus snapshots; rerun each print |
 
 Naming: `collect-` gathers raw material, `model-` adds to the Excel model, `research-` writes a report, `write-`
-(future) produces a deliverable such as a pitch deck. A new skill takes the prefix of what it produces.
+produces a deliverable (write-pitch: the pitch deck). A new skill takes the prefix of what it produces.
 
 ## Rules every skill follows
 - Works for any listed company. Nothing company-specific in scripts, prompts or lists; DXCM appears only as an example.
@@ -51,7 +52,7 @@ README skills table and this file's table.
 
 ## Layout and testing
 - `skills/<name>/`: SKILL.md (what Claude follows), scripts/, tests/, references/ (prompts), NOTES.md (why things are the way they are; read it before changing scripts)
-- `agents/`: helper agents the skills dispatch (filings-analyst, street-analyst, street-researcher, forecast-planner, valuation-analyst, short-analyst, earnings-analyst)
+- `agents/`: helper agents the skills dispatch (filings-analyst, street-analyst, street-researcher, forecast-planner, valuation-analyst, short-analyst, earnings-analyst, pitch-analyst)
 - `lib/settings.py|mjs`: the settings file reader
 - `bash run-tests.sh`: every suite plus `check-refs.sh` (no personal paths or names), skipping tests marked `slow`
   (they start LibreOffice); use it while working, and on one skill run only that skill's suite.
