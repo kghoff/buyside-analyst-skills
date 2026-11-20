@@ -88,7 +88,8 @@ def main():
         b = os.path.basename(c["source"])
         col = {"current": "", "comparative": " - prior-year comparative column"}[c["vintage"]]
         if c["basis"] == "FY" and not c["period"].startswith("FY") is False: col += " (twelve-month column)" if c["basis"] == "FY" else ""
-        return f"{b}" + (f", page {c['page']}" if c.get("page") else "") + f" (md line ~{c['line']}){col}"
+        return f"{b}" + (f", page {c['page']}" if c.get("page") else "") + f" (md line ~{c['line']}){col}" \
+            + (" (scaled from thousands)" if c.get("scale") == 0.001 else "")
     def split(c):
         f = 1; sp = period_of(c["source"]) or c["period"]
         for s in plan.get("share_splits", []):

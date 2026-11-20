@@ -1,5 +1,6 @@
 """Extractor rules that decide which reported figure lands in which model period."""
 import json
+import re
 import os
 import subprocess
 import sys
@@ -115,3 +116,74 @@ def test_sellside_notes_are_not_company_releases_or_calls():
     from ng_extract import classify_doc
     assert classify_doc("/x/ABT/Sellside Research/1 Broker Research/_md/2026-10-21 JPM earnings recap - Model Update.md") == "sellside"
     assert classify_doc("/x/ABT/Sellside Research/1 Broker Research/_md/2026-10-21 JPM earnings recap - Key Takeaways from Our 3Q26 Call.md") == "sellside"
+
+
+SFM_RELEASE = """NON-GAAP MEASURE RECONCILIATION
+
+(IN THOUSANDS, EXCEPT PER SHARE AMOUNTS)
+
+|  | Thirteen weeks ended | Thirteen weeks ended | Twenty-six weeks ended | Twenty-six weeks ended |
+| --- | --- | --- | --- | --- |
+| Net income | $ | 35,343 |  |  | $ | 41,709 |  |  | $ | 91,735 |  |  | $ | 108,333 |  |
+| Income tax provision (1) | 10,551 |  | 13,565 |  | 28,713 |  | 20,764 |
+| Interest expense, net | 5,438 |  | 6,540 |  | 10,440 |  | 12,604 |
+| Earnings before interest and taxes (EBIT) | 51,332 |  | 61,814 |  | 130,888 |  | 141,701 |
+| Depreciation, amortization and accretion | 30,139 |  | 27,087 |  | 60,211 |  | 53,976 |
+| Earnings before interest, taxes, depreciation and amortization (EBITDA) | $ | 81,471 |  | $ | 88,901 |  | $ | 191,099 |  | $ | 195,677 |
+| Special Items: |  |  |  |  |
+| Store closures (2) | — |  | — |  | 508 |  | — |
+| Total Special Items - pre-tax | — |  | — |  | 508 |  | — |
+| Adjusted EBITDA | $ | 81,471 |  | $ | 88,901 |  | $ | 191,607 |  | $ | 195,677 |
+| Net income | $ | 35,343 |  | $ | 41,709 |  | $ | 91,735 |  | $ | 108,333 |
+| Special Items: |  |  |  |  |
+| Store closures, net of tax (2) | 1,000 |  | — |  | 377 |  | — |
+| Adjusted Net income | $ | 36,343 |  | $ | 41,709 |  | $ | 92,112 |  | $ | 108,333 |
+| Diluted earnings per share | $ | 0.30 |  | $ | 0.32 |  | $ | 0.76 |  | $ | 0.82 |
+| Adjusted diluted earnings per share | $ | 0.31 |  | $ | 0.32 |  | $ | 0.76 |  | $ | 0.82 |
+"""
+
+
+def test_thousands_release_with_plain_gaap_start_and_printed_subtotals(tmp_path):
+    # SFM: tables in thousands (model in millions), start at plain 'Net income' (no 'GAAP' prefix), print EBIT /
+    # EBITDA / 'Total special items' subtotals inside the walk, and say 'Adjusted diluted earnings per share'.
+    # Before: 0 candidates from 172 files, so the model got no non-GAAP section at all.
+    src = tmp_path / "src" / "Press Releases" / "_md"; src.mkdir(parents=True)
+    (src / "2019 Q2 TEST release 2019-08-01.md").write_text(SFM_RELEASE)
+    m = str(tmp_path / "TEST_model.xlsx")
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "MOD"
+    for i, h in enumerate(["Q1 18", "Q2 18", "Q3 18", "Q4 18", 2018, None, "Q1 19", "Q2 19", "Q3 19", "Q4 19", 2019]):
+        ws.cell(1, 3 + i, h)
+    ws["A2"] = "INCOME STATEMENT"; ws["B5"] = "Net income"
+    ws.cell(5, 4, 41.709); ws.cell(5, 10, 35.343)
+    ws["A8"] = "BALANCE SHEET"; wb.save(m)
+    w = str(tmp_path / "w")
+    subprocess.run([sys.executable, os.path.join(SCRIPTS, "ng_extract.py"), "--src", str(tmp_path / "src"), "--model", m, "--work", w],
+                   check=True, capture_output=True)
+    C = json.load(open(os.path.join(w, "candidates.json")))["candidates"]
+    by = {(c["metric"], c["period"], c["basis"]): c for c in C}
+    e = by[("adjusted ebitda", "Q2 19", "3M")]
+    assert e["start"] == 35.343 and e["end"] == 81.471 and e["start_matches_model"] is True
+    labels = [x[0] for x in e["items"]]
+    assert not any(re.search(r"EBIT|Total Special", x) for x in labels)          # printed subtotals are not items
+    assert abs(sum(x[1] for x in e["items"]) - (81.471 - 35.343)) < 0.001
+    n = by[("non-gaap net income", "Q2 19", "3M")]
+    assert n["end"] == 36.343 and [x[1] for x in n["items"]] == [1.0]
+    eps = by[("reported non-gaap eps", "Q2 19", "3M")]
+    assert eps["value"] == 0.31                                                   # per-share amounts are not scaled
+
+
+def test_diluted_share_row_right_after_adjusted_eps_gives_non_gaap_shares():
+    # SFM prints 'Diluted weighted average shares outstanding' under 'Adjusted diluted earnings per share'; without
+    # it the non-GAAP EPS row stays blank for every period
+    t = ("| Adjusted diluted earnings per share | $ | 0.31 |  | $ | 0.32 |\n"
+         "| Diluted weighted average shares outstanding | 118.436 |  | 130.012 |\n")
+    got = [b for b in blocks(table_rows(t)) if b[0] == "non-gaap diluted shares"]
+    assert len(got) == 1 and got[0][1][0][2] == [118.436, 130.012]
+
+
+def test_gaap_share_row_after_non_gaap_eps_is_not_non_gaap_shares():
+    # DXCM prints 'GAAP diluted weighted-average shares' under non-GAAP EPS; it differs from the non-GAAP count
+    # (if-converted shares), so it must not be read as one
+    t = ("| Non-GAAP diluted net income per share | $ | 0.50 |  |\n"
+         "| GAAP diluted weighted-average shares outstanding | 104.3 |  |\n")
+    assert not [b for b in blocks(table_rows(t)) if b[0] == "non-gaap diluted shares"]

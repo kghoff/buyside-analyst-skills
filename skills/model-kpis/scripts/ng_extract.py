@@ -74,22 +74,69 @@ def discover(src):
 
 
 EXTRAS = ("non-gaap diluted shares", "if-converted add-back", "reported non-gaap eps")
+PER_SHARE = re.compile(r"per (diluted |basic )?(common |ordinary )?share|\beps\b")
+UNITS = re.compile(r"\bin (thousands|millions|billions)\b", re.I)
+
+
+def _scales(head):
+    """(dollar scale, share scale) to $ millions / millions of shares, as /model-historicals reads a statement's units
+    ('dollars in millions ...; shares in thousands': the shares phrase is removed before the dollar unit is read)"""
+    dollars = re.sub(r"shares in (thousands|millions)", "", head)
+    scale = 0.001 if "in thousands" in dollars else (1000.0 if "in billions" in dollars else 1.0)
+    shares = 0.001 if "shares in thousands" in head else (1.0 if "shares in millions" in head else scale)
+    return scale, shares
+
+
+def scale_rows(rows, text):
+    """Tables printed under '(in thousands ...' go to $ millions like the model: each table takes the nearest units
+    statement above it (outside a table). Per-share rows are never scaled; share rows take the share unit, and so do
+    bare 'Basic' / 'Diluted' rows under a shares heading. -> (rows, {line: scale used})"""
+    L = text.split("\n"); unit, top, units_at, table_of, t0 = (1.0, 1.0), 0, {}, {}, 0
+    for i, line in enumerate(L):
+        if not line.lstrip().startswith("|"):
+            if UNITS.search(line): unit = _scales(line.lower())
+            continue
+        if i == 0 or not L[i - 1].lstrip().startswith("|"): top, t0 = unit, i   # a table starts: it keeps the unit above it
+        units_at[i + 1], table_of[i + 1] = top, t0
+    out, used, hd, tbl = [], {}, None, None
+    for ln, lab, v in rows:
+        scale, shares = units_at.get(ln, (1.0, 1.0))
+        if table_of.get(ln) != tbl: hd, tbl = None, table_of.get(ln)          # a heading only reaches the rows of its own table
+        low = norm(clean(lab))
+        if not v or low.endswith(":") and all(x == 0 for x in v):          # a heading: 'Weighted average shares outstanding:'
+            hd = 1.0 if PER_SHARE.search(low) and "shares" not in low else (shares if re.search(r"shares|weighted.average", low) else None)
+        f = 1.0 if PER_SHARE.search(low) and "shares" not in low else (shares if "shares" in low else hd if hd is not None else scale)
+        used[ln] = f
+        out.append((ln, lab, v if f == 1.0 else [round(x * f, 6) for x in v]))
+    return out, used
+
+
+PLAIN_GAAP = ("net income", "operating income", "income from operations", "gross profit")
+EBITDA_LONG = "earnings before interest, taxes, depreciation and amortization (ebitda)"
 
 
 def blocks(rows):
     """yield (metric, rows) for each reconciliation block, plus share rows and if-converted add-backs"""
     out, cur = [], None
+    def is_start(l, v):                 # 'GAAP net income', or a plain GAAP metric row ('Net income') with values
+        return v and (re.match(r"^(gaap|u\.s\. gaap|reported|as reported) ", l) and "per share" not in l and "used for diluted" not in l
+                      and "shares" not in l and "margin" not in l or l in PLAIN_GAAP)
+    def adjusted_ebitda_follows(i):     # a plain EBITDA row is a subtotal when the block goes on to 'Adjusted EBITDA'
+        for _, lab2, v2 in rows[i + 1:]:
+            l2 = norm(clean(lab2))
+            if is_start(l2, v2): return False
+            if re.match(r"^(non-gaap|adjusted) ", l2) and "ebitda" in l2: return True
+        return False
     for i, (ln, lab, v) in enumerate(rows):
         l = norm(clean(lab))
-        start = re.match(r"^(gaap|u\.s\. gaap|reported|as reported) ", l) and v and "per share" not in l and "used for diluted" not in l \
-                and "shares" not in l and "margin" not in l
+        start = is_start(l, v)
         if start:
             cur = {"start_metric": metric_of(lab), "rows": [(ln, lab, v)]}; continue
         if cur is None: continue
         if l.startswith("gaap") and ("used for diluted" in l or "per share" in l):
             cur = None; continue                                    # if-converted / per-share sub-tables are handled separately
         cur["rows"].append((ln, lab, v))
-        end_m = re.match(r"^(non-gaap|adjusted) ", l) or l in ("ebitda",)
+        end_m = re.match(r"^(non-gaap|adjusted) ", l) or (l in ("ebitda", EBITDA_LONG) and not adjusted_ebitda_follows(i))
         if end_m and v:
             m = metric_of(lab)
             if m == cur["start_metric"] or ("ebitda" in m and cur["start_metric"].startswith("net income")):
@@ -98,19 +145,23 @@ def blocks(rows):
             elif "used for diluted" in l or "per share" in l:
                 cur = None
     extras = []
-    last_eps = -99
+    last_eps = shares_at = -99
     for i, (ln, lab, v) in enumerate(rows):
         l = norm(clean(lab))
         # older layout (DXCM 2015-18): a 'Shares used to compute ... per share' heading, then 'Basic' / 'Diluted'
         # rows, right below the non-GAAP EPS line
         if l == "diluted" and v and i - last_eps <= 3 and any("shares used" in norm(rows[k][1]) for k in (i - 1, i - 2) if k >= 0):
             head = next(rows[k][1] for k in (i - 1, i - 2) if "shares used" in norm(rows[k][1]))
-            extras.append(("non-gaap diluted shares", [(ln, f"Diluted ({clean(head).rstrip(':')})", v)]))
+            extras.append(("non-gaap diluted shares", [(ln, f"Diluted ({clean(head).rstrip(':')})", v)])); shares_at = i
         if v and ("shares" in l) and ("non-gaap" in l) and "reconciliation" not in l:
-            extras.append(("non-gaap diluted shares", [(ln, lab, v)]))
+            extras.append(("non-gaap diluted shares", [(ln, lab, v)])); shares_at = i
+        # SFM: 'Diluted weighted average shares outstanding' right under 'Adjusted diluted earnings per share'
+        elif v and "diluted" in l and "shares" in l and "per share" not in l and not l.startswith(("gaap", "u.s. gaap")) and 0 < i - last_eps <= 3 and shares_at < last_eps:
+            extras.append(("non-gaap diluted shares", [(ln, lab, v)])); shares_at = i
         if v and l.startswith("non-gaap net income used for diluted") and i and "convertible" in norm(rows[i - 1][1]):
             extras.append(("if-converted add-back", [rows[i - 1]]))
-        if v and re.match(r"non-gaap (diluted )?net (income|loss).*per (diluted |basic )?share|non-gaap diluted net income.*per share", l):
+        if v and re.match(r"non-gaap (diluted )?net (income|loss).*per (diluted |basic )?share|non-gaap diluted net income.*per share"
+                          r"|adjusted (diluted earnings per share|diluted eps|earnings per diluted share)", l):
             extras.append(("reported non-gaap eps", [(ln, lab, v)])); last_eps = i
     return out + extras
 
@@ -180,6 +231,18 @@ def wide_tables(text):
                 tbl["unresolved"].append((k + 1, lab, len(vals), len(hn))); continue
             tbl["rows"].append((k + 1, lab, row))
         out.append(tbl)
+    return out
+
+
+def drop_subtotals(start, items):
+    """printed subtotals inside a walk are not adjustments: a row equal to the running total (start + items so far) or to
+    the items since the last subtotal (at least one) is dropped. Used only when the rows as printed do not add up."""
+    out, run, since = [], start, []
+    for it in items:
+        x = it[1]
+        if since and (abs(x - run) <= 0.15 or abs(x - sum(since)) <= 0.15):
+            since = []; continue
+        out.append(it); run += x; since.append(x)
     return out
 
 
@@ -443,7 +506,8 @@ def main():
         off_basis = set()          # (period, basis) columns of THIS document whose GAAP start differs from the model
         br = restatement_bridges(text)
         bridges += [{"source": s["path"], "lines": [a, b], "header": h, "page": page_of(text, a)} for a, b, h in br]
-        bl = blocks([r for r in table_rows(text) if not any(a <= r[0] <= b for a, b, _ in br)])
+        rows_s, scale_of = scale_rows([r for r in table_rows(text) if not any(a <= r[0] <= b for a, b, _ in br)], text)
+        bl = blocks(rows_s)
         bl = [b for b in bl if b[0] not in EXTRAS] + [b for b in bl if b[0] in EXTRAS]     # bridges first: they tell us the column layout
         for key, rows in bl:
             first = rows[0]; n = len(first[2])
@@ -462,7 +526,8 @@ def main():
                     # document starts from a different GAAP figure (restated comparatives) is on that other basis too
                     cands.append({"metric": key, "period": per, "basis": basis, "vintage": vint, "source": s["path"], "type": s["type"],
                                   "line": first[0], "page": page_of(text, first[0]), "label": clean(first[1]), "value": v, "col": i, "ncols": n,
-                                  "start_matches_model": False if (per, basis) in off_basis else None})
+                                  "start_matches_model": False if (per, basis) in off_basis else None,
+                                  **({"scale": scale_of[first[0]]} if scale_of.get(first[0], 1.0) != 1.0 else {})})
                 continue
             start_metric = metric_of(first[1])
             # resolve 2-column tables in Q4 documents (Q4-only vs full-year) by matching the model
@@ -476,6 +541,9 @@ def main():
                 if end is None: continue
                 items = [(clean(lab), v[i], ln) for ln, lab, v in rows[1:-1] if len(v) > i]
                 if abs(start - end) < 0.05: items = []                    # nothing adjusted in this column (blank cells)
+                elif abs(start + sum(x for _, x, _ in items) - end) > 0.15 and \
+                        abs(start + sum(x for _, x, _ in drop_subtotals(start, items)) - end) <= 0.15:
+                    items = drop_subtotals(start, items)                  # printed EBIT / EBITDA / 'Total special items' rows
                 elif abs(start + sum(x for _, x, _ in items) - end) > 0.15:
                     unresolved.append((s["path"], key, per, "items do not add up")); continue
                 mv = model_val(start_metric, per) if start_metric in gaap else None
@@ -484,7 +552,7 @@ def main():
                               "line": first[0], "page": page_of(text, first[0]), "start": start, "end": end, "items": items,
                               "start_label": clean(first[1]), "end_label": clean(rows[-1][1]), "start_metric": start_metric,
                               "model_start": mv, "start_matches_model": (mv is not None and abs(mv - start) < 0.15) if start_metric in gaap else None,
-                              "col": i, "ncols": n})
+                              "col": i, "ncols": n, **({"scale": scale_of[first[0]]} if scale_of.get(first[0], 1.0) != 1.0 else {})})
         wc, wu = wide_candidates(text, s, P, rev_of)
         sc, su = specified_candidates(text, s, P, model_val)
         wc += sc; unresolved += wu + su
