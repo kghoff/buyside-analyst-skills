@@ -118,7 +118,7 @@ def build(plan, pm_review, out):
     n = plan["numbers"]
     f = lambda t: fill(t, n)  # noqa: E731
     sheet = plan["pitch_sheet"]
-    L = [f"**Call: {plan['call']}. Action: {plan['action']}.**", ""]
+    L = [f"**Call: {plan['call']}. Action: {f(plan['action'])}.**", ""]
     if plan.get("override"):
         o = plan["override"]
         if isinstance(o, dict):

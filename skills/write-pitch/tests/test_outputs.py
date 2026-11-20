@@ -185,3 +185,17 @@ def test_know_cold_capped_at_ten():
     p["numbers"]["k4"] = p["numbers"]["k1"]
     p["pitch_sheet"]["know_cold"].append("k4")
     assert any("know_cold: at most 10" in x for x in planmod.check(p, "Buy"))
+
+
+# why: plan.py allows "Wait for {buy_price}" in action and says the builder fills it; a raw {key} on the sheet's
+# title line or the Markdown's first line is the first thing the reader sees
+def test_action_placeholder_filled_on_sheet_and_md(tmp_path):
+    p = copy.deepcopy(PLAN)
+    p["action"] = "Wait for {price}"
+    want = "Wait for " + p["numbers"]["price"]["shown"]
+    sheet = Document(build_sheet.build(p, str(tmp_path / "s.docx")))
+    assert want in sheet.paragraphs[0].text
+    pm = tmp_path / "pm.md"
+    pm.write_text("# PM review\n")
+    text = open(build_md.build(p, str(pm), str(tmp_path / "p.md"))).read()
+    assert text.startswith(f"**Call: {p['call']}. Action: {want}.**")

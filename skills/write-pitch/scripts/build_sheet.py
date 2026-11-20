@@ -51,7 +51,7 @@ def build(plan, out):
     sheet = plan["pitch_sheet"]
     doc = Document()
     _style(doc)
-    _head(doc, f"{plan['ticker']}  |  {plan['call']}  |  {plan['action']}  |  {n['price']['shown']}", 16)
+    _head(doc, f"{plan['ticker']}  |  {plan['call']}  |  {f(plan['action'])}  |  {n['price']['shown']}", 16)
     _head(doc, "20-second pitch")
     doc.add_paragraph(f(plan["pitch_20s"]))
     _head(doc, "3-minute script")
