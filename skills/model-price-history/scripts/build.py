@@ -336,9 +336,9 @@ def build(model, work, out, replace=False, refresh=False):
         r = R0 + i
         warm = r <= RB
         pdx.set(f"{D_['date']}{r}", "d", serial(dates[i]), sty["in_date"])
-        pdx.set(f"{D_['close']}{r}", "n", round(float(px[i]), 6), sty["in_num"])
-        pdx.set(f"{D_['spy']}{r}", "n", round(float(sp[i]), 6), sty["in_num"])
-        pdx.set(f"{D_['tr']}{r}", "n", round(float(run['tr'][i]), 6), sty["in_num"])
+        pdx.set(f"{D_['close']}{r}", "n", float(px[i]), sty["in_num"])
+        pdx.set(f"{D_['spy']}{r}", "n", float(sp[i]), sty["in_num"])
+        pdx.set(f"{D_['tr']}{r}", "n", float(run['tr'][i]), sty["in_num"])
         if i:
             pdx.set(f"{D_['ret']}{r}", "f", f"{D_['tr']}{r}/{D_['tr']}{r - 1}-1", sty["grey_pct2" if warm else "pct2"])
             pdx.set(f"{D_['spy_ret']}{r}", "f", f"{D_['spy']}{r}/{D_['spy']}{r - 1}-1", sty["grey_pct2" if warm else "pct2"])
@@ -349,7 +349,7 @@ def build(model, work, out, replace=False, refresh=False):
                         sty["pct2"])
         for key, arr in (("f_etf", run["etf"]), ("f_mom", run["mom"])):
             if isnum(float(arr[i])):
-                pdx.set(f"{D_[key]}{r}", "n", round(float(arr[i]), 6), sty["in_num"])
+                pdx.set(f"{D_[key]}{r}", "n", float(arr[i]), sty["in_num"])
         if r < RS:
             continue
         pdx.set(f"{D_['beta']}{r}", "f", f"SLOPE({D_['ret']}{r - 252}:{D_['ret']}{r - 1},{D_['spy_ret']}{r - 252}:{D_['spy_ret']}{r - 1})",

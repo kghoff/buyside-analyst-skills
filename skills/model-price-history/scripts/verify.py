@@ -130,8 +130,9 @@ def main():
         if name in build.TABS:
             new_tab_parts.add(part)
     moves = refresh.column_moves(before, after) if a.refresh else {}
-    follow = lambda p: refresh.remap_formulas(before.text(p), moves)[0].encode() if moves and p.startswith(
-        "xl/worksheets/") else before.parts[p]       # refresh: only references into moved columns may change
+    rows = refresh.row_moves(before, after, moves) if a.refresh else {}
+    follow = lambda p: refresh.remap_formulas(before.text(p), moves, rows)[0].encode() if (moves or rows) and \
+        p.startswith("xl/worksheets/") else before.parts[p]   # refresh: only references that follow may change
     changed = [p for p in keep if p not in ALLOWED and p in after.parts and follow(p) != after.parts[p]]
     missing = [p for p in keep if p not in ALLOWED and p not in after.parts]
     sheets_before = [s[0] for s in before.sheets()]

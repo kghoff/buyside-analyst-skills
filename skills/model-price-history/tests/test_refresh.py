@@ -41,7 +41,8 @@ def _inputs(w, src_dir):
         last = pd.Timestamp(df["Date"].iloc[-1])
         add = pd.bdate_range(last + pd.Timedelta(days=1), periods=EXTRA_DAYS)
         row = df.iloc[-1]
-        extra = pd.DataFrame([{**row, "Date": d.date().isoformat(), "Close": row["Close"] * (1 + 0.004 * (i + 1))}
+        extra = pd.DataFrame([{**row, "Date": d.date().isoformat(),        # Yahoo-style: ~15 digits, not 4 decimals
+                               "Close": row["Close"] * (1 + 0.004 * (i + 1)) + 1e-5 / 3}
                               for i, d in enumerate(add)])
         p = src_dir / f"{t}_us_d.csv"
         pd.concat([df, extra]).to_csv(p, index=False)
@@ -197,6 +198,90 @@ def test_single_cell_link_must_still_read_the_same_day():
     assert same and not moved
 
 
+GAP_DAY = "2016-03-01"      # a trading day before the old row 1002, dropped from every price file
+
+
+@pytest.fixture(scope="session")
+def gap_run(old_model, tmp_path_factory):
+    """(Edits to other tabs go in before the build: restore writes into the built file, which copied them.)
+    New price files that differ from the old ones by one day in the middle of history (the other way round from
+    the real case: Yahoo's file had 2016-07-21, the old stooq file did not). Every later row moves by one. Old
+    'Research'!ZZ1 reads 'Px Data'!$A$1002; ZZ4 reads the gap day's own row."""
+    d = tmp_path_factory.mktemp("gap")
+    w = d / "w"
+    w.mkdir()
+    (d / "src").mkdir()
+    _inputs(w, d / "src")
+    for f in json.load(open(w / "prices.json"))["files"].values():
+        df = pd.read_csv(f["path"])
+        df[df["Date"] != GAP_DAY].to_csv(f["path"], index=False)
+    ev = json.load(open(w / "events.json"))         # one more event early on: every later event row moves down one
+    ev["events"].append({"date": "2015-03-02", "type": "Other release", "name": "Test event", "timing": "Same day",
+                         "source": "test"})
+    ev["events"].sort(key=lambda e: e["date"])      # events.py writes them in date order
+    json.dump(ev, open(w / "events.json", "w"))
+    m = str(d / "m.xlsx")
+    shutil.copy(old_model, m)
+    px = refresh.cells(Package(m), refresh.sheet_parts(Package(m))["Px Data"])
+    import datetime as _dt
+    serial = (_dt.date.fromisoformat(GAP_DAY) - _dt.date(1899, 12, 30)).days
+    gap_row = next(int(r[1:]) for r, c in px.items() if re.fullmatch(r"A\d+", r) and refresh._text(c) == serial)
+    _edit(m, "Research", lambda x: _formula_cell(x, "ZZ4", f"'Px Data'!$B${gap_row}"))
+    # Px Events holds two tables side by side: quarters (A-H, U-Z, keyed by period) and events (J-S, keyed by date
+    # and name). Short Check reads an event's idio move (R), Multiples a quarter's release date (B), on the same row.
+    _edit(m, "Research", lambda x: _formula_cell(_formula_cell(x, "ZZ5", "'Px Events'!$R$8"), "ZZ6",
+                                                 "'Px Events'!$B$8"))
+    # a trailing window (Valuation's and Earnings' 252-day volatility read a fixed block of rows)
+    _edit(m, "Research", lambda x: _formula_cell(x, "ZZ7", "STDEV('Px Data'!$B$1002:$B$1010)"))
+    _run("refresh.py", "extract", "--model", m, "--work", str(w))
+    _run("build.py", "--model", m, "--work", str(w), "--out", str(d / "b.xlsx"), "--refresh")
+    return {"m": m, "w": w, "b": str(d / "b.xlsx"), "d": d, "gap_row": gap_row}
+
+
+def test_a_single_cell_link_follows_its_date_when_rows_shift(gap_run, tmp_path):
+    """Consensus's rating-history chart links each day by row ('Px Data'!$A$1986). When the new price file has one
+    day more or fewer earlier in history, the same date sits one row away: the link must follow the date (and say so),
+    not stop the refresh and not quietly read the neighbouring day."""
+    m = str(tmp_path / "m.xlsx")
+    shutil.copy(gap_run["m"], m)
+    _edit(m, "Research", lambda x: re.sub(r'<c r="ZZ4".*?</c>', "", x, flags=re.S))   # only the day that still exists
+    r = _run("refresh.py", "restore", "--model", m, "--built", gap_run["b"], "--work", str(gap_run["w"]),
+             "--out", str(tmp_path / "f.xlsx"), check=False)
+    assert r.returncode == 0, r.stdout[-2000:]
+    rep = json.loads(r.stdout)
+    old_px = refresh.cells(Package(m), refresh.sheet_parts(Package(m))["Px Data"])
+    new = Package(str(tmp_path / "f.xlsx"))
+    zz1 = refresh.cells(new, refresh.sheet_parts(new)["Research"])["ZZ1"][1]
+    row = int(re.search(r"\$A\$(\d+)", zz1).group(1))
+    assert row == 1001                                                    # one day fewer before it
+    new_px = refresh.cells(new, refresh.sheet_parts(new)["Px Data"])
+    assert refresh._text(new_px[f"A{row}"]) == refresh._text(old_px["A1002"])          # still the same day
+    assert any(x.startswith("Research ZZ1") and "row" in x for x in rep["references_followed"])
+    res = refresh.cells(new, refresh.sheet_parts(new)["Research"])
+    old_ev = refresh.cells(Package(m), refresh.sheet_parts(Package(m))["Px Events"])
+    new_ev = refresh.cells(new, refresh.sheet_parts(new)["Px Events"])
+    ev_row = int(re.search(r"\$R\$(\d+)", res["ZZ5"][1]).group(1))
+    assert ev_row == 9                                                    # the event moved down one
+    assert [refresh._text(new_ev.get(f"{c}{ev_row}")) for c in "JL"] == [refresh._text(old_ev.get(f"{c}8")) for c in "JL"]
+    assert res["ZZ6"][1] == "'Px Events'!$B$8"                            # the quarter did not move
+    assert res["ZZ7"][1] == "STDEV('Px Data'!$B$1001:$B$1009)"            # the window keeps the same days
+
+
+def test_a_single_cell_link_to_a_day_that_is_gone_still_stops(gap_run, tmp_path):
+    """The gap day is not in the new file: there is no row to follow, so the refresh stops and writes nothing."""
+    r = _run("refresh.py", "restore", "--model", gap_run["m"], "--built", gap_run["b"], "--work", str(gap_run["w"]),
+             "--out", str(tmp_path / "f.xlsx"), check=False)
+    assert r.returncode == 3 and not os.path.exists(tmp_path / "f.xlsx")
+    assert any(f"B{gap_run['gap_row']}" in s and "ZZ4" in s for s in json.loads(r.stdout)["stops"])
+
+
+def test_remap_follows_rows_of_cells_and_range_ends_into_the_three_tabs_only():
+    xml = "<c r=\"A1\"><f>'Px Data'!$A$1002+'Px Data'!B1002+SUM('Px Data'!$B$1002:$B$1010)+Research!A1002</f></c>"
+    out, n = refresh.remap_formulas(xml, {}, {"Px Data": {"A1002": "1001", "B1002": "1001", "B1010": "1009"}})
+    assert n == 1
+    assert out == "<c r=\"A1\"><f>'Px Data'!$A$1001+'Px Data'!B1001+SUM('Px Data'!$B$1001:$B$1009)+Research!A1002</f></c>"
+
+
 def test_a_note_whose_day_left_the_table_is_reported_not_dropped():
     placed, unplaced = refresh.place_notes([{"key": ["2020-03-16"], "note": "kept"},
                                             {"key": ["2019-01-02"], "note": "gone from the top 20"}],
@@ -262,3 +347,15 @@ def test_refreshed_stooq_build_says_its_closes_are_dividend_adjusted(refreshed):
     import openpyxl
     a2 = openpyxl.load_workbook(refreshed["final"], read_only=True)["Px Data"]["A2"].value
     assert "stooq" in a2 and "P/E history runs low" in a2 and "traded price" not in a2
+
+
+def test_prices_are_typed_exactly_as_the_source_prints_them(refreshed):
+    """Yahoo prints adjusted closes to ~15 digits. Rounding them to 6 decimals in Px Data made every return, beta and
+    idio cell differ from verify's prototype (which reads the file) in the 7th digit: 17,047 failures on DXCM. A typed
+    number is the source's number."""
+    prices = json.load(open(refreshed["w"] / "prices.json"))["files"]["stock"]["path"]
+    want = float(pd.read_csv(prices)["Close"].iloc[-1])
+    new = Package(refreshed["final"])
+    px = refresh.cells(new, refresh.sheet_parts(new)["Px Data"])
+    last = refreshed["layout"]["rows"]["RN"]
+    assert float(refresh._text(px[f"B{last}"])) == want
