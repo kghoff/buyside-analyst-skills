@@ -202,7 +202,8 @@ def lev_rows():
         K("EBITDA_TTM", "EBITDA TTM", _ttm("EBITDA")),
         Row("blank"),
         K("NETLEV", "Net Leverage / (Cash) Ratio", _needs(HAS_TTM)(lambda x, c:
-          f"=({debt(x, c)}-{a(x, c, 'CASH')}-{a(x, c, 'STSEC')})/{a(x, c, 'EBITDA_TTM')}"), "x", units="0.0x"),
+          f"=({debt(x, c)}-{a(x, c, 'CASH')}" + (f"-{a(x, c, 'STSEC')}" if "STSEC" in x.rows else "")   # no securities row: debt less cash
+          + f")/{a(x, c, 'EBITDA_TTM')}"), "x", units="0.0x"),
         K("LEV", "Leverage Ratio", _needs(HAS_TTM)(lambda x, c: f"=({debt(x, c)})/{a(x, c, 'EBITDA_TTM')}"), "x", units="0.0x"),
         K("INTCOV", "Interest Coverage Ratio", _int_cov, "x", units="0.0x"),
         Row("blank"),

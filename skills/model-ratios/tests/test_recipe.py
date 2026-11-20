@@ -66,3 +66,13 @@ def test_current_year_quarters_fall_back_to_latest_reported_tax_rate(mod_path):
     assert calc["ROIC_TAX"](x, CI("V")) == f"=$T${keys['TAXRATE']}"     # Q1 24: no FY 2024 yet -> FY 2023 rate
     assert x.notes and "FY 2023" in x.notes[0][2]
     assert calc["ROIC_TAX"](x, CI("X")) == f"=$Z${keys['TAXRATE']}"     # Q3 24E: its own FY-estimate rate
+
+
+def test_net_leverage_without_a_short_term_securities_row(mod_path):
+    # SFM holds no short-term securities, so model-historicals drops the row; net leverage is then debt less cash,
+    # not "n.a." (a company with no securities still has a net leverage ratio)
+    rows, keys, x = layout(mod_path)
+    calc = {R.key: R.calc for R in rows if R.kind == "kpi"}
+    r = dict(keys)
+    del x.rows["STSEC"]
+    assert calc["NETLEV"](x, CI("P")) == f"=(P{r['LTDEBT']}+P{r['CURDEBT']}-P{r['CASH']})/P{r['EBITDA_TTM']}"

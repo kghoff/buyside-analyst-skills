@@ -86,8 +86,8 @@ def test_missing_role_gives_na_dependents_and_verify_does_not_crash(mod_path, tm
     wb = openpyxl.load_workbook(mod_path)
     ws, b = wb["MOD"], Book(wb)
     def row(label): return next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 2).value == label)
-    for label in ("Net Leverage / (Cash) Ratio",):                # leverage needs securities: n.a.
-        assert b.value("MOD", f"V{row(label)}") == "n.a.", label
+    # no securities row = no securities: net leverage is debt less cash, a number, not n.a. (SFM holds none)
+    assert isinstance(b.value("MOD", f"V{row('Net Leverage / (Cash) Ratio')}"), (int, float))
     # invested capital just leaves the missing line out, and says so
     assert any(t == "Invested capital" and "STSEC" in w for t, w, _ in res["log"])
     assert isinstance(b.value("MOD", f"V{row('Invested Capital (asset based)')}"), (int, float))
@@ -130,7 +130,7 @@ def test_assumed_values_carry_comments(mod_path, tmp_path):
     assert ws[f"J{r}"].comment is None                                     # 90 from the dates
     assert ws[f"K{r}"].comment.text == "Assumed 91 days: no period-end date for this quarter in the /collect-documents manifest."
     r2 = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 2).value == "Net Leverage / (Cash) Ratio")
-    assert ws[f"J{r2}"].comment.text == "n.a.: MOD has no row for STSEC."
+    assert ws[f"J{r2}"].comment is None                                    # computed without securities, not n.a.
     assert check(mod_path, work, src=src)[0] == []
     ws[f"K{r}"].comment = None
     wb.save(mod_path)
